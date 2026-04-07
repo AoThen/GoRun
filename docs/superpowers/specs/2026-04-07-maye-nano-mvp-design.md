@@ -23,60 +23,20 @@ Maye Nano 是一款 Windows 平台的快速启动工具，使用 C++ 和 ImGui �
 4. **项目运行** - 双击运行、管理员运行
 5. **全局快捷键** - 通过快捷键唤醒/隐藏主窗口
 
-## 项目结构
+## 数据存储
 
-```
-MayeNano/
-├── CMakeLists.txt
-├── cmake/
-│   └── FetchDependencies.cmake
-├── src/
-│   ├── main.cpp
-│   ├── app/
-│   │   ├── App.h
-│   │   ├── App.cpp
-│   │   └── Resource.h
-│   ├── ui/
-│   │   ├── MainWindow.h/cpp
-│   │   ├── widgets/
-│   │   │   ├── ItemGrid.h/cpp
-│   │   │   └── CategoryTab.h/cpp
-│   │   └── dialogs/
-│   │       └── EditDialog.h/cpp
-│   ├── core/
-│   │   ├── Config.h/cpp
-│   │   ├── Storage.h/cpp
-│   │   ├── Item.h/cpp
-│   │   ├── Category.h/cpp
-│   │   ├── ItemManager.h/cpp
-│   │   ├── Runner.h/cpp
-│   │   └── HotkeyManager.h/cpp
-│   ├── platform/
-│   │   ├── Window.h/cpp
-│   │   ├── D3D11Renderer.h/cpp
-│   │   ├── DragDrop.h/cpp
-│   │   └── ShellExecute.h/cpp
-│   └── utils/
-│       ├── PathUtils.h/cpp
-│       └── StringUtils.h/cpp
-├── res/
-│   ├── icons/
-│   └── resource.rc            # Windows 资源文件（应用图标、清单）
-├── lang/                   # 已存在
-├── img/                    # 已存在
-└── SDK/                    # 已存在
-```
+**配置文件路径**：`%APPDATA%/MayeNano/config.json`
+
+首次运行时自动创建目录和默认配置文件。
 
 ## 数据模型
 
 ### 枚举定义
 
 ```cpp
-// 视图类型
+// 视图类型（MVP 仅支持 Icon）
 enum class ViewType {
-    Icon = 0,    // 图标视图
-    List = 1,    // 列表视图
-    Tile = 2     // 平铺视图
+    Icon = 0    // 图标视图
 };
 ```
 
@@ -89,7 +49,7 @@ struct Item {
     std::wstring target;       // 目标路径
     std::wstring arguments;    // 启动参数
     std::wstring workingDir;   // 工作目录
-    std::wstring iconPath;     // 图标路径
+    std::wstring iconPath;     // 图标路径（为空时自动提取）
     int iconIndex = 0;         // 图标索引
     bool runAsAdmin = false;   // 以管理员运行
     int runCount = 0;          // 运行次数
@@ -104,12 +64,11 @@ struct Item {
 
 ```cpp
 struct Category {
-    std::wstring id;                      // 唯一标识
-    std::wstring name;                    // 分类名称
-    int sortOrder = 0;                    // 排序顺序
-    bool isPasswordProtected = false;     // 是否密码保护
-    ViewType viewType = ViewType::Icon;   // 视图类型
-    int iconSize = 48;                    // 图标大小
+    std::wstring id;                    // 唯一标识
+    std::wstring name;                  // 分类名称
+    int sortOrder = 0;                  // 排序顺序
+    ViewType viewType = ViewType::Icon; // 视图类型
+    int iconSize = 48;                  // 图标大小
 };
 ```
 
@@ -123,7 +82,6 @@ struct Category {
             "id": "cat_001",
             "name": "常用工具",
             "sortOrder": 0,
-            "isPasswordProtected": false,
             "viewType": 0,
             "iconSize": 48
         }
@@ -188,7 +146,7 @@ private:
 
 ### Storage（存储引擎）
 
-负责 JSON 数据的读写操作。
+负责 JSON 数据的读写操作。内部使用 UTF-8 编码存储，读取时转换为 `std::wstring`。
 
 ```cpp
 class Storage {
@@ -210,6 +168,11 @@ public:
     
     std::wstring GetConfig(const std::string& key, const std::wstring& defaultVal = L"");
     bool SetConfig(const std::string& key, const std::wstring& value);
+
+private:
+    // wstring <-> UTF-8 转换
+    std::string WStringToUtf8(const std::wstring& wstr);
+    std::wstring Utf8ToWString(const std::string& str);
 };
 ```
 
@@ -234,6 +197,11 @@ public:
     void DeleteItem(const std::wstring& id);
     
     void HandleDrop(const std::vector<std::wstring>& files, const std::wstring& categoryId);
+
+private:
+    Storage* m_storage = nullptr;
+    std::vector<Category> m_categories;
+    std::unordered_map<std::wstring, std::vector<Item>> m_itemsByCategory;
 };
 ```
 
@@ -244,9 +212,12 @@ public:
 ```cpp
 class Runner {
 public:
-    bool Run(const Item& item);
-    bool RunAsAdmin(const Item& item);
-    bool RunMinimized(const Item& item);
+    bool Run(const Item& item);        // 普通运行
+    bool RunAsAdmin(const Item& item); // 管理员运行
+
+private:
+    // 图标提取：iconPath 为空时使用 SHGetFileInfo 获取文件关联图标
+    HICON ExtractIcon(const std::wstring& target, const std::wstring& iconPath, int iconIndex);
 };
 ```
 
@@ -261,9 +232,42 @@ public:
     bool UnregisterGlobalHotkey(int id);
     void ProcessHotkey(WPARAM wParam);
     
+    // 解析快捷键字符串，如 "Ctrl+Alt+M" -> modifiers, vk
+    bool ParseHotkeyString(const std::wstring& hotkey, UINT& modifiers, UINT& vk);
+    
     using HotkeyCallback = std::function<void(int id)>;
     void SetCallback(HotkeyCallback callback);
 };
+```
+
+**快捷键解析逻辑：**
+
+```cpp
+// 示例：ParseHotkeyString("Ctrl+Alt+M", modifiers, vk)
+// modifiers = MOD_CONTROL | MOD_ALT
+// vk = 'M'
+
+bool ParseHotkeyString(const std::wstring& hotkey, UINT& modifiers, UINT& vk) {
+    modifiers = 0;
+    vk = 0;
+    
+    // 分割字符串
+    auto parts = Split(hotkey, L'+');
+    for (size_t i = 0; i < parts.size(); i++) {
+        const auto& part = Trim(parts[i]);
+        if (part == L"Ctrl") modifiers |= MOD_CONTROL;
+        else if (part == L"Alt") modifiers |= MOD_ALT;
+        else if (part == L"Shift") modifiers |= MOD_SHIFT;
+        else if (part == L"Win") modifiers |= MOD_WIN;
+        else if (i == parts.size() - 1) {
+            // 最后一个部分是按键
+            if (part.size() == 1) vk = toupper(part[0]);
+            else if (part == L"F1") vk = VK_F1;
+            // ... 其他功能键映射
+        }
+    }
+    return modifiers != 0 && vk != 0;
+}
 ```
 
 ## 平台层
@@ -289,6 +293,9 @@ public:
     void OnDropFiles(std::function<void(const std::vector<std::wstring>&)> callback);
     void OnHotkey(std::function<void(int id)> callback);
     void OnResize(std::function<void(int w, int h)> callback);
+
+private:
+    HWND m_hwnd = nullptr;
 };
 ```
 
@@ -306,6 +313,13 @@ public:
     void Resize(int width, int height);
     
     ImGuiContext* GetContext();
+
+private:
+    ID3D11Device* m_device = nullptr;
+    ID3D11DeviceContext* m_context = nullptr;
+    IDXGISwapChain* m_swapChain = nullptr;
+    ID3D11RenderTargetView* m_rtv = nullptr;
+    ImGuiContext* m_imguiContext = nullptr;
 };
 ```
 
@@ -362,7 +376,7 @@ private:
 ```cpp
 class ItemGrid {
 public:
-    void SetItems(std::vector<Item>* items);
+    void SetItems(std::vector<Item>* items);  // 指针由 ItemManager 管理，生命周期有保障
     void Render();
     
     // 回调
@@ -370,7 +384,7 @@ public:
     void OnItemRightClicked(std::function<void(const Item&)> callback);
 
 private:
-    std::vector<Item>* m_items = nullptr;
+    std::vector<Item>* m_items = nullptr;  // 外部管理生命周期
     int m_selectedIndex = -1;
 };
 ```
@@ -382,7 +396,7 @@ private:
 ```cpp
 class CategoryTab {
 public:
-    void SetCategories(std::vector<Category>* categories);
+    void SetCategories(std::vector<Category>* categories);  // 指针由 ItemManager 管理
     void Render();
     
     void OnCategoryChanged(std::function<void(const std::wstring& id)> callback);
@@ -391,7 +405,7 @@ public:
     std::wstring GetCurrentCategory() const;
 
 private:
-    std::vector<Category>* m_categories = nullptr;
+    std::vector<Category>* m_categories = nullptr;  // 外部管理生命周期
     std::wstring m_currentId;
 };
 ```
@@ -403,7 +417,7 @@ private:
 ```cpp
 class EditDialog {
 public:
-    void Show(Item* item);
+    void Show(Item* item);  // 指针由调用者管理
     void Hide();
     bool IsVisible() const;
     void Render();
@@ -411,7 +425,7 @@ public:
     void OnSave(std::function<void(const Item&)> callback);
 
 private:
-    Item* m_item = nullptr;
+    Item* m_item = nullptr;  // 外部管理生命周期
     bool m_visible = false;
     char m_nameBuf[256] = {};
     char m_targetBuf[1024] = {};
@@ -436,6 +450,15 @@ public:
 private:
     void MainLoop();
     void HandleHotkey(int id);
+    
+    std::unique_ptr<Storage> m_storage;
+    std::unique_ptr<ItemManager> m_itemManager;
+    std::unique_ptr<Config> m_config;
+    std::unique_ptr<HotkeyManager> m_hotkeyManager;
+    std::unique_ptr<Runner> m_runner;
+    std::unique_ptr<Window> m_window;
+    std::unique_ptr<D3D11Renderer> m_renderer;
+    std::unique_ptr<MainWindow> m_mainWindow;
 };
 ```
 
@@ -447,6 +470,50 @@ private:
 4. `App::Run()` - 进入主消息循环
 5. 收到快捷键 → `MainWindow::Toggle()` 显示/隐藏窗口
 6. 用户操作 → `ItemManager` 更新数据 → `Storage::Save()` 保存
+
+## 项目结构
+
+```
+MayeNano/
+├── CMakeLists.txt
+├── cmake/
+│   └── FetchDependencies.cmake
+├── src/
+│   ├── main.cpp
+│   ├── app/
+│   │   ├── App.h
+│   │   ├── App.cpp
+│   │   └── Resource.h
+│   ├── ui/
+│   │   ├── MainWindow.h/cpp
+│   │   ├── widgets/
+│   │   │   ├── ItemGrid.h/cpp
+│   │   │   └── CategoryTab.h/cpp
+│   │   └── dialogs/
+│   │       └── EditDialog.h/cpp
+│   ├── core/
+│   │   ├── Config.h/cpp
+│   │   ├── Storage.h/cpp
+│   │   ├── Item.h/cpp
+│   │   ├── Category.h/cpp
+│   │   ├── ItemManager.h/cpp
+│   │   ├── Runner.h/cpp
+│   │   └── HotkeyManager.h/cpp
+│   ├── platform/
+│   │   ├── Window.h/cpp
+│   │   ├── D3D11Renderer.h/cpp
+│   │   ├── DragDrop.h/cpp
+│   │   └── ShellExecute.h/cpp
+│   └── utils/
+│       ├── PathUtils.h/cpp
+│       └── StringUtils.h/cpp
+├── res/
+│   ├── icons/
+│   └── resource.rc
+├── lang/
+├── img/
+└── SDK/
+```
 
 ## 依赖
 
@@ -531,3 +598,5 @@ MVP 完成后可扩展的功能：
 4. 任务计划
 5. 脚本支持
 6. 托盘图标
+7. 密码保护分类
+8. 列表/平铺视图
