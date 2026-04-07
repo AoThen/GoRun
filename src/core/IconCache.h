@@ -3,6 +3,7 @@
 #include "Types.h"
 #include <string>
 #include <unordered_map>
+#include <cstdint>
 
 namespace mn {
 
@@ -19,7 +20,7 @@ public:
 private:
     std::wstring m_cacheDir;
     std::unordered_map<std::wstring, std::wstring> m_cache;
-    void* m_gdiplusToken = nullptr;  // GDI+ token
+    uintptr_t m_gdiplusToken = 0;  // GDI+ token (ULONG_PTR on Windows)
 };
 
 } // namespace mn

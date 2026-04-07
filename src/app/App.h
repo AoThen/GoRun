@@ -22,6 +22,7 @@ class TrayIcon;
 
 class App {
 public:
+    App();  // 显式声明构造函数
 #ifdef _WIN32
     bool Initialize(HINSTANCE hInstance);
 #endif

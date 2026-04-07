@@ -15,7 +15,12 @@
 
 namespace mn {
 
-App::~App() = default;
+App::App() = default;
+
+App::~App() {
+    // 显式定义析构函数，确保 unique_ptr 在此处销毁
+    // 此时 TrayIcon 等类型已是完整类型
+}
 
 App* App::s_instance = nullptr;
 
@@ -131,7 +136,7 @@ int App::Run() {
             DispatchMessage(&msg);
             
             if (msg.message == WM_HOTKEY) {
-                m_hotkeyManager->ProcessHotkey(msg.wParam);
+                m_hotkeyManager->ProcessHotkey(static_cast<int>(msg.wParam));
             }
         } else {
             m_renderer->NewFrame();
