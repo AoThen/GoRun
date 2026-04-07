@@ -60,13 +60,25 @@ MayeNano/
 │       ├── PathUtils.h/cpp
 │       └── StringUtils.h/cpp
 ├── res/
-│   └── icons/
+│   ├── icons/
+│   └── resource.rc            # Windows 资源文件（应用图标、清单）
 ├── lang/                   # 已存在
 ├── img/                    # 已存在
 └── SDK/                    # 已存在
 ```
 
 ## 数据模型
+
+### 枚举定义
+
+```cpp
+// 视图类型
+enum class ViewType {
+    Icon = 0,    // 图标视图
+    List = 1,    // 列表视图
+    Tile = 2     // 平铺视图
+};
+```
 
 ### Item（快捷项）
 
@@ -92,12 +104,12 @@ struct Item {
 
 ```cpp
 struct Category {
-    std::wstring id;           // 唯一标识
-    std::wstring name;         // 分类名称
-    int sortOrder = 0;         // 排序顺序
-    bool isPasswordProtected = false;
-    ViewType viewType = ViewType::Icon;
-    int iconSize = 48;
+    std::wstring id;                      // 唯一标识
+    std::wstring name;                    // 分类名称
+    int sortOrder = 0;                    // 排序顺序
+    bool isPasswordProtected = false;     // 是否密码保护
+    ViewType viewType = ViewType::Icon;   // 视图类型
+    int iconSize = 48;                    // 图标大小
 };
 ```
 
@@ -110,7 +122,10 @@ struct Category {
         {
             "id": "cat_001",
             "name": "常用工具",
-            "sortOrder": 0
+            "sortOrder": 0,
+            "isPasswordProtected": false,
+            "viewType": 0,
+            "iconSize": 48
         }
     ],
     "items": [
@@ -118,17 +133,58 @@ struct Category {
             "id": "item_001",
             "name": "记事本",
             "target": "notepad.exe",
-            "categoryId": "cat_001"
+            "arguments": "",
+            "workingDir": "",
+            "iconPath": "",
+            "iconIndex": 0,
+            "runAsAdmin": false,
+            "runCount": 0,
+            "keywords": "",
+            "remark": "",
+            "categoryId": "cat_001",
+            "sortOrder": 0
         }
     ],
     "config": {
         "language": "zh-CN",
-        "globalHotkey": "Ctrl+Alt+M"
+        "globalHotkey": "Ctrl+Alt+M",
+        "windowWidth": 800,
+        "windowHeight": 600
     }
 }
 ```
 
 ## 核心组件
+
+### Config（配置管理）
+
+管理应用配置的读取和写入。
+
+```cpp
+class Config {
+public:
+    void Initialize(Storage* storage);
+    
+    // 基础配置
+    std::wstring GetLanguage() const;
+    void SetLanguage(const std::wstring& lang);
+    
+    std::wstring GetGlobalHotkey() const;
+    void SetGlobalHotkey(const std::wstring& hotkey);
+    
+    // 窗口配置
+    int GetWindowWidth() const;
+    int GetWindowHeight() const;
+    void SetWindowSize(int width, int height);
+    
+    // 保存配置
+    void Save();
+
+private:
+    Storage* m_storage = nullptr;
+    std::unordered_map<std::string, std::wstring> m_values;
+};
+```
 
 ### Storage（存储引擎）
 
@@ -253,6 +309,19 @@ public:
 };
 ```
 
+### DragDrop（拖放处理）
+
+处理 Windows 拖放操作，提取文件路径。
+
+```cpp
+class DragDrop {
+public:
+    void Initialize(HWND hwnd);
+    std::vector<std::wstring> GetDroppedFiles(HDROP hDrop);
+    void Cleanup();
+};
+```
+
 ## UI 层
 
 ### MainWindow（主窗口）
@@ -277,6 +346,76 @@ private:
     void RenderItemGrid();
     void RenderContextMenu();
     void HandleDragDrop();
+    
+    ItemManager* m_itemManager = nullptr;
+    Config* m_config = nullptr;
+    std::wstring m_currentCategoryId;
+    bool m_visible = false;
+    int m_selectedItemIndex = -1;
+};
+```
+
+### ItemGrid（项目网格）
+
+渲染项目图标网格，处理选择和双击事件。
+
+```cpp
+class ItemGrid {
+public:
+    void SetItems(std::vector<Item>* items);
+    void Render();
+    
+    // 回调
+    void OnItemDoubleClicked(std::function<void(const Item&)> callback);
+    void OnItemRightClicked(std::function<void(const Item&)> callback);
+
+private:
+    std::vector<Item>* m_items = nullptr;
+    int m_selectedIndex = -1;
+};
+```
+
+### CategoryTab（分类标签）
+
+渲染分类标签栏，处理分类切换。
+
+```cpp
+class CategoryTab {
+public:
+    void SetCategories(std::vector<Category>* categories);
+    void Render();
+    
+    void OnCategoryChanged(std::function<void(const std::wstring& id)> callback);
+    
+    void SetCurrentCategory(const std::wstring& id);
+    std::wstring GetCurrentCategory() const;
+
+private:
+    std::vector<Category>* m_categories = nullptr;
+    std::wstring m_currentId;
+};
+```
+
+### EditDialog（编辑对话框）
+
+编辑项目属性的对话框。
+
+```cpp
+class EditDialog {
+public:
+    void Show(Item* item);
+    void Hide();
+    bool IsVisible() const;
+    void Render();
+    
+    void OnSave(std::function<void(const Item&)> callback);
+
+private:
+    Item* m_item = nullptr;
+    bool m_visible = false;
+    char m_nameBuf[256] = {};
+    char m_targetBuf[1024] = {};
+    char m_argsBuf[512] = {};
 };
 ```
 
@@ -318,6 +457,8 @@ private:
 
 ## 构建配置
 
+### CMakeLists.txt
+
 ```cmake
 cmake_minimum_required(VERSION 3.16)
 project(MayeNano VERSION 1.0.0 LANGUAGES CXX)
@@ -340,6 +481,44 @@ target_include_directories(MayeNano PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_sources(MayeNano PRIVATE "res/resource.rc")
 
 set_target_properties(MayeNano PROPERTIES WIN32_EXECUTABLE TRUE)
+```
+
+### cmake/FetchDependencies.cmake
+
+```cmake
+include(FetchContent)
+
+# ImGui
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG docking
+)
+
+# nlohmann/json
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+)
+
+FetchContent_MakeAvailable(imgui nlohmann_json)
+
+# ImGui 源文件
+set(IMGUI_SOURCES
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp
+)
+
+add_library(imgui STATIC ${IMGUI_SOURCES})
+target_include_directories(imgui PUBLIC 
+    ${imgui_SOURCE_DIR} 
+    ${imgui_SOURCE_DIR}/backends
+)
 ```
 
 ## 后续扩展
