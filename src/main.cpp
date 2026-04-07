@@ -1,4 +1,12 @@
 #include "app/App.h"
+#include "core/Storage.h"
+#include "core/IconCache.h"
+#include "core/ItemManager.h"
+#include "core/Config.h"
+#include "core/HotkeyManager.h"
+#include "core/Runner.h"
+#include "platform/Window.h"
+#include "platform/D3D11Renderer.h"
 #include "ui/MainWindow.h"
 
 #ifdef _WIN32
