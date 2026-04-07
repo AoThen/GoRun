@@ -32,5 +32,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MayeNano-${{ matrix.build_type }}
-          path: build/${{ matrix.build_type }}/MayeNano.exe
+          path: build/${{ matrix.build_type }}/GoRun.exe
           retention-days: 30
