@@ -5,10 +5,104 @@
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 #include <windows.h>
+#include <gdiplus.h>
+#include <unordered_map>
 #include "../ui/Theme.h"
+#pragma comment(lib, "gdiplus.lib")
 #endif
 
 namespace mn {
+
+#ifdef _WIN32
+// 纹理缓存
+static std::unordered_map<std::wstring, ID3D11ShaderResourceView*> s_textureCache;
+static Gdiplus::GdiplusStartupInput s_gdiplusInput;
+static ULONG_PTR s_gdiplusToken = 0;
+
+static ID3D11ShaderResourceView* LoadTextureFromFile(ID3D11Device* device, const std::wstring& path, int* width, int* height) {
+    // 检查缓存
+    auto it = s_textureCache.find(path);
+    if (it != s_textureCache.end()) {
+        return it->second;
+    }
+    
+    // 初始化 GDI+
+    static bool gdiplusInit = false;
+    if (!gdiplusInit) {
+        Gdiplus::GdiplusStartup(&s_gdiplusToken, &s_gdiplusInput, nullptr);
+        gdiplusInit = true;
+    }
+    
+    // 加载图片
+    Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromFile(path.c_str());
+    if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+        delete bitmap;
+        return nullptr;
+    }
+    
+    if (width) *width = bitmap->GetWidth();
+    if (height) *height = bitmap->GetHeight();
+    
+    // 转换为 32 位 ARGB
+    Gdiplus::Bitmap* converted = new Gdiplus::Bitmap(bitmap->GetWidth(), bitmap->GetHeight(), PixelFormat32bppARGB);
+    Gdiplus::Graphics graphics(converted);
+    graphics.DrawImage(bitmap, 0, 0, bitmap->GetWidth(), bitmap->GetHeight());
+    delete bitmap;
+    bitmap = converted;
+    
+    // 锁定像素数据
+    Gdiplus::BitmapData bmpData;
+    Gdiplus::Rect rect(0, 0, bitmap->GetWidth(), bitmap->GetHeight());
+    bitmap->LockBits(&rect, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &bmpData);
+    
+    // 创建 D3D11 纹理
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = bitmap->GetWidth();
+    texDesc.Height = bitmap->GetHeight();
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    
+    // 转换 BGRA 到 RGBA
+    unsigned char* pixels = (unsigned char*)bmpData.Scan0;
+    for (int i = 0; i < bitmap->GetWidth() * bitmap->GetHeight(); i++) {
+        unsigned char b = pixels[i * 4];
+        pixels[i * 4] = pixels[i * 4 + 2];
+        pixels[i * 4 + 2] = b;
+    }
+    
+    D3D11_SUBRESOURCE_DATA initData = {};
+    initData.pSysMem = pixels;
+    initData.SysMemPitch = bmpData.Stride;
+    
+    ID3D11Texture2D* texture = nullptr;
+    device->CreateTexture2D(&texDesc, &initData, &texture);
+    
+    bitmap->UnlockBits(&bmpData);
+    delete bitmap;
+    
+    if (!texture) return nullptr;
+    
+    // 创建着色器资源视图
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+    
+    ID3D11ShaderResourceView* srv = nullptr;
+    device->CreateShaderResourceView(texture, &srvDesc, &srv);
+    texture->Release();
+    
+    if (srv) {
+        s_textureCache[path] = srv;
+    }
+    
+    return srv;
+}
+#endif
 
 bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
 #ifdef _WIN32
@@ -59,7 +153,7 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     config.OversampleV = 1;
     config.PixelSnapH = true;
     
-    // 设置中文字符范围（基本汉字 + 常用标点）
+    // 设置中文字符范围
     ImVector<ImWchar> ranges;
     ImFontGlyphRangesBuilder builder;
     builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
@@ -67,10 +161,10 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     
     // 尝试加载微软雅黑
     const char* fontPaths[] = {
-        "C:\\Windows\\Fonts\\msyh.ttc",      // 微软雅黑
-        "C:\\Windows\\Fonts\\msyhbd.ttc",    // 微软雅黑粗体
-        "C:\\Windows\\Fonts\\simhei.ttf",    // 黑体
-        "C:\\Windows\\Fonts\\simsun.ttc",    // 宋体
+        "C:\\Windows\\Fonts\\msyh.ttc",
+        "C:\\Windows\\Fonts\\msyhbd.ttc",
+        "C:\\Windows\\Fonts\\simhei.ttf",
+        "C:\\Windows\\Fonts\\simsun.ttc",
     };
     
     ImFont* font = nullptr;
@@ -79,14 +173,12 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
         if (font) break;
     }
     
-    // 如果系统字体加载失败，使用默认字体
     if (!font) {
         io.Fonts->AddFontDefault();
     }
     
     io.Fonts->Build();
     
-    // 应用主题
     ApplyLightTheme();
     
     ImGui_ImplWin32_Init((HWND)hwnd);
@@ -101,6 +193,17 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
 void D3D11Renderer::Shutdown()
 {
 #ifdef _WIN32
+    // 释放纹理缓存
+    for (auto& [path, srv] : s_textureCache) {
+        if (srv) srv->Release();
+    }
+    s_textureCache.clear();
+    
+    if (s_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(s_gdiplusToken);
+        s_gdiplusToken = 0;
+    }
+    
     ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
@@ -129,7 +232,6 @@ void D3D11Renderer::Render()
     ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
     ImGui::Render();
     
-    // 白色背景
     float clear_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     m_context->OMSetRenderTargets(1, &m_rtv, nullptr);
     m_context->ClearRenderTargetView(m_rtv, clear_color);
@@ -150,16 +252,11 @@ void D3D11Renderer::Resize(int width, int height)
     }
     
     HRESULT hr = m_swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-    if (FAILED(hr)) {
-        // ResizeBuffers 失败，尝试恢复
-        return;
-    }
+    if (FAILED(hr)) return;
     
     ID3D11Texture2D* pBackBuffer = nullptr;
     hr = m_swapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
-    if (FAILED(hr) || !pBackBuffer) {
-        return;
-    }
+    if (FAILED(hr) || !pBackBuffer) return;
     
     hr = m_device->CreateRenderTargetView(pBackBuffer, nullptr, &m_rtv);
     pBackBuffer->Release();
@@ -167,6 +264,57 @@ void D3D11Renderer::Resize(int width, int height)
     if (FAILED(hr)) {
         m_rtv = nullptr;
     }
+#endif
+}
+
+void* D3D11Renderer::LoadTexture(const std::wstring& path) {
+#ifdef _WIN32
+    int w, h;
+    return LoadTextureFromFile(m_device, path, &w, &h);
+#else
+    return nullptr;
+#endif
+}
+
+void D3D11Renderer::UnloadTexture(void* texture) {
+#ifdef _WIN32
+    // 纹理由缓存管理，暂不释放
+#endif
+}
+
+int D3D11Renderer::GetTextureWidth(void* texture) {
+#ifdef _WIN32
+    if (!texture) return 0;
+    ID3D11ShaderResourceView* srv = static_cast<ID3D11ShaderResourceView*>(texture);
+    ID3D11Resource* resource = nullptr;
+    srv->GetResource(&resource);
+    ID3D11Texture2D* tex = nullptr;
+    resource->QueryInterface(&tex);
+    D3D11_TEXTURE2D_DESC desc;
+    tex->GetDesc(&desc);
+    tex->Release();
+    resource->Release();
+    return desc.Width;
+#else
+    return 0;
+#endif
+}
+
+int D3D11Renderer::GetTextureHeight(void* texture) {
+#ifdef _WIN32
+    if (!texture) return 0;
+    ID3D11ShaderResourceView* srv = static_cast<ID3D11ShaderResourceView*>(texture);
+    ID3D11Resource* resource = nullptr;
+    srv->GetResource(&resource);
+    ID3D11Texture2D* tex = nullptr;
+    resource->QueryInterface(&tex);
+    D3D11_TEXTURE2D_DESC desc;
+    tex->GetDesc(&desc);
+    tex->Release();
+    resource->Release();
+    return desc.Height;
+#else
+    return 0;
 #endif
 }
 

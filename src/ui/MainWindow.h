@@ -11,10 +11,11 @@ namespace mn {
 class ItemManager;
 class Config;
 class Runner;
+class IconTextureManager;
 
 class MainWindow {
 public:
-    void Initialize(ItemManager* itemManager, Config* config, Runner* runner);
+    void Initialize(ItemManager* itemManager, Config* config, Runner* runner, IconTextureManager* iconTextureManager);
     void Render();
     
     void Show();
@@ -27,11 +28,13 @@ private:
     void RenderMenuBar();
     void RenderSearchBar();
     void UpdateSearchResults();
+    void RefreshItems();
     void ShowError(const std::wstring& message);
     
     ItemManager* m_itemManager = nullptr;
     Config* m_config = nullptr;
     Runner* m_runner = nullptr;
+    IconTextureManager* m_iconTextureManager = nullptr;
     
     CategoryTab m_categoryTab;
     ItemGrid m_itemGrid;

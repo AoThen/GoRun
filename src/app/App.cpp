@@ -1,6 +1,7 @@
 #include "App.h"
 #include "core/Storage.h"
 #include "core/IconCache.h"
+#include "core/IconTextureManager.h"
 #include "core/ItemManager.h"
 #include "core/Config.h"
 #include "core/HotkeyManager.h"
@@ -30,6 +31,7 @@ bool App::Initialize(HINSTANCE hInstance) {
     
     m_storage = std::make_unique<Storage>();
     m_iconCache = std::make_unique<IconCache>();
+    m_iconTextureManager = std::make_unique<IconTextureManager>();
     m_itemManager = std::make_unique<ItemManager>();
     m_config = std::make_unique<Config>();
     m_hotkeyManager = std::make_unique<HotkeyManager>();
@@ -68,6 +70,9 @@ bool App::Initialize(HINSTANCE hInstance) {
         return false;
     }
     
+    // 初始化图标纹理管理器
+    m_iconTextureManager->Initialize(m_renderer.get(), m_iconCache.get());
+    
     m_window->EnableDragDrop();
     
     m_window->OnDropFiles([this](const std::vector<std::wstring>& files) {
@@ -95,9 +100,8 @@ bool App::Initialize(HINSTANCE hInstance) {
         m_hotkeyManager->RegisterGlobalHotkey(1, modifiers, vk);
     }
     
-    m_mainWindow->Initialize(m_itemManager.get(), m_config.get(), m_runner.get());
+    m_mainWindow->Initialize(m_itemManager.get(), m_config.get(), m_runner.get(), m_iconTextureManager.get());
     
-    // 创建系统托盘图标
     m_trayIcon->Create(m_window->GetHandle(), WM_TRAYICON, L"GoRun");
     m_trayIcon->OnShow([this]() {
         m_mainWindow->Toggle();
@@ -106,7 +110,6 @@ bool App::Initialize(HINSTANCE hInstance) {
         Quit();
     });
     
-    // 设置托盘消息处理
     m_window->OnTrayMessage([this](WPARAM wParam, LPARAM lParam) {
         m_trayIcon->HandleMessage(wParam, lParam);
     });
@@ -181,6 +184,10 @@ Config* App::GetConfig() {
 
 MainWindow* App::GetMainWindow() {
     return m_mainWindow.get();
+}
+
+IconTextureManager* App::GetIconTextureManager() {
+    return m_iconTextureManager.get();
 }
 
 void App::HandleHotkey(int id) {

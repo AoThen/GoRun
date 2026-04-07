@@ -2,16 +2,18 @@
 #include "core/ItemManager.h"
 #include "core/Config.h"
 #include "core/Runner.h"
+#include "core/IconTextureManager.h"
 #include "utils/StringUtils.h"
 #include <imgui.h>
 #include <algorithm>
 
 namespace mn {
 
-void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* runner) {
+void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* runner, IconTextureManager* iconTextureManager) {
     m_itemManager = itemManager;
     m_config = config;
     m_runner = runner;
+    m_iconTextureManager = iconTextureManager;
     
     m_categoryTab.SetCategories(&itemManager->GetCategories());
     
@@ -22,6 +24,7 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         m_itemGrid.SetItems(&m_itemManager->GetItems(id));
     });
     
+    // 单击运行
     m_itemGrid.OnItemClicked([this](const Item& item) {
         RunResult result = m_runner->Run(item);
         if (!result.success) {
@@ -29,12 +32,31 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         }
     });
     
-    m_editDialog.OnSave([this](const Item& item) {
-        if (m_isSearching) {
-            UpdateSearchResults();
-        } else {
-            m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+    // 管理员运行
+    m_itemGrid.OnItemRunAsAdmin([this](const Item& item) {
+        RunResult result = m_runner->RunAsAdmin(item);
+        if (!result.success) {
+            ShowError(result.errorMessage);
         }
+    });
+    
+    // 编辑项目
+    m_itemGrid.OnItemEdit([this](Item& item) {
+        m_editDialog.Show(&item);
+    });
+    
+    // 删除项目
+    m_itemGrid.OnItemDelete([this](const Item& item) {
+        m_itemManager->DeleteItem(item.id);
+        RefreshItems();
+    });
+    
+    // 设置图标纹理管理器
+    m_itemGrid.SetIconTextureManager(iconTextureManager);
+    
+    // 编辑保存后刷新
+    m_editDialog.OnSave([this](const Item& item) {
+        RefreshItems();
     });
     
     auto& categories = itemManager->GetCategories();
@@ -49,33 +71,55 @@ void MainWindow::Render() {
     
     // 菜单栏
     if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("文件")) {
-            if (ImGui::MenuItem("新建分类")) {
+        if (ImGui::BeginMenu(u8"文件")) {
+            if (ImGui::MenuItem(u8"新建分类")) {
                 Category cat;
                 cat.id = GenerateId(L"cat");
                 cat.name = L"新分类";
                 m_itemManager->AddCategory(cat);
                 m_categoryTab.SetCategories(&m_itemManager->GetCategories());
             }
+            if (ImGui::MenuItem(u8"删除当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
+                if (!m_currentCategoryId.empty()) {
+                    if (m_itemManager->GetCategories().size() > 1) {
+                        m_itemManager->DeleteCategory(m_currentCategoryId);
+                        m_categoryTab.SetCategories(&m_itemManager->GetCategories());
+                        auto& cats = m_itemManager->GetCategories();
+                        if (!cats.empty()) {
+                            m_currentCategoryId = cats[0].id;
+                            m_categoryTab.SetCurrentCategory(m_currentCategoryId);
+                            m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+                        }
+                    } else {
+                        ShowError(L"至少需要保留一个分类");
+                    }
+                }
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem(u8"退出")) {
+                PostQuitMessage(0);
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu(u8"编辑")) {
+            if (ImGui::MenuItem(u8"重命名当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
+                // TODO: 实现分类重命名对话框
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMenuBar();
     }
     
-    // 搜索栏
     RenderSearchBar();
     
-    // 主布局
     ImGui::BeginChild("MainContent", ImVec2(0, 0), false);
     
-    // 左侧分类
     ImGui::BeginChild("Left", ImVec2(160, 0), false);
     m_categoryTab.Render();
     ImGui::EndChild();
     
     ImGui::SameLine(0, 0);
     
-    // 右侧项目
     ImGui::BeginChild("Right", ImVec2(0, 0), false);
     m_itemGrid.Render();
     ImGui::EndChild();
@@ -85,10 +129,10 @@ void MainWindow::Render() {
     m_editDialog.Render();
     
     if (m_showError) {
-        ImGui::OpenPopup("错误");
-        if (ImGui::BeginPopupModal("错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::OpenPopup(u8"错误");
+        if (ImGui::BeginPopupModal(u8"错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("%s", StringUtils::WStringToUtf8(m_errorMessage).c_str());
-            if (ImGui::Button("确定", ImVec2(100, 0))) {
+            if (ImGui::Button(u8"确定", ImVec2(100, 0))) {
                 m_showError = false;
                 ImGui::CloseCurrentPopup();
             }
@@ -104,7 +148,6 @@ void MainWindow::RenderSearchBar() {
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.92f, 0.92f, 0.92f, 1.0f));
     
-    // 搜索图标 + 输入框
     ImGui::SetNextItemWidth(-FLT_MIN);
     bool searchChanged = ImGui::InputTextWithHint("##search", u8"搜索...", m_searchBuf, sizeof(m_searchBuf));
     
@@ -133,18 +176,14 @@ void MainWindow::UpdateSearchResults() {
     std::wstring searchWStr = StringUtils::Utf8ToWString(searchStr);
     std::wstring searchLower = StringUtils::ToLower(searchWStr);
     
-    // 搜索所有分类中的项目
     for (const auto& cat : m_itemManager->GetCategories()) {
         for (const auto& item : m_itemManager->GetItems(cat.id)) {
-            // 匹配名称
             std::wstring nameLower = StringUtils::ToLower(item.name);
             bool matchName = nameLower.find(searchLower) != std::wstring::npos;
             
-            // 匹配关键词
             std::wstring keywordsLower = StringUtils::ToLower(item.keywords);
             bool matchKeywords = keywordsLower.find(searchLower) != std::wstring::npos;
             
-            // 匹配路径
             std::wstring targetLower = StringUtils::ToLower(item.target);
             bool matchTarget = targetLower.find(searchLower) != std::wstring::npos;
             
@@ -155,6 +194,14 @@ void MainWindow::UpdateSearchResults() {
     }
     
     m_itemGrid.SetItems(&m_searchResults);
+}
+
+void MainWindow::RefreshItems() {
+    if (m_isSearching) {
+        UpdateSearchResults();
+    } else {
+        m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+    }
 }
 
 void MainWindow::Show() {

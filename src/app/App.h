@@ -10,6 +10,7 @@ namespace mn {
 
 class Storage;
 class IconCache;
+class IconTextureManager;
 class ItemManager;
 class Config;
 class HotkeyManager;
@@ -34,6 +35,7 @@ public:
     ItemManager* GetItemManager();
     Config* GetConfig();
     MainWindow* GetMainWindow();
+    IconTextureManager* GetIconTextureManager();
 
 private:
     void HandleHotkey(int id);
@@ -43,6 +45,7 @@ private:
     
     std::unique_ptr<Storage> m_storage;
     std::unique_ptr<IconCache> m_iconCache;
+    std::unique_ptr<IconTextureManager> m_iconTextureManager;
     std::unique_ptr<ItemManager> m_itemManager;
     std::unique_ptr<Config> m_config;
     std::unique_ptr<HotkeyManager> m_hotkeyManager;

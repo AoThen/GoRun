@@ -2,6 +2,7 @@
 
 #ifdef _WIN32
 #include <d3d11.h>
+#include <string>
 #endif
 
 namespace mn {
@@ -13,6 +14,12 @@ public:
     void NewFrame();
     void Render();
     void Resize(int width, int height);
+    
+    // 纹理加载
+    void* LoadTexture(const std::wstring& path);
+    void UnloadTexture(void* texture);
+    int GetTextureWidth(void* texture);
+    int GetTextureHeight(void* texture);
 
 private:
 #ifdef _WIN32
