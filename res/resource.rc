@@ -51,7 +51,7 @@ BEGIN
         BLOCK "080404b0"
         BEGIN
             VALUE "CompanyName", "Maye Nano"
-            VALUE "FileDescription", "Maye Nano - 快速启动工具"
+            VALUE "FileDescription", "Maye Nano - Quick Launcher"
             VALUE "FileVersion", "1.0.0.0"
             VALUE "InternalName", "MayeNano"
             VALUE "LegalCopyright", "Copyright (C) 2026"
