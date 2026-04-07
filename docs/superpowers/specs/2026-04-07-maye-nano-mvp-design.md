@@ -31,6 +31,21 @@ Maye Nano 是一款 Windows 平台的快速启动工具，使用 C++ 和 ImGui �
 
 ## 数据模型
 
+### ID 生成规则
+
+使用时间戳 + 随机数生成唯一 ID：
+
+```cpp
+std::wstring GenerateId(const std::wstring& prefix) {
+    auto now = std::chrono::system_clock::now().time_since_epoch();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    std::random_device rd;
+    int random = rd() % 10000;
+    return prefix + L"_" + std::to_wstring(ms) + L"_" + std::to_wstring(random);
+}
+// 示例: "item_1712512345678_1234"
+```
+
 ### 枚举定义
 
 ```cpp
@@ -44,7 +59,7 @@ enum class ViewType {
 
 ```cpp
 struct Item {
-    std::wstring id;           // 唯一标识
+    std::wstring id;           // 唯一标识，格式: item_<timestamp>_<random>
     std::wstring name;         // 显示名称
     std::wstring target;       // 目标路径
     std::wstring arguments;    // 启动参数
@@ -64,7 +79,7 @@ struct Item {
 
 ```cpp
 struct Category {
-    std::wstring id;                    // 唯一标识
+    std::wstring id;                    // 唯一标识，格式: cat_<timestamp>_<random>
     std::wstring name;                  // 分类名称
     int sortOrder = 0;                  // 排序顺序
     ViewType viewType = ViewType::Icon; // 视图类型
@@ -79,7 +94,7 @@ struct Category {
     "version": "1.0.0",
     "categories": [
         {
-            "id": "cat_001",
+            "id": "cat_1712512345678_1234",
             "name": "常用工具",
             "sortOrder": 0,
             "viewType": 0,
@@ -88,7 +103,7 @@ struct Category {
     ],
     "items": [
         {
-            "id": "item_001",
+            "id": "item_1712512345679_5678",
             "name": "记事本",
             "target": "notepad.exe",
             "arguments": "",
@@ -99,7 +114,7 @@ struct Category {
             "runCount": 0,
             "keywords": "",
             "remark": "",
-            "categoryId": "cat_001",
+            "categoryId": "cat_1712512345678_1234",
             "sortOrder": 0
         }
     ],
@@ -109,6 +124,51 @@ struct Category {
         "windowWidth": 800,
         "windowHeight": 600
     }
+}
+```
+
+## 工具类
+
+### PathUtils（路径工具）
+
+```cpp
+namespace PathUtils {
+    // 获取 AppData 目录
+    std::wstring GetAppDataPath();
+    
+    // 转换为绝对路径
+    std::wstring ToAbsolute(const std::wstring& path);
+    
+    // 转换为相对路径（相对于程序目录）
+    std::wstring ToRelative(const std::wstring& path);
+    
+    // 检查路径是否存在
+    bool Exists(const std::wstring& path);
+    
+    // 获取父目录
+    std::wstring GetParentDir(const std::wstring& path);
+    
+    // 获取文件名
+    std::wstring GetFileName(const std::wstring& path);
+}
+```
+
+### StringUtils（字符串工具）
+
+```cpp
+namespace StringUtils {
+    // wstring <-> UTF-8 转换
+    std::string WStringToUtf8(const std::wstring& wstr);
+    std::wstring Utf8ToWString(const std::string& str);
+    
+    // 分割字符串
+    std::vector<std::wstring> Split(const std::wstring& str, wchar_t delimiter);
+    
+    // 去除空白
+    std::wstring Trim(const std::wstring& str);
+    
+    // 转小写
+    std::wstring ToLower(const std::wstring& str);
 }
 ```
 
@@ -146,7 +206,7 @@ private:
 
 ### Storage（存储引擎）
 
-负责 JSON 数据的读写操作。内部使用 UTF-8 编码存储，读取时转换为 `std::wstring`。
+负责 JSON 数据的读写操作。内部使用 UTF-8 编码存储。
 
 ```cpp
 class Storage {
@@ -168,11 +228,6 @@ public:
     
     std::wstring GetConfig(const std::string& key, const std::wstring& defaultVal = L"");
     bool SetConfig(const std::string& key, const std::wstring& value);
-
-private:
-    // wstring <-> UTF-8 转换
-    std::string WStringToUtf8(const std::wstring& wstr);
-    std::wstring Utf8ToWString(const std::string& str);
 };
 ```
 
@@ -243,27 +298,22 @@ public:
 **快捷键解析逻辑：**
 
 ```cpp
-// 示例：ParseHotkeyString("Ctrl+Alt+M", modifiers, vk)
-// modifiers = MOD_CONTROL | MOD_ALT
-// vk = 'M'
-
 bool ParseHotkeyString(const std::wstring& hotkey, UINT& modifiers, UINT& vk) {
     modifiers = 0;
     vk = 0;
     
-    // 分割字符串
-    auto parts = Split(hotkey, L'+');
+    auto parts = StringUtils::Split(hotkey, L'+');
     for (size_t i = 0; i < parts.size(); i++) {
-        const auto& part = Trim(parts[i]);
+        const auto& part = StringUtils::Trim(parts[i]);
         if (part == L"Ctrl") modifiers |= MOD_CONTROL;
         else if (part == L"Alt") modifiers |= MOD_ALT;
         else if (part == L"Shift") modifiers |= MOD_SHIFT;
         else if (part == L"Win") modifiers |= MOD_WIN;
         else if (i == parts.size() - 1) {
-            // 最后一个部分是按键
             if (part.size() == 1) vk = toupper(part[0]);
             else if (part == L"F1") vk = VK_F1;
-            // ... 其他功能键映射
+            else if (part == L"F2") vk = VK_F2;
+            // ... 其他功能键
         }
     }
     return modifiers != 0 && vk != 0;
@@ -376,15 +426,14 @@ private:
 ```cpp
 class ItemGrid {
 public:
-    void SetItems(std::vector<Item>* items);  // 指针由 ItemManager 管理，生命周期有保障
+    void SetItems(std::vector<Item>* items);
     void Render();
     
-    // 回调
     void OnItemDoubleClicked(std::function<void(const Item&)> callback);
     void OnItemRightClicked(std::function<void(const Item&)> callback);
 
 private:
-    std::vector<Item>* m_items = nullptr;  // 外部管理生命周期
+    std::vector<Item>* m_items = nullptr;
     int m_selectedIndex = -1;
 };
 ```
@@ -396,7 +445,7 @@ private:
 ```cpp
 class CategoryTab {
 public:
-    void SetCategories(std::vector<Category>* categories);  // 指针由 ItemManager 管理
+    void SetCategories(std::vector<Category>* categories);
     void Render();
     
     void OnCategoryChanged(std::function<void(const std::wstring& id)> callback);
@@ -405,19 +454,19 @@ public:
     std::wstring GetCurrentCategory() const;
 
 private:
-    std::vector<Category>* m_categories = nullptr;  // 外部管理生命周期
+    std::vector<Category>* m_categories = nullptr;
     std::wstring m_currentId;
 };
 ```
 
 ### EditDialog（编辑对话框）
 
-编辑项目属性的对话框。
+编辑项目属性的对话框。使用 `std::string` 动态管理缓冲区，避免截断。
 
 ```cpp
 class EditDialog {
 public:
-    void Show(Item* item);  // 指针由调用者管理
+    void Show(Item* item);
     void Hide();
     bool IsVisible() const;
     void Render();
@@ -425,11 +474,14 @@ public:
     void OnSave(std::function<void(const Item&)> callback);
 
 private:
-    Item* m_item = nullptr;  // 外部管理生命周期
+    Item* m_item = nullptr;
     bool m_visible = false;
-    char m_nameBuf[256] = {};
-    char m_targetBuf[1024] = {};
-    char m_argsBuf[512] = {};
+    
+    // 动态缓冲区
+    std::string m_nameBuf;
+    std::string m_targetBuf;
+    std::string m_argsBuf;
+    std::string m_workingDirBuf;
 };
 ```
 
@@ -502,8 +554,7 @@ MayeNano/
 │   ├── platform/
 │   │   ├── Window.h/cpp
 │   │   ├── D3D11Renderer.h/cpp
-│   │   ├── DragDrop.h/cpp
-│   │   └── ShellExecute.h/cpp
+│   │   └── DragDrop.h/cpp
 │   └── utils/
 │       ├── PathUtils.h/cpp
 │       └── StringUtils.h/cpp
@@ -532,7 +583,6 @@ project(MayeNano VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_GENERATOR_PLATFORM x64)
 
 include(cmake/FetchDependencies.cmake)
 
@@ -546,8 +596,12 @@ target_link_libraries(MayeNano
 
 target_include_directories(MayeNano PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_sources(MayeNano PRIVATE "res/resource.rc")
+```
 
-set_target_properties(MayeNano PROPERTIES WIN32_EXECUTABLE TRUE)
+**构建命令：**
+```bash
+cmake -B build -A x64
+cmake --build build --config Release
 ```
 
 ### cmake/FetchDependencies.cmake
