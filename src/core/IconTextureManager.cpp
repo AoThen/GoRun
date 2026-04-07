@@ -1,5 +1,5 @@
 #include "IconTextureManager.h"
-#include "D3D11Renderer.h"
+#include "platform/D3D11Renderer.h"
 #include "IconCache.h"
 #include "utils/PathUtils.h"
 

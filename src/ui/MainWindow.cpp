@@ -6,6 +6,7 @@
 #include "utils/StringUtils.h"
 #include <imgui.h>
 #include <algorithm>
+#include <windows.h>
 
 namespace mn {
 
