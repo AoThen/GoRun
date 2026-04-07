@@ -44,7 +44,7 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     pBackBuffer->Release();
     
     m_imguiContext = ImGui::CreateContext();
-    ImGui::SetCurrentContext(m_imguiContext);
+    ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     
@@ -60,10 +60,10 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
 void D3D11Renderer::Shutdown()
 {
 #ifdef _WIN32
-    ImGui::SetCurrentContext(m_imguiContext);
+    ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext(m_imguiContext);
+    ImGui::DestroyContext(static_cast<ImGuiContext*>(m_imguiContext));
     
     if (m_rtv) m_rtv->Release();
     if (m_swapChain) m_swapChain->Release();
@@ -75,7 +75,7 @@ void D3D11Renderer::Shutdown()
 void D3D11Renderer::NewFrame()
 {
 #ifdef _WIN32
-    ImGui::SetCurrentContext(m_imguiContext);
+    ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
@@ -85,7 +85,7 @@ void D3D11Renderer::NewFrame()
 void D3D11Renderer::Render()
 {
 #ifdef _WIN32
-    ImGui::SetCurrentContext(m_imguiContext);
+    ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
     ImGui::Render();
     
     float clear_color[4] = { 0.1f, 0.1f, 0.12f, 1.0f };

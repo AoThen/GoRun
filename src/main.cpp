@@ -1,4 +1,5 @@
 #include "app/App.h"
+#include "ui/MainWindow.h"
 
 #ifdef _WIN32
 #include <Windows.h>
