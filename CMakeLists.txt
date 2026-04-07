@@ -16,26 +16,23 @@ target_link_libraries(GoRun
 
 target_include_directories(GoRun PRIVATE "${CMAKE_SOURCE_DIR}/src")
 
-# Release 模式优化配置
+# MSVC 编译配置
 if(MSVC)
-    # 代码优化
+    # 通用设置
     target_compile_options(GoRun PRIVATE
-        /O2      # 最大优化
-        /Ob2     # 内联扩展
-        /Oi      # 内联函数
-        /Ot      # 速度优先
-        /GL      # 全程序优化
-        /Gy      # 函数级链接
-        /Zc:inline  # 移除未引用内联函数
+        /W3           # 警告级别 3
+        /Zc:inline    # 移除未引用内联函数
     )
-    # 链接优化
-    target_link_options(GoRun PRIVATE
-        /LTCG    # 链接时代码生成
-        /OPT:REF # 移除未引用函数
-        /OPT:ICF # 合并相同 COMDAT
-    )
+    
+    # Release 模式优化配置
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /Ob2 /Oi /Ot /GL /Gy")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG /OPT:REF /OPT:ICF")
+    
+    # Debug 模式配置（保持默认的 /RTC1 运行时检查）
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
+    
     # 静态链接运行时库（避免 msvcrt 依赖）
-    set_property(TARGET GoRun PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    set_property(TARGET GoRun PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 # 应用程序图标（需要用户提供 icons/app.ico）
