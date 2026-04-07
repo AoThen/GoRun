@@ -4,6 +4,7 @@
 #include "widgets/ItemGrid.h"
 #include "dialogs/EditDialog.h"
 #include "core/Types.h"
+#include <string>
 
 namespace mn {
 
@@ -24,6 +25,8 @@ public:
 
 private:
     void RenderMenuBar();
+    void RenderSearchBar();
+    void UpdateSearchResults();
     void ShowError(const std::wstring& message);
     
     ItemManager* m_itemManager = nullptr;
@@ -36,6 +39,11 @@ private:
     
     std::wstring m_currentCategoryId;
     bool m_visible = false;
+    
+    // 搜索相关
+    char m_searchBuf[256] = {};
+    bool m_isSearching = false;
+    std::vector<Item> m_searchResults;
     
     std::wstring m_errorMessage;
     bool m_showError = false;

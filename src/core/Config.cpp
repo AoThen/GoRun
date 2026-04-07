@@ -8,7 +8,7 @@ void Config::Initialize(Storage* storage) {
 }
 
 std::wstring Config::GetGlobalHotkey() const {
-    return m_storage ? m_storage->GetConfig("globalHotkey", L"Ctrl+Alt+M") : L"Ctrl+Alt+M";
+    return m_storage ? m_storage->GetConfig("globalHotkey", L"Ctrl+Alt+Z") : L"Ctrl+Alt+Z";
 }
 
 void Config::SetGlobalHotkey(const std::wstring& hotkey) {

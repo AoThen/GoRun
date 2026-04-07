@@ -12,9 +12,9 @@ std::wstring GetAppDataPath() {
 #ifdef _WIN32
     wchar_t path[MAX_PATH];
     SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, path);
-    return std::wstring(path) + L"\\MayeNano";
+    return std::wstring(path) + L"\\GoRun";
 #else
-    return L"/tmp/MayeNano";
+    return L"/tmp/GoRun";
 #endif
 }
 
@@ -24,7 +24,7 @@ std::wstring GetExePath() {
     GetModuleFileNameW(nullptr, path, MAX_PATH);
     return path;
 #else
-    return L"./MayeNano";
+    return L"./GoRun";
 #endif
 }
 

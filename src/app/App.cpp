@@ -7,6 +7,7 @@
 #include "core/Runner.h"
 #include "platform/Window.h"
 #include "platform/D3D11Renderer.h"
+#include "platform/TrayIcon.h"
 #include "ui/MainWindow.h"
 #include "utils/PathUtils.h"
 #include <imgui.h>
@@ -22,6 +23,8 @@ App* App::Get() {
 }
 
 #ifdef _WIN32
+#define WM_TRAYICON (WM_USER + 100)
+
 bool App::Initialize(HINSTANCE hInstance) {
     s_instance = this;
     
@@ -34,6 +37,7 @@ bool App::Initialize(HINSTANCE hInstance) {
     m_window = std::make_unique<Window>();
     m_renderer = std::make_unique<D3D11Renderer>();
     m_mainWindow = std::make_unique<MainWindow>();
+    m_trayIcon = std::make_unique<TrayIcon>();
     
     std::wstring appDataPath = PathUtils::GetAppDataPath();
     PathUtils::EnsureDirectory(appDataPath);
@@ -56,7 +60,7 @@ bool App::Initialize(HINSTANCE hInstance) {
     int width = m_config->GetWindowWidth();
     int height = m_config->GetWindowHeight();
     
-    if (!m_window->Create(L"Maye Nano", width, height, x, y)) {
+    if (!m_window->Create(L"GoRun", width, height, x, y)) {
         return false;
     }
     
@@ -92,6 +96,20 @@ bool App::Initialize(HINSTANCE hInstance) {
     }
     
     m_mainWindow->Initialize(m_itemManager.get(), m_config.get(), m_runner.get());
+    
+    // 创建系统托盘图标
+    m_trayIcon->Create(m_window->GetHandle(), WM_TRAYICON, L"GoRun");
+    m_trayIcon->OnShow([this]() {
+        m_mainWindow->Toggle();
+    });
+    m_trayIcon->OnExit([this]() {
+        Quit();
+    });
+    
+    // 设置托盘消息处理
+    m_window->OnTrayMessage([this](WPARAM wParam, LPARAM lParam) {
+        m_trayIcon->HandleMessage(wParam, lParam);
+    });
     
     m_window->Show();
     m_mainWindow->Show();
@@ -142,8 +160,15 @@ int App::Run() {
 void App::Shutdown() {
     SaveWindowPosition();
     
+    m_trayIcon->Destroy();
     m_renderer->Shutdown();
     m_hotkeyManager->UnregisterGlobalHotkey(1);
+}
+
+void App::Quit() {
+#ifdef _WIN32
+    PostQuitMessage(0);
+#endif
 }
 
 ItemManager* App::GetItemManager() {

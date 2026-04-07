@@ -4,6 +4,7 @@
 #include "core/Runner.h"
 #include "utils/StringUtils.h"
 #include <imgui.h>
+#include <algorithm>
 
 namespace mn {
 
@@ -16,10 +17,12 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     
     m_categoryTab.OnCategoryChanged([this](const std::wstring& id) {
         m_currentCategoryId = id;
+        m_searchBuf[0] = '\0';
+        m_isSearching = false;
         m_itemGrid.SetItems(&m_itemManager->GetItems(id));
     });
     
-    m_itemGrid.OnItemDoubleClicked([this](const Item& item) {
+    m_itemGrid.OnItemClicked([this](const Item& item) {
         RunResult result = m_runner->Run(item);
         if (!result.success) {
             ShowError(result.errorMessage);
@@ -27,7 +30,11 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     });
     
     m_editDialog.OnSave([this](const Item& item) {
-        m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+        if (m_isSearching) {
+            UpdateSearchResults();
+        } else {
+            m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+        }
     });
     
     auto& categories = itemManager->GetCategories();
@@ -40,6 +47,7 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
 void MainWindow::Render() {
     if (!m_visible) return;
     
+    // 菜单栏
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("文件")) {
             if (ImGui::MenuItem("新建分类")) {
@@ -54,14 +62,24 @@ void MainWindow::Render() {
         ImGui::EndMenuBar();
     }
     
-    ImGui::BeginChild("Left", ImVec2(150, 0), true);
+    // 搜索栏
+    RenderSearchBar();
+    
+    // 主布局
+    ImGui::BeginChild("MainContent", ImVec2(0, 0), false);
+    
+    // 左侧分类
+    ImGui::BeginChild("Left", ImVec2(160, 0), false);
     m_categoryTab.Render();
     ImGui::EndChild();
     
-    ImGui::SameLine();
+    ImGui::SameLine(0, 0);
     
-    ImGui::BeginChild("Right", ImVec2(0, 0), true);
+    // 右侧项目
+    ImGui::BeginChild("Right", ImVec2(0, 0), false);
     m_itemGrid.Render();
+    ImGui::EndChild();
+    
     ImGui::EndChild();
     
     m_editDialog.Render();
@@ -70,13 +88,73 @@ void MainWindow::Render() {
         ImGui::OpenPopup("错误");
         if (ImGui::BeginPopupModal("错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("%s", StringUtils::WStringToUtf8(m_errorMessage).c_str());
-            if (ImGui::Button("确定")) {
+            if (ImGui::Button("确定", ImVec2(100, 0))) {
                 m_showError = false;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
         }
     }
+}
+
+void MainWindow::RenderSearchBar() {
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 10));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.96f, 0.96f, 0.96f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.92f, 0.92f, 0.92f, 1.0f));
+    
+    // 搜索图标 + 输入框
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    bool searchChanged = ImGui::InputTextWithHint("##search", u8"搜索...", m_searchBuf, sizeof(m_searchBuf));
+    
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
+    
+    if (searchChanged) {
+        std::string searchText(m_searchBuf);
+        m_isSearching = !searchText.empty();
+        
+        if (m_isSearching) {
+            UpdateSearchResults();
+        } else {
+            m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+        }
+    }
+    
+    ImGui::Spacing();
+    ImGui::Spacing();
+}
+
+void MainWindow::UpdateSearchResults() {
+    m_searchResults.clear();
+    
+    std::string searchStr(m_searchBuf);
+    std::wstring searchWStr = StringUtils::Utf8ToWString(searchStr);
+    std::wstring searchLower = StringUtils::ToLower(searchWStr);
+    
+    // 搜索所有分类中的项目
+    for (const auto& cat : m_itemManager->GetCategories()) {
+        for (const auto& item : m_itemManager->GetItems(cat.id)) {
+            // 匹配名称
+            std::wstring nameLower = StringUtils::ToLower(item.name);
+            bool matchName = nameLower.find(searchLower) != std::wstring::npos;
+            
+            // 匹配关键词
+            std::wstring keywordsLower = StringUtils::ToLower(item.keywords);
+            bool matchKeywords = keywordsLower.find(searchLower) != std::wstring::npos;
+            
+            // 匹配路径
+            std::wstring targetLower = StringUtils::ToLower(item.target);
+            bool matchTarget = targetLower.find(searchLower) != std::wstring::npos;
+            
+            if (matchName || matchKeywords || matchTarget) {
+                m_searchResults.push_back(item);
+            }
+        }
+    }
+    
+    m_itemGrid.SetItems(&m_searchResults);
 }
 
 void MainWindow::Show() {

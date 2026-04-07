@@ -17,6 +17,7 @@ class Runner;
 class Window;
 class D3D11Renderer;
 class MainWindow;
+class TrayIcon;
 
 class App {
 public:
@@ -27,6 +28,7 @@ public:
     
     int Run();
     void Shutdown();
+    void Quit();
     
     static App* Get();
     ItemManager* GetItemManager();
@@ -48,6 +50,7 @@ private:
     std::unique_ptr<Window> m_window;
     std::unique_ptr<D3D11Renderer> m_renderer;
     std::unique_ptr<MainWindow> m_mainWindow;
+    std::unique_ptr<TrayIcon> m_trayIcon;
 };
 
 } // namespace mn

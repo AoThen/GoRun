@@ -4,13 +4,53 @@
 #ifdef _WIN32
 #include <Windows.h>
 #include <ShellApi.h>
+#include <comdef.h>
+#include <gdiplus.h>
+#include <shlwapi.h>
+#pragma comment(lib, "gdiplus.lib")
 #endif
 
 namespace mn {
 
+#ifdef _WIN32
+static int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
+    UINT num = 0, size = 0;
+    Gdiplus::GetImageEncodersSize(&num, &size);
+    if (size == 0) return -1;
+    
+    Gdiplus::ImageCodecInfo* pImageCodecInfo = (Gdiplus::ImageCodecInfo*)malloc(size);
+    if (!pImageCodecInfo) return -1;
+    
+    Gdiplus::GetImageEncoders(num, size, pImageCodecInfo);
+    for (UINT j = 0; j < num; ++j) {
+        if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0) {
+            *pClsid = pImageCodecInfo[j].Clsid;
+            free(pImageCodecInfo);
+            return j;
+        }
+    }
+    free(pImageCodecInfo);
+    return -1;
+}
+#endif
+
 void IconCache::Initialize(const std::wstring& cacheDir) {
     m_cacheDir = cacheDir;
     PathUtils::EnsureDirectory(cacheDir);
+    
+#ifdef _WIN32
+    // 初始化 GDI+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    Gdiplus::GdiplusStartup(&m_gdiplusToken, &gdiplusStartupInput, nullptr);
+#endif
+}
+
+IconCache::~IconCache() {
+#ifdef _WIN32
+    if (m_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(m_gdiplusToken);
+    }
+#endif
 }
 
 std::wstring IconCache::GetIconPath(const Item& item) {
@@ -37,7 +77,15 @@ void IconCache::RefreshIcon(const Item& item) {
     );
     
     if (result && sfi.hIcon) {
-        // 简化：只保存图标路径引用
+        // 使用 GDI+ 保存图标为 PNG
+        Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromHICON(sfi.hIcon);
+        if (bitmap) {
+            CLSID clsid;
+            if (GetEncoderClsid(L"image/png", &clsid) != -1) {
+                bitmap->Save(cachePath.c_str(), &clsid, nullptr);
+            }
+            delete bitmap;
+        }
         DestroyIcon(sfi.hIcon);
     }
 #endif

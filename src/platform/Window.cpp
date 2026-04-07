@@ -8,7 +8,8 @@
 namespace mn {
 
 #ifdef _WIN32
-static const wchar_t* CLASS_NAME = L"MayeNanoWindowClass";
+static const wchar_t* CLASS_NAME = L"GoRunWindowClass";
+#define WM_TRAYICON (WM_USER + 100)
 #endif
 
 bool Window::Create(const std::wstring& title, int width, int height, int x, int y) {
@@ -155,6 +156,12 @@ LRESULT Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_MOVE:
             if (m_moveCallback) {
                 m_moveCallback(LOWORD(lParam), HIWORD(lParam));
+            }
+            return 0;
+        
+        case WM_TRAYICON:
+            if (m_trayCallback) {
+                m_trayCallback(wParam, lParam);
             }
             return 0;
             

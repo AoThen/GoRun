@@ -33,11 +33,13 @@ public:
     using HotkeyCallback = std::function<void(int id)>;
     using ResizeCallback = std::function<void(int w, int h)>;
     using MoveCallback = std::function<void(int x, int y)>;
+    using TrayCallback = std::function<void(WPARAM wParam, LPARAM lParam)>;
     
     void OnDropFiles(DropFilesCallback cb) { m_dropFilesCallback = cb; }
     void OnHotkey(HotkeyCallback cb) { m_hotkeyCallback = cb; }
     void OnResize(ResizeCallback cb) { m_resizeCallback = cb; }
     void OnMove(MoveCallback cb) { m_moveCallback = cb; }
+    void OnTrayMessage(TrayCallback cb) { m_trayCallback = cb; }
 
 private:
 #ifdef _WIN32
@@ -51,6 +53,7 @@ private:
     HotkeyCallback m_hotkeyCallback;
     ResizeCallback m_resizeCallback;
     MoveCallback m_moveCallback;
+    TrayCallback m_trayCallback;
 };
 
 } // namespace mn
