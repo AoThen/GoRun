@@ -31,3 +31,8 @@ target_include_directories(imgui PUBLIC
     ${imgui_SOURCE_DIR} 
     ${imgui_SOURCE_DIR}/backends
 )
+
+# imgui 使用静态运行时库，与主程序保持一致
+if(MSVC)
+    set_property(TARGET imgui PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
