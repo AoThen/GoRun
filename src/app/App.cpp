@@ -93,6 +93,9 @@ bool App::Initialize(HINSTANCE hInstance) {
     
     m_mainWindow->Initialize(m_itemManager.get(), m_config.get(), m_runner.get());
     
+    m_window->Show();
+    m_mainWindow->Show();
+    
     return true;
 }
 #endif
