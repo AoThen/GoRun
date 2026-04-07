@@ -29,6 +29,43 @@ Maye Nano 是一款 Windows 平台的快速启动工具，使用 C++ 和 ImGui �
 
 首次运行时自动创建目录和默认配置文件。
 
+**数据保存策略**：每次操作后立即保存，确保数据不丢失。
+
+## 图标缓存机制
+
+**缓存目录**：`%APPDATA%/MayeNano/icons/`
+
+**提取时机**：
+- 添加项目时自动提取图标并缓存
+- 用户可通过右键菜单"刷新图标"主动重新提取
+
+**缓存文件命名**：使用项目 ID 作为文件名，如 `item_1712512345678_1234.png`
+
+**缓存清理**：删除项目时同时删除对应的缓存图标
+
+```cpp
+class IconCache {
+public:
+    void Initialize(const std::wstring& cacheDir);
+    
+    // 获取缓存图标路径，若不存在则提取并缓存
+    std::wstring GetIconPath(const Item& item);
+    
+    // 强制刷新图标
+    void RefreshIcon(const Item& item);
+    
+    // 删除缓存
+    void DeleteCache(const std::wstring& itemId);
+    
+private:
+    std::wstring m_cacheDir;
+    std::unordered_map<std::wstring, std::wstring> m_cache;
+    
+    HICON ExtractIconFromTarget(const std::wstring& target, int iconIndex);
+    bool SaveIconToFile(HICON hIcon, const std::wstring& path);
+};
+```
+
 ## 数据模型
 
 ### ID 生成规则
@@ -53,6 +90,17 @@ std::wstring GenerateId(const std::wstring& prefix) {
 enum class ViewType {
     Icon = 0    // 图标视图
 };
+
+// 运行错误类型
+enum class RunError {
+    None = 0,
+    FileNotFound,
+    PathNotFound,
+    AccessDenied,
+    OutOfMemory,
+    DllNotFound,
+    Unknown
+};
 ```
 
 ### Item（快捷项）
@@ -64,7 +112,7 @@ struct Item {
     std::wstring target;       // 目标路径
     std::wstring arguments;    // 启动参数
     std::wstring workingDir;   // 工作目录
-    std::wstring iconPath;     // 图标路径（为空时自动提取）
+    std::wstring iconPath;     // 图标路径（为空时使用缓存图标）
     int iconIndex = 0;         // 图标索引
     bool runAsAdmin = false;   // 以管理员运行
     int runCount = 0;          // 运行次数
@@ -119,8 +167,9 @@ struct Category {
         }
     ],
     "config": {
-        "language": "zh-CN",
         "globalHotkey": "Ctrl+Alt+M",
+        "windowX": 100,
+        "windowY": 100,
         "windowWidth": 800,
         "windowHeight": 600
     }
@@ -157,7 +206,7 @@ namespace PathUtils {
 
 ```cpp
 namespace StringUtils {
-    // wstring <-> UTF-8 转换
+    // wstring <-> UTF-8 转换（ImGui 使用 UTF-8）
     std::string WStringToUtf8(const std::wstring& wstr);
     std::wstring Utf8ToWString(const std::string& str);
     
@@ -183,16 +232,16 @@ class Config {
 public:
     void Initialize(Storage* storage);
     
-    // 基础配置
-    std::wstring GetLanguage() const;
-    void SetLanguage(const std::wstring& lang);
-    
+    // 快捷键配置
     std::wstring GetGlobalHotkey() const;
     void SetGlobalHotkey(const std::wstring& hotkey);
     
-    // 窗口配置
+    // 窗口配置（位置和尺寸）
+    int GetWindowX() const;
+    int GetWindowY() const;
     int GetWindowWidth() const;
     int GetWindowHeight() const;
+    void SetWindowPosition(int x, int y);
     void SetWindowSize(int width, int height);
     
     // 保存配置
@@ -200,7 +249,6 @@ public:
 
 private:
     Storage* m_storage = nullptr;
-    std::unordered_map<std::string, std::wstring> m_values;
 };
 ```
 
@@ -220,11 +268,14 @@ public:
     
     bool AddCategory(const Category& category);
     bool UpdateCategory(const Category& category);
-    bool DeleteCategory(const std::wstring& id);
+    bool DeleteCategory(const std::wstring& id);  // 同时删除该分类下所有项目
     
     bool AddItem(const Item& item);
     bool UpdateItem(const Item& item);
     bool DeleteItem(const std::wstring& id);
+    
+    // 删除分类下的所有项目
+    std::vector<std::wstring> GetItemIdsByCategory(const std::wstring& categoryId);
     
     std::wstring GetConfig(const std::string& key, const std::wstring& defaultVal = L"");
     bool SetConfig(const std::string& key, const std::wstring& value);
@@ -238,12 +289,12 @@ public:
 ```cpp
 class ItemManager {
 public:
-    void Initialize(Storage* storage);
+    void Initialize(Storage* storage, IconCache* iconCache);
     
     std::vector<Category>& GetCategories();
     Category* GetCategory(const std::wstring& id);
     void AddCategory(Category category);
-    void DeleteCategory(const std::wstring& id);
+    void DeleteCategory(const std::wstring& id);  // 同时删除该分类下所有项目
     
     std::vector<Item>& GetItems(const std::wstring& categoryId);
     Item* GetItem(const std::wstring& id);
@@ -251,30 +302,56 @@ public:
     void MoveItem(const std::wstring& itemId, const std::wstring& targetCategoryId);
     void DeleteItem(const std::wstring& id);
     
+    // 刷新项目图标
+    void RefreshItemIcon(const std::wstring& itemId);
+    
+    // 拖放处理：自动提取图标、设置工作目录
     void HandleDrop(const std::vector<std::wstring>& files, const std::wstring& categoryId);
 
 private:
     Storage* m_storage = nullptr;
+    IconCache* m_iconCache = nullptr;
     std::vector<Category> m_categories;
     std::unordered_map<std::wstring, std::vector<Item>> m_itemsByCategory;
+    
+    // 解析快捷方式（.lnk）获取真实目标
+    bool ResolveShortcut(const std::wstring& lnkPath, std::wstring& target, std::wstring& workingDir);
 };
 ```
 
 ### Runner（程序启动器）
 
-执行项目启动操作。
+执行项目启动操作，返回详细错误信息。
 
 ```cpp
 class Runner {
 public:
-    bool Run(const Item& item);        // 普通运行
-    bool RunAsAdmin(const Item& item); // 管理员运行
+    // 运行结果
+    struct RunResult {
+        bool success;
+        RunError error;
+        std::wstring errorMessage;  // 中文错误消息
+    };
+    
+    RunResult Run(const Item& item);        // 普通运行
+    RunResult RunAsAdmin(const Item& item); // 管理员运行
 
 private:
-    // 图标提取：iconPath 为空时使用 SHGetFileInfo 获取文件关联图标
-    HICON ExtractIcon(const std::wstring& target, const std::wstring& iconPath, int iconIndex);
+    // 根据错误码生成中文错误消息
+    std::wstring GetErrorMessage(DWORD errorCode);
 };
 ```
+
+**错误消息映射：**
+
+| 错误类型 | 中文消息 |
+|---------|---------|
+| FileNotFound | 文件未找到 |
+| PathNotFound | 路径未找到 |
+| AccessDenied | 拒绝访问 |
+| OutOfMemory | 内存不足 |
+| DllNotFound | 动态链接库未找到 |
+| Unknown | 未知错误 |
 
 ### HotkeyManager（全局快捷键）
 
@@ -329,11 +406,17 @@ bool ParseHotkeyString(const std::wstring& hotkey, UINT& modifiers, UINT& vk) {
 ```cpp
 class Window {
 public:
-    bool Create(const std::wstring& title, int width, int height);
+    bool Create(const std::wstring& title, int width, int height, int x, int y);
     void Show();
     void Hide();
     void Toggle();
     bool IsVisible() const;
+    
+    // 位置和尺寸
+    void SetPosition(int x, int y);
+    void SetSize(int width, int height);
+    void GetPosition(int& x, int& y);
+    void GetSize(int& width, int& height);
     
     LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void EnableDragDrop();
@@ -343,6 +426,7 @@ public:
     void OnDropFiles(std::function<void(const std::vector<std::wstring>&)> callback);
     void OnHotkey(std::function<void(int id)> callback);
     void OnResize(std::function<void(int w, int h)> callback);
+    void OnMove(std::function<void(int x, int y)> callback);
 
 private:
     HWND m_hwnd = nullptr;
@@ -410,6 +494,7 @@ private:
     void RenderItemGrid();
     void RenderContextMenu();
     void HandleDragDrop();
+    void ShowError(const std::wstring& message);  // 显示错误提示
     
     ItemManager* m_itemManager = nullptr;
     Config* m_config = nullptr;
@@ -461,7 +546,7 @@ private:
 
 ### EditDialog（编辑对话框）
 
-编辑项目属性的对话框。使用 `std::string` 动态管理缓冲区，避免截断。
+编辑项目属性的对话框。内部使用 UTF-8（std::string）与 ImGui 交互，保存时转换为 wstring。
 
 ```cpp
 class EditDialog {
@@ -477,11 +562,16 @@ private:
     Item* m_item = nullptr;
     bool m_visible = false;
     
-    // 动态缓冲区
+    // UTF-8 缓冲区（ImGui 使用 UTF-8）
     std::string m_nameBuf;
     std::string m_targetBuf;
     std::string m_argsBuf;
     std::string m_workingDirBuf;
+    
+    // 显示时：wstring -> UTF-8
+    void LoadFromItem();
+    // 保存时：UTF-8 -> wstring
+    void SaveToItem();
 };
 ```
 
@@ -502,8 +592,10 @@ public:
 private:
     void MainLoop();
     void HandleHotkey(int id);
+    void SaveWindowPosition();  // 窗口关闭或移动时保存位置
     
     std::unique_ptr<Storage> m_storage;
+    std::unique_ptr<IconCache> m_iconCache;
     std::unique_ptr<ItemManager> m_itemManager;
     std::unique_ptr<Config> m_config;
     std::unique_ptr<HotkeyManager> m_hotkeyManager;
@@ -518,10 +610,12 @@ private:
 
 1. `App::Initialize()` - 初始化各组件
 2. `Storage::Load()` - 加载数据文件
-3. `HotkeyManager::RegisterGlobalHotkey()` - 注册全局快捷键
-4. `App::Run()` - 进入主消息循环
-5. 收到快捷键 → `MainWindow::Toggle()` 显示/隐藏窗口
-6. 用户操作 → `ItemManager` 更新数据 → `Storage::Save()` 保存
+3. `Config::Initialize()` - 加载配置（包括窗口位置）
+4. `HotkeyManager::RegisterGlobalHotkey()` - 注册全局快捷键
+5. `App::Run()` - 进入主消息循环
+6. 收到快捷键 → `MainWindow::Toggle()` 显示/隐藏窗口
+7. 用户操作 → `ItemManager` 更新数据 → `Storage::Save()` 立即保存
+8. 窗口关闭/移动 → `SaveWindowPosition()` 保存位置
 
 ## 项目结构
 
@@ -550,7 +644,8 @@ MayeNano/
 │   │   ├── Category.h/cpp
 │   │   ├── ItemManager.h/cpp
 │   │   ├── Runner.h/cpp
-│   │   └── HotkeyManager.h/cpp
+│   │   ├── HotkeyManager.h/cpp
+│   │   └── IconCache.h/cpp
 │   ├── platform/
 │   │   ├── Window.h/cpp
 │   │   ├── D3D11Renderer.h/cpp
