@@ -13,6 +13,8 @@
 
 namespace mn {
 
+App::~App() = default;
+
 App* App::s_instance = nullptr;
 
 App* App::Get() {

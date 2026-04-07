@@ -23,6 +23,8 @@ public:
 #ifdef _WIN32
     bool Initialize(HINSTANCE hInstance);
 #endif
+    ~App();
+    
     int Run();
     void Shutdown();
     
