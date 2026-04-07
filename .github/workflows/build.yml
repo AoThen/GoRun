@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+        
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+        
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MayeNano-${{ matrix.build_type }}
+          path: build/${{ matrix.build_type }}/MayeNano.exe
+          retention-days: 30
