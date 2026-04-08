@@ -57,6 +57,7 @@ private:
     
     std::wstring m_errorMessage;
     bool m_showError = false;
+    bool m_openErrorPopup = false;  // 控制错误弹窗首次打开
     
     // 分类重命名对话框
     bool m_showRenameCategory = false;

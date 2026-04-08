@@ -202,7 +202,12 @@ void MainWindow::Render() {
     RenderRenameCategoryDialog();
     
     if (m_showError) {
-        ImGui::OpenPopup("错误");
+        // 只在首次显示时打开弹窗
+        if (m_openErrorPopup) {
+            ImGui::OpenPopup("错误");
+            m_openErrorPopup = false;
+        }
+        
         if (ImGui::BeginPopupModal("错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("%s", StringUtils::WStringToUtf8(m_errorMessage).c_str());
             if (ImGui::Button("确定", ImVec2(100, 0))) {
@@ -210,6 +215,9 @@ void MainWindow::Render() {
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
+        } else {
+            // 弹窗被用户关闭，重置状态
+            m_showError = false;
         }
     }
 }
@@ -334,6 +342,7 @@ void MainWindow::SetCurrentCategory(const std::wstring& categoryId) {
 void MainWindow::ShowError(const std::wstring& message) {
     m_errorMessage = message;
     m_showError = true;
+    m_openErrorPopup = true;  // 标记需要打开弹窗
 }
 
 void MainWindow::RenderRenameCategoryDialog() {
@@ -381,6 +390,9 @@ void MainWindow::RenderRenameCategoryDialog() {
         }
         
         ImGui::EndPopup();
+    } else {
+        // 弹窗被用户关闭（点击外部或按 ESC），重置状态
+        m_showRenameCategory = false;
     }
 }
 

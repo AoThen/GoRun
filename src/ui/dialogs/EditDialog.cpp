@@ -146,6 +146,9 @@ void EditDialog::Render() {
         }
         
         ImGui::EndPopup();
+    } else {
+        // 弹窗被用户关闭（点击外部或按 ESC），清理状态
+        Hide();
     }
 }
 

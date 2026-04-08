@@ -10,6 +10,8 @@ namespace mn {
 void ItemGrid::SetItems(std::vector<Item>* items) {
     m_items = items;
     m_selectedIndex = -1;
+    // 清理旧的动画状态，避免内存缓慢增长
+    m_hoverAnimState.clear();
 }
 
 void ItemGrid::SetIconTextureManager(IconTextureManager* manager) {
@@ -139,7 +141,9 @@ void ItemGrid::RenderIconView() {
                 }
                 firstChar[charLen] = '\0';
                 
-                ImGui::SetCursorScreenPos(ImVec2(center.x - 14, center.y - 14));
+                // 根据字体大小计算居中偏移
+                ImVec2 textSize = ImGui::CalcTextSize(firstChar);
+                ImGui::SetCursorScreenPos(ImVec2(center.x - textSize.x / 2, center.y - textSize.y / 2));
                 ImGui::PushStyleColor(ImGuiCol_Text, placeholderColor);
                 ImGui::TextUnformatted(firstChar);
                 ImGui::PopStyleColor();
@@ -270,7 +274,9 @@ void ItemGrid::RenderListView() {
                 }
                 firstChar[charLen] = '\0';
                 
-                ImGui::SetCursorScreenPos(ImVec2(center.x - 5, center.y - 6));
+                // 根据字体大小计算居中偏移
+                ImVec2 textSize = ImGui::CalcTextSize(firstChar);
+                ImGui::SetCursorScreenPos(ImVec2(center.x - textSize.x / 2, center.y - textSize.y / 2));
                 ImGui::PushStyleColor(ImGuiCol_Text, placeholderColor);
                 ImGui::TextUnformatted(firstChar);
                 ImGui::PopStyleColor();
