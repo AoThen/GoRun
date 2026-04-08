@@ -121,14 +121,14 @@ void ItemGrid::Render() {
 }
 
 void ItemGrid::RenderContextMenu(const Item& item) {
-    if (ImGui::MenuItem(u8"运行")) {
+    if (ImGui::MenuItem("运行")) {
         if (m_onClick) {
             m_onClick(item);
         }
         ImGui::CloseCurrentPopup();
     }
     
-    if (ImGui::MenuItem(u8"以管理员运行")) {
+    if (ImGui::MenuItem("以管理员运行")) {
         if (m_onRunAsAdmin) {
             m_onRunAsAdmin(item);
         }
@@ -137,7 +137,7 @@ void ItemGrid::RenderContextMenu(const Item& item) {
     
     ImGui::Separator();
     
-    if (ImGui::MenuItem(u8"编辑")) {
+    if (ImGui::MenuItem("编辑")) {
         if (m_onEdit) {
             for (auto& i : *m_items) {
                 if (i.id == item.id) {
@@ -149,7 +149,7 @@ void ItemGrid::RenderContextMenu(const Item& item) {
         ImGui::CloseCurrentPopup();
     }
     
-    if (ImGui::MenuItem(u8"删除")) {
+    if (ImGui::MenuItem("删除")) {
         if (m_onDelete) {
             m_onDelete(item);
         }

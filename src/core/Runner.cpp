@@ -35,6 +35,11 @@ RunResult Runner::Run(const Item& item) {
         return result;
     }
     
+    // 关闭进程句柄，避免资源泄漏
+    if (sei.hProcess) {
+        CloseHandle(sei.hProcess);
+    }
+    
     result.success = true;
 #else
     result.success = false;
@@ -73,6 +78,11 @@ RunResult Runner::RunAsAdmin(const Item& item) {
         result.error = MapError(err);
         result.errorMessage = GetErrorMessage(err);
         return result;
+    }
+    
+    // 关闭进程句柄，避免资源泄漏
+    if (sei.hProcess) {
+        CloseHandle(sei.hProcess);
     }
     
     result.success = true;

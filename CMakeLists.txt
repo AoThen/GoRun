@@ -22,6 +22,7 @@ if(MSVC)
     target_compile_options(GoRun PRIVATE
         /W3           # 警告级别 3
         /Zc:inline    # 移除未引用内联函数
+        /utf-8        # 源文件和执行字符集使用 UTF-8
     )
     
     # Release 模式优化配置

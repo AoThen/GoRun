@@ -153,10 +153,11 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     config.OversampleV = 1;
     config.PixelSnapH = true;
     
-    // 设置中文字符范围
+    // 设置中文字符范围 - 包含基本中文和标点符号
     ImVector<ImWchar> ranges;
     ImFontGlyphRangesBuilder builder;
     builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+    builder.AddRanges(io.Fonts->GetGlyphRangesChineseFull());  // 添加完整中文字符集
     builder.BuildRanges(&ranges);
     
     // 尝试加载微软雅黑
@@ -165,15 +166,23 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
         "C:\\Windows\\Fonts\\msyhbd.ttc",
         "C:\\Windows\\Fonts\\simhei.ttf",
         "C:\\Windows\\Fonts\\simsun.ttc",
+        "C:\\Windows\\Fonts\\dengxian.ttf",  // 等线字体
     };
     
     ImFont* font = nullptr;
     for (const char* path : fontPaths) {
         font = io.Fonts->AddFontFromFileTTF(path, 18.0f, &config, ranges.Data);
-        if (font) break;
+        if (font) {
+            OutputDebugStringA("Font loaded: ");
+            OutputDebugStringA(path);
+            OutputDebugStringA("\n");
+            break;
+        }
     }
     
     if (!font) {
+        OutputDebugStringA("Failed to load Chinese font, using default\n");
+        // 默认字体不支持中文，需要使用内置的紧凑字符集
         io.Fonts->AddFontDefault();
     }
     

@@ -72,15 +72,15 @@ void MainWindow::Render() {
     
     // 菜单栏
     if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu(u8"文件")) {
-            if (ImGui::MenuItem(u8"新建分类")) {
+        if (ImGui::BeginMenu("文件")) {
+            if (ImGui::MenuItem("新建分类")) {
                 Category cat;
                 cat.id = GenerateId(L"cat");
                 cat.name = L"新分类";
                 m_itemManager->AddCategory(cat);
                 m_categoryTab.SetCategories(&m_itemManager->GetCategories());
             }
-            if (ImGui::MenuItem(u8"删除当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
+            if (ImGui::MenuItem("删除当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
                 if (!m_currentCategoryId.empty()) {
                     if (m_itemManager->GetCategories().size() > 1) {
                         m_itemManager->DeleteCategory(m_currentCategoryId);
@@ -97,13 +97,13 @@ void MainWindow::Render() {
                 }
             }
             ImGui::Separator();
-            if (ImGui::MenuItem(u8"退出")) {
+            if (ImGui::MenuItem("退出")) {
                 PostQuitMessage(0);
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu(u8"编辑")) {
-            if (ImGui::MenuItem(u8"重命名当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
+        if (ImGui::BeginMenu("编辑")) {
+            if (ImGui::MenuItem("重命名当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
                 // TODO: 实现分类重命名对话框
             }
             ImGui::EndMenu();
@@ -130,10 +130,10 @@ void MainWindow::Render() {
     m_editDialog.Render();
     
     if (m_showError) {
-        ImGui::OpenPopup(u8"错误");
-        if (ImGui::BeginPopupModal(u8"错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::OpenPopup("错误");
+        if (ImGui::BeginPopupModal("错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("%s", StringUtils::WStringToUtf8(m_errorMessage).c_str());
-            if (ImGui::Button(u8"确定", ImVec2(100, 0))) {
+            if (ImGui::Button("确定", ImVec2(100, 0))) {
                 m_showError = false;
                 ImGui::CloseCurrentPopup();
             }
@@ -150,7 +150,7 @@ void MainWindow::RenderSearchBar() {
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.92f, 0.92f, 0.92f, 1.0f));
     
     ImGui::SetNextItemWidth(-FLT_MIN);
-    bool searchChanged = ImGui::InputTextWithHint("##search", u8"搜索...", m_searchBuf, sizeof(m_searchBuf));
+    bool searchChanged = ImGui::InputTextWithHint("##search", "搜索...", m_searchBuf, sizeof(m_searchBuf));
     
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);

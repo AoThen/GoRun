@@ -10,8 +10,11 @@ namespace mn::PathUtils {
 
 std::wstring GetAppDataPath() {
 #ifdef _WIN32
-    wchar_t path[MAX_PATH];
-    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, path);
+    wchar_t path[MAX_PATH] = {};
+    HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, path);
+    if (FAILED(hr)) {
+        return L"C:\\GoRun";  // 回退到默认路径
+    }
     return std::wstring(path) + L"\\GoRun";
 #else
     return L"/tmp/GoRun";
@@ -20,8 +23,11 @@ std::wstring GetAppDataPath() {
 
 std::wstring GetExePath() {
 #ifdef _WIN32
-    wchar_t path[MAX_PATH];
-    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    wchar_t path[MAX_PATH] = {};
+    DWORD len = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) {
+        return L"GoRun.exe";
+    }
     return path;
 #else
     return L"./GoRun";
@@ -34,8 +40,11 @@ std::wstring GetExeDir() {
 
 std::wstring ToAbsolute(const std::wstring& path) {
 #ifdef _WIN32
-    wchar_t absPath[MAX_PATH];
-    GetFullPathNameW(path.c_str(), MAX_PATH, absPath, nullptr);
+    wchar_t absPath[MAX_PATH] = {};
+    DWORD len = GetFullPathNameW(path.c_str(), MAX_PATH, absPath, nullptr);
+    if (len == 0 || len >= MAX_PATH) {
+        return path;  // 失败时返回原路径
+    }
     return absPath;
 #else
     return std::filesystem::absolute(path).wstring();

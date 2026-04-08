@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "app/Resource.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -9,7 +10,6 @@ namespace mn {
 
 #ifdef _WIN32
 static const wchar_t* CLASS_NAME = L"GoRunWindowClass";
-#define WM_TRAYICON (WM_USER + 100)
 #endif
 
 bool Window::Create(const std::wstring& title, int width, int height, int x, int y) {

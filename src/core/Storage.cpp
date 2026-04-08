@@ -59,7 +59,14 @@ bool Storage::Load(const std::wstring& path) {
         }
         
         return true;
+    } catch (const std::exception& e) {
+        // 输出错误日志到调试窗口
+        OutputDebugStringA("Storage::Load failed: ");
+        OutputDebugStringA(e.what());
+        OutputDebugStringA("\n");
+        return false;
     } catch (...) {
+        OutputDebugStringA("Storage::Load failed: unknown error\n");
         return false;
     }
 }

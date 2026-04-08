@@ -1,17 +1,20 @@
 #include "TrayIcon.h"
+#include "app/Resource.h"
 
 #ifdef _WIN32
 #include <ShellApi.h>
 
 namespace mn {
 
-#define WM_TRAYICON (WM_USER + 100)
-#define ID_TRAY_SHOW 1001
-#define ID_TRAY_EXIT 1002
-
 bool TrayIcon::Create(HWND hwnd, UINT messageId, const wchar_t* tooltip) {
     m_hwnd = hwnd;
     m_messageId = messageId;
+    
+    // 加载自定义图标
+    HICON hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+    if (!hIcon) {
+        hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+    }
     
     NOTIFYICONDATAW nid = {};
     nid.cbSize = sizeof(NOTIFYICONDATAW);
@@ -19,7 +22,7 @@ bool TrayIcon::Create(HWND hwnd, UINT messageId, const wchar_t* tooltip) {
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = messageId;
-    nid.hIcon = LoadIcon(GetModuleHandle(nullptr), IDI_APPLICATION);
+    nid.hIcon = hIcon;
     wcscpy_s(nid.szTip, tooltip);
     
     m_created = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;

@@ -1,4 +1,5 @@
 #include "App.h"
+#include "Resource.h"
 #include "core/Storage.h"
 #include "core/IconCache.h"
 #include "core/IconTextureManager.h"
@@ -29,7 +30,6 @@ App* App::Get() {
 }
 
 #ifdef _WIN32
-#define WM_TRAYICON (WM_USER + 100)
 
 bool App::Initialize(HINSTANCE hInstance) {
     s_instance = this;
