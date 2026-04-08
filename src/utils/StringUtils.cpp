@@ -3,6 +3,10 @@
 
 #ifdef _WIN32
 #include <Windows.h>
+// 某些 Windows SDK 版本未定义 LCMAP_PINYIN
+#ifndef LCMAP_PINYIN
+#define LCMAP_PINYIN 0x02000000
+#endif
 #endif
 
 namespace mn::StringUtils {

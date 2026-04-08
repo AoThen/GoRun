@@ -4,6 +4,10 @@
 #include <algorithm>
 
 #ifdef _WIN32
+// 禁用 Windows min/max 宏
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #include <ShlObj.h>
 #include <Commdlg.h>
@@ -40,7 +44,7 @@ void EditDialog::Render() {
     if (ImGui::BeginPopupModal("编辑项目", nullptr, ImGuiWindowFlags_NoResize)) {
         // 名称
         char nameBuf[256] = {};
-        size_t copyLen = std::min(m_nameBuf.size(), sizeof(nameBuf) - 1);
+        size_t copyLen = (std::min)(m_nameBuf.size(), sizeof(nameBuf) - 1);
         memcpy(nameBuf, m_nameBuf.c_str(), copyLen);
         if (ImGui::InputText("名称", nameBuf, sizeof(nameBuf))) {
             m_nameBuf = nameBuf;
@@ -49,7 +53,7 @@ void EditDialog::Render() {
         // 目标路径（带浏览按钮）
         ImGui::BeginGroup();
         char targetBuf[1024] = {};
-        copyLen = std::min(m_targetBuf.size(), sizeof(targetBuf) - 1);
+        copyLen = (std::min)(m_targetBuf.size(), sizeof(targetBuf) - 1);
         memcpy(targetBuf, m_targetBuf.c_str(), copyLen);
         ImGui::PushItemWidth(-70);
         if (ImGui::InputText("##target", targetBuf, sizeof(targetBuf))) {
@@ -66,7 +70,7 @@ void EditDialog::Render() {
         
         // 参数
         char argsBuf[512] = {};
-        copyLen = std::min(m_argsBuf.size(), sizeof(argsBuf) - 1);
+        copyLen = (std::min)(m_argsBuf.size(), sizeof(argsBuf) - 1);
         memcpy(argsBuf, m_argsBuf.c_str(), copyLen);
         if (ImGui::InputText("参数", argsBuf, sizeof(argsBuf))) {
             m_argsBuf = argsBuf;
@@ -74,7 +78,7 @@ void EditDialog::Render() {
         
         // 工作目录
         char workDirBuf[1024] = {};
-        copyLen = std::min(m_workingDirBuf.size(), sizeof(workDirBuf) - 1);
+        copyLen = (std::min)(m_workingDirBuf.size(), sizeof(workDirBuf) - 1);
         memcpy(workDirBuf, m_workingDirBuf.c_str(), copyLen);
         if (ImGui::InputText("工作目录", workDirBuf, sizeof(workDirBuf))) {
             m_workingDirBuf = workDirBuf;
@@ -82,7 +86,7 @@ void EditDialog::Render() {
         
         // 关键词
         char keywordsBuf[512] = {};
-        copyLen = std::min(m_keywordsBuf.size(), sizeof(keywordsBuf) - 1);
+        copyLen = (std::min)(m_keywordsBuf.size(), sizeof(keywordsBuf) - 1);
         memcpy(keywordsBuf, m_keywordsBuf.c_str(), copyLen);
         if (ImGui::InputTextWithHint("关键词", "多个关键词用逗号分隔", keywordsBuf, sizeof(keywordsBuf))) {
             m_keywordsBuf = keywordsBuf;
@@ -93,7 +97,7 @@ void EditDialog::Render() {
         
         // 备注
         char remarkBuf[512] = {};
-        copyLen = std::min(m_remarkBuf.size(), sizeof(remarkBuf) - 1);
+        copyLen = (std::min)(m_remarkBuf.size(), sizeof(remarkBuf) - 1);
         memcpy(remarkBuf, m_remarkBuf.c_str(), copyLen);
         if (ImGui::InputText("备注", remarkBuf, sizeof(remarkBuf))) {
             m_remarkBuf = remarkBuf;
@@ -102,7 +106,7 @@ void EditDialog::Render() {
         // 图标路径
         ImGui::BeginGroup();
         char iconPathBuf[1024] = {};
-        copyLen = std::min(m_iconPathBuf.size(), sizeof(iconPathBuf) - 1);
+        copyLen = (std::min)(m_iconPathBuf.size(), sizeof(iconPathBuf) - 1);
         memcpy(iconPathBuf, m_iconPathBuf.c_str(), copyLen);
         ImGui::PushItemWidth(-70);
         if (ImGui::InputText("##iconPath", iconPathBuf, sizeof(iconPathBuf))) {
