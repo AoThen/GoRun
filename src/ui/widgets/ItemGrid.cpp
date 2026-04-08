@@ -175,13 +175,13 @@ void ItemGrid::RenderIconView() {
             drawList->AddRect(min, max, glowColor, 8.0f, 0, 2.0f);
         }
         
-        ImGui::PopID();
-        
-        // 右键菜单
+        // 右键菜单（必须在 PopID 之前绑定）
         if (ImGui::BeginPopupContextItem("item_context", ImGuiPopupFlags_MouseButtonRight)) {
             RenderContextMenu(item);
             ImGui::EndPopup();
         }
+        
+        ImGui::PopID();
         
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(3);

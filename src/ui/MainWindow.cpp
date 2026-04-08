@@ -211,38 +211,20 @@ void MainWindow::Render() {
 }
 
 void MainWindow::RenderSearchBar() {
-    // 视图切换按钮（左侧）
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 10));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    
-    const char* viewLabel = (m_currentViewType == ViewType::Icon) ? "图标" : "列表";
-    if (ImGui::Button(viewLabel, ImVec2(50, 0))) {
-        ToggleViewType();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", (m_currentViewType == ViewType::Icon) ? "切换到列表视图" : "切换到图标视图");
-    }
-    
-    // 主题切换按钮
-    ImGui::SameLine(0, 4);
-    const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "浅色" : "深色";
-    if (ImGui::Button(themeLabel, ImVec2(50, 0))) {
-        ToggleTheme();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", (GetCurrentTheme() == ThemeType::Light) ? "切换到深色主题" : "切换到浅色主题");
-    }
-    
-    ImGui::PopStyleVar(2);
-    
-    ImGui::SameLine(0, 8);
-    
-    // 搜索框
+    // 搜索框（左侧）
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 10));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.96f, 0.96f, 0.96f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.92f, 0.92f, 0.92f, 1.0f));
+    
+    bool isDark = (GetCurrentTheme() == ThemeType::Dark);
+    if (isDark) {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.96f, 0.96f, 0.96f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.92f, 0.92f, 0.92f, 1.0f));
+    }
     
     // 首次显示时聚焦搜索框
     if (m_focusSearch) {
@@ -275,6 +257,32 @@ void MainWindow::RenderSearchBar() {
             m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
         }
     }
+    
+    ImGui::Spacing();
+    
+    // 视图切换按钮
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 8));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    
+    const char* viewLabel = (m_currentViewType == ViewType::Icon) ? "图标" : "列表";
+    if (ImGui::Button(viewLabel, ImVec2(50, 0))) {
+        ToggleViewType();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", (m_currentViewType == ViewType::Icon) ? "切换到列表视图" : "切换到图标视图");
+    }
+    
+    // 主题切换按钮
+    ImGui::SameLine(0, 4);
+    const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "浅色" : "深色";
+    if (ImGui::Button(themeLabel, ImVec2(50, 0))) {
+        ToggleTheme();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", (GetCurrentTheme() == ThemeType::Light) ? "切换到深色主题" : "切换到浅色主题");
+    }
+    
+    ImGui::PopStyleVar(2);
     
     ImGui::Spacing();
     ImGui::Spacing();

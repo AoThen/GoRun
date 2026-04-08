@@ -183,6 +183,7 @@ int App::Run() {
                     ImGuiWindowFlags_NoResize | 
                     ImGuiWindowFlags_NoMove |
                     ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoTitleBar |
                     ImGuiWindowFlags_MenuBar);
                 ImGui::PopStyleVar(3);
                 

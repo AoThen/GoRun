@@ -84,51 +84,46 @@ void IconCache::RefreshIcon(const Item& item) {
         ExtractIconExW(item.iconPath.c_str(), item.iconIndex, &hIcon, nullptr, 1);
     }
     
-    // 2. 如果失败，尝试从目标文件提取图标
-    if (!hIcon && !item.target.empty()) {
-        // 如果目标文件存在，使用 SHGetFileInfo
-        if (PathUtils::Exists(item.target)) {
-            SHFILEINFOW sfi = {};
-            DWORD_PTR result = SHGetFileInfoW(
-                item.target.c_str(),
-                0,
-                &sfi,
-                sizeof(sfi),
-                SHGFI_ICON | SHGFI_LARGEICON
-            );
-            if (result && sfi.hIcon) {
-                hIcon = sfi.hIcon;
-            }
-        }
-        
-        // 如果目标不存在但是是快捷方式，尝试提取快捷方式本身的图标
-        if (!hIcon && item.target.size() > 4 && 
-            item.target.substr(item.target.size() - 4) == L".lnk") {
-            // 尝试获取 .lnk 文件的图标
-            SHFILEINFOW sfi = {};
-            DWORD_PTR result = SHGetFileInfoW(
-                item.target.c_str(),
-                0,
-                &sfi,
-                sizeof(sfi),
-                SHGFI_ICON | SHGFI_LARGEICON
-            );
-            if (result && sfi.hIcon) {
-                hIcon = sfi.hIcon;
-            }
+    // 2. 如果失败，尝试从原始目标路径提取（快捷方式解析前的路径）
+    if (!hIcon && !item.target.empty() && PathUtils::Exists(item.target)) {
+        SHFILEINFOW sfi = {};
+        DWORD_PTR result = SHGetFileInfoW(
+            item.target.c_str(),
+            0,
+            &sfi,
+            sizeof(sfi),
+            SHGFI_ICON | SHGFI_LARGEICON
+        );
+        if (result && sfi.hIcon) {
+            hIcon = sfi.hIcon;
         }
     }
     
-    // 3. 保存图标
+    // 3. 如果仍然没有图标，使用默认图标
+    if (!hIcon) {
+        SHFILEINFOW sfi = {};
+        DWORD_PTR result = SHGetFileInfoW(
+            L".txt",
+            FILE_ATTRIBUTE_NORMAL,
+            &sfi,
+            sizeof(sfi),
+            SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES
+        );
+        if (result && sfi.hIcon) {
+            hIcon = sfi.hIcon;
+        }
+    }
+    
+    // 4. 保存图标
     if (hIcon) {
         Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromHICON(hIcon);
         if (bitmap) {
             CLSID clsid;
             if (GetEncoderClsid(L"image/png", &clsid) != -1) {
                 Gdiplus::Status status = bitmap->Save(cachePath.c_str(), &clsid, nullptr);
-                // 如果保存失败，删除 bitmap 并返回
                 if (status != Gdiplus::Ok) {
-                    // 保存失败，可能路径不存在
+                    // 保存失败
+                    OutputDebugStringW(L"IconCache: Failed to save icon\n");
                 }
             }
             delete bitmap;

@@ -1,5 +1,6 @@
 #include "CategoryTab.h"
 #include "utils/StringUtils.h"
+#include "ui/Theme.h"
 #include <imgui.h>
 
 namespace mn {
@@ -14,8 +15,10 @@ void CategoryTab::SetCategories(std::vector<Category>* categories) {
 void CategoryTab::Render() {
     if (!m_categories) return;
     
+    bool isDark = (GetCurrentTheme() == ThemeType::Dark);
+    
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.961f, 0.961f, 0.961f, 1.0f)); // #F5F5F5
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, isDark ? ImVec4(0.12f, 0.12f, 0.12f, 1.0f) : ImVec4(0.961f, 0.961f, 0.961f, 1.0f));
     
     ImGui::BeginChild("Categories", ImVec2(150, 0), false);
     
@@ -23,17 +26,19 @@ void CategoryTab::Render() {
         bool selected = (cat.id == m_currentId);
         std::string name = StringUtils::WStringToUtf8(cat.name);
         
+        ImGui::PushID(cat.id.c_str());
+        
         // 自定义选中样式
         if (selected) {
-            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.902f, 0.914f, 0.941f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.902f, 0.914f, 0.941f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.902f, 0.914f, 0.941f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Header, isDark ? ImVec4(0.25f, 0.25f, 0.25f, 1.0f) : ImVec4(0.902f, 0.914f, 0.941f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, isDark ? ImVec4(0.25f, 0.25f, 0.25f, 1.0f) : ImVec4(0.902f, 0.914f, 0.941f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, isDark ? ImVec4(0.3f, 0.3f, 0.3f, 1.0f) : ImVec4(0.902f, 0.914f, 0.941f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, isDark ? ImVec4(0.9f, 0.9f, 0.9f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
         } else {
             ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.91f, 0.92f, 0.95f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, isDark ? ImVec4(0.2f, 0.2f, 0.2f, 1.0f) : ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, isDark ? ImVec4(0.22f, 0.22f, 0.22f, 1.0f) : ImVec4(0.91f, 0.92f, 0.95f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, isDark ? ImVec4(0.7f, 0.7f, 0.7f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
         }
         
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 10));
@@ -46,14 +51,16 @@ void CategoryTab::Render() {
             }
         }
         
-        // 右键菜单
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+        
+        // 右键菜单（必须在 PushID/PopID 内）
         if (ImGui::BeginPopupContextItem("category_context", ImGuiPopupFlags_MouseButtonRight)) {
             RenderContextMenu(cat);
             ImGui::EndPopup();
         }
         
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
+        ImGui::PopID();
     }
     
     // 底部添加分类按钮
