@@ -141,6 +141,19 @@ LRESULT CALLBACK Window::StaticWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 
 LRESULT Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_DPICHANGED:
+            // DPI 变化时调整窗口大小和位置
+            if (m_dpiChangedCallback) {
+                m_dpiChangedCallback(LOWORD(wParam));
+            }
+            // 使用系统建议的新窗口位置和大小
+            RECT* rect = (RECT*)lParam;
+            SetWindowPos(hwnd, nullptr, 
+                rect->left, rect->top,
+                rect->right - rect->left, rect->bottom - rect->top,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+            return 0;
+            
         case WM_HOTKEY:
             if (m_hotkeyCallback) {
                 m_hotkeyCallback(static_cast<int>(wParam));

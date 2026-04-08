@@ -144,12 +144,19 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     
+    // 获取 DPI 缩放因子
+    HDC hdc = GetDC(nullptr);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+    ReleaseDC(nullptr, hdc);
+    float dpiScale = dpi / 96.0f;
+    m_dpiScale = dpiScale;
+    
     // 加载微软雅黑字体支持中文
     io.Fonts->Clear();
     
-    // 字体配置
+    // 字体配置 - 提高采样率以获得更清晰的字体
     ImFontConfig config;
-    config.OversampleH = 2;
+    config.OversampleH = 3;  // 提高水平采样率
     config.OversampleV = 1;
     config.PixelSnapH = true;
     
@@ -159,6 +166,9 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
     builder.AddRanges(io.Fonts->GetGlyphRangesChineseFull());  // 添加完整中文字符集
     builder.BuildRanges(&ranges);
+    
+    // 基础字体大小（根据 DPI 缩放）
+    float fontSize = 16.0f * dpiScale;
     
     // 尝试加载微软雅黑
     const char* fontPaths[] = {
@@ -171,7 +181,7 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     
     ImFont* font = nullptr;
     for (const char* path : fontPaths) {
-        font = io.Fonts->AddFontFromFileTTF(path, 18.0f, &config, ranges.Data);
+        font = io.Fonts->AddFontFromFileTTF(path, fontSize, &config, ranges.Data);
         if (font) {
             OutputDebugStringA("Font loaded: ");
             OutputDebugStringA(path);
@@ -187,6 +197,10 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     }
     
     io.Fonts->Build();
+    
+    // 缩放 ImGui 样式
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(dpiScale);
     
     ApplyLightTheme();
     
@@ -273,6 +287,67 @@ void D3D11Renderer::Resize(int width, int height)
     if (FAILED(hr)) {
         m_rtv = nullptr;
     }
+#endif
+}
+
+void D3D11Renderer::UpdateDpiScale(float newScale)
+{
+#ifdef _WIN32
+    if (newScale == m_dpiScale) return;
+    
+    float oldScale = m_dpiScale;
+    m_dpiScale = newScale;
+    
+    ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
+    ImGuiIO& io = ImGui::GetIO();
+    
+    // 清除旧字体
+    io.Fonts->Clear();
+    
+    // 字体配置
+    ImFontConfig config;
+    config.OversampleH = 3;
+    config.OversampleV = 1;
+    config.PixelSnapH = true;
+    
+    // 设置中文字符范围
+    ImVector<ImWchar> ranges;
+    ImFontGlyphRangesBuilder builder;
+    builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+    builder.AddRanges(io.Fonts->GetGlyphRangesChineseFull());
+    builder.BuildRanges(&ranges);
+    
+    // 基础字体大小（根据新的 DPI 缩放）
+    float fontSize = 16.0f * newScale;
+    
+    // 尝试加载微软雅黑
+    const char* fontPaths[] = {
+        "C:\\Windows\\Fonts\\msyh.ttc",
+        "C:\\Windows\\Fonts\\msyhbd.ttc",
+        "C:\\Windows\\Fonts\\simhei.ttf",
+        "C:\\Windows\\Fonts\\simsun.ttc",
+        "C:\\Windows\\Fonts\\dengxian.ttf",
+    };
+    
+    ImFont* font = nullptr;
+    for (const char* path : fontPaths) {
+        font = io.Fonts->AddFontFromFileTTF(path, fontSize, &config, ranges.Data);
+        if (font) break;
+    }
+    
+    if (!font) {
+        io.Fonts->AddFontDefault();
+    }
+    
+    io.Fonts->Build();
+    
+    // 重新缩放 ImGui 样式（先恢复再应用新缩放）
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(newScale / oldScale);
+    
+    // 更新字体纹理
+    ImGui_ImplDX11_InvalidateDeviceObjects();
+    ImGui_ImplDX11_CreateDeviceObjects();
 #endif
 }
 

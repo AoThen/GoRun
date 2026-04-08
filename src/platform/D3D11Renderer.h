@@ -15,6 +15,10 @@ public:
     void Render();
     void Resize(int width, int height);
     
+    // DPI 相关
+    float GetDpiScale() const { return m_dpiScale; }
+    void UpdateDpiScale(float newScale);
+    
     // 纹理加载
     void* LoadTexture(const std::wstring& path);
     void UnloadTexture(void* texture);
@@ -28,6 +32,7 @@ private:
     IDXGISwapChain* m_swapChain = nullptr;
     ID3D11RenderTargetView* m_rtv = nullptr;
     void* m_imguiContext = nullptr;
+    float m_dpiScale = 1.0f;
 #endif
 };
 

@@ -35,6 +35,18 @@ bool App::Initialize(HINSTANCE hInstance) {
     s_instance = this;
     m_hInstance = hInstance;
     
+    // 设置 DPI 感知，确保在高 DPI 显示器上字体清晰
+    // 使用 Per-Monitor DPI Awareness V2（Windows 10 1703+）
+    typedef HRESULT(WINAPI* SetProcessDpiAwarenessContext_t)(DPI_AWARENESS_CONTEXT);
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        auto pSetProcessDpiAwarenessContext = 
+            (SetProcessDpiAwarenessContext_t)GetProcAddress(hUser32, "SetProcessDpiAwarenessContext");
+        if (pSetProcessDpiAwarenessContext) {
+            pSetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        }
+    }
+    
     // 单实例检查
     HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"GoRun_SingleInstance_Mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -108,6 +120,11 @@ bool App::Initialize(HINSTANCE hInstance) {
     
     m_window->OnMove([this](int x, int y) {
         m_config->SetWindowPosition(x, y);
+    });
+    
+    m_window->OnDpiChanged([this](int dpi) {
+        float newScale = dpi / 96.0f;
+        m_renderer->UpdateDpiScale(newScale);
     });
     
     m_hotkeyManager->SetCallback([this](int id) {
