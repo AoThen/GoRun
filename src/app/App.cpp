@@ -33,6 +33,20 @@ App* App::Get() {
 
 bool App::Initialize(HINSTANCE hInstance) {
     s_instance = this;
+    m_hInstance = hInstance;
+    
+    // 单实例检查
+    HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"GoRun_SingleInstance_Mutex");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        // 已有实例运行，尝试激活现有窗口
+        HWND hwndExisting = FindWindowW(L"GoRunWindowClass", nullptr);
+        if (hwndExisting) {
+            ShowWindow(hwndExisting, SW_SHOW);
+            SetForegroundWindow(hwndExisting);
+        }
+        return false;
+    }
+    m_hMutex = hMutex;
     
     m_storage = std::make_unique<Storage>();
     m_iconCache = std::make_unique<IconCache>();
@@ -109,7 +123,7 @@ bool App::Initialize(HINSTANCE hInstance) {
     
     m_trayIcon->Create(m_window->GetHandle(), WM_TRAYICON, L"GoRun");
     m_trayIcon->OnShow([this]() {
-        m_mainWindow->Toggle();
+        ToggleWindow();
     });
     m_trayIcon->OnExit([this]() {
         Quit();
@@ -171,6 +185,13 @@ void App::Shutdown() {
     m_trayIcon->Destroy();
     m_renderer->Shutdown();
     m_hotkeyManager->UnregisterGlobalHotkey(1);
+    
+    // 释放单实例互斥体
+    if (m_hMutex) {
+        ReleaseMutex(m_hMutex);
+        CloseHandle(m_hMutex);
+        m_hMutex = nullptr;
+    }
 }
 
 void App::Quit() {
@@ -197,7 +218,17 @@ IconTextureManager* App::GetIconTextureManager() {
 
 void App::HandleHotkey(int id) {
     if (id == 1) {
-        m_mainWindow->Toggle();
+        ToggleWindow();
+    }
+}
+
+void App::ToggleWindow() {
+    if (m_window->IsVisible()) {
+        m_window->Hide();
+        m_mainWindow->Hide();
+    } else {
+        m_window->Show();
+        m_mainWindow->Show();
     }
 }
 

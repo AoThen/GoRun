@@ -1,186 +1,228 @@
+# GoRun - 极速启动工具
 
-**[点击阅读原文](https://t.arae.cc/p-25933/)**
+**GoRun** 是一款专注于"快速启动"的纯粹工具。我们深知效率的本质是减法而非加法，因此摒弃一切冗余，仅保留最极致的启动体验。
 
-# Maye Nano：拒绝臃肿，回归纯粹的速启动工具
+> 本项目为 GoRun 的开源重写版本，使用 C++ 和 ImGui 开发，采用原生架构。
 
-**Maye Nano** 是一款专注于“快速启动”的纯粹工具。我们深知效率的本质是减法而非加法，因此摒弃一切冗余，仅保留最极致的启动体验。它坚持绿色无污染设计，不产生系统垃圾，旨在为 Windows 提供一种更轻盈、更现代的操控方式。
+![GoRun Logo](img/Logo.png)
 
-![Maye Nano Logo](https://raw.githubusercontent.com/25H/MayeNano/refs/heads/main/img/Logo.png)
+## 特色亮点
 
+**现代化架构** - 拥抱前沿技术栈，以超前架构定义性能，深度融合新系统特性。
 
-### ✨ 特色亮点
+**极致的快** - 100% 原生开发，毫秒级启动、即时响应。无 WebView，无 Electron，性能与体验全面领先。
 
-🚀 现代化 : 拥抱前沿技术栈，以超前架构定义性能，深度融合新系统特性。
+**低能耗** - 深度优化底层架构，实现极低资源占用，长时间运行依然轻盈高效。
 
-⚡ 极致的快 : 100% 原生开发，毫秒级启动、即时响应。无 WebView，无 Electron，性能与体验全面领先。
+## 已实现功能
 
-🍃 低能耗 : 深度优化底层架构，实现极低资源占用，长时间运行依然轻盈高效。
+### 核心功能
+- 窗口框架（DirectX 11 + ImGui）
+- 拖放添加文件/快捷方式
+- 分类管理（创建、编辑、删除）
+- 项目管理（添加、编辑、删除、拖拽排序）
+- 双击运行 / 管理员运行
+- 全局快捷键唤醒/隐藏主窗口
+- 托盘图标
 
+### 数据管理
+- JSON 格式存储配置和数据
+- 图标缓存系统
+- 配置持久化（窗口位置、大小等）
 
-### 🛠️ 核心功能
-**⚡ 极速交互与启动**
+### UI 组件
+- 分类标签栏
+- 项目网格视图
+- 编辑对话框
+- 主题系统基础框架
 
-* 多维快捷录入 | 支持多文件批量拖拽添加，化繁为简，瞬间构建个人工作台。
-* 全局唤醒系统 | 自定义多模式快捷键，一键唤醒，瞬时运行，让操作快于直觉。
+## 技术栈
 
+| 项目 | 选择 |
+|-----|------|
+| 语言 | C++17 |
+| 构建 | CMake |
+| 渲染 | DirectX 11 + ImGui (docking) |
+| 存储 | JSON (nlohmann/json) |
+| 依赖管理 | FetchContent |
+| 平台 | Windows 10+ |
 
-**🗂️ 秩序井然的管理**
+## 构建
 
-* 灵动分组管理 | 支持自由分类，跨分组随心拖拽，重塑文件组织逻辑。
-* 自由布局定义 | 突破限制，任意设置分类位置，打造最符合直觉的视觉动线。
-* 快捷精细编辑 | 深度支持快捷方式属性编辑，每一项配置都尽在掌握。
-* 虚拟目录｜构建无限层级分类，实现更灵活高效的组织与管理。
+### 环境要求
 
+- Visual Studio 2019+ 或 MSVC Build Tools
+- CMake 3.16+
 
-**⚙️ 深度定制与自动化**
+### 构建步骤
 
-* 脚本驱动赋能 | 内置脚本运行机制，简单高效的自动化处理，释放重复劳动。
-* 独家美学引擎 | 自定义主题支持，内置可视化主题编辑器，定义你的专属视觉风格。
-* 自动更新环境变量 | 智能同步系统环境，无需重启，环境变更即刻生效。
+```bash
+# 生成项目文件
+cmake -B build -A x64
 
+# 编译
+cmake --build build --config Release
+```
 
-**📅 任务计划**
+### 依赖项
 
-* 多维触发引擎 | 支持定时执行、开机自启、周期循环等多种触发模式，适配各类复杂办公场景。
-* 静默后台调度 | 任务启动无弹窗干扰，在指尖之外高效运转，实现真正的“隐形”生产力。
-* 链式任务编排 | 支持逻辑组合，前置任务完成后自动唤醒后续动作，构建完整的自动化工作流。
-* 脚本驱动任务 | 深度结合内置脚本系统，实现复杂逻辑处理，让静态计划直接转化为动态行动。
-* 可视化运行看板 | 清晰呈现任务状态与历史日志，执行结果一目了然，掌控全局运行数据。
+项目使用 CMake FetchContent 自动下载以下依赖：
 
+| 依赖 | 版本 | 用途 |
+|-----|------|------|
+| ImGui | docking 分支 | UI 框架 |
+| nlohmann/json | v3.11.2 | JSON 解析 |
 
-**🔋 智能能效管理**
+## 项目结构
 
-* 自动效能模式 | 智能感知运行状态，转入后台时进入极低占用模式，极致节电，轻盈无感。
+```
+GoRun/
+├── CMakeLists.txt              # CMake 配置
+├── cmake/
+│   └── FetchDependencies.cmake # 依赖获取脚本
+├── src/
+│   ├── main.cpp                # 程序入口
+│   ├── app/
+│   │   ├── App.h/cpp           # 应用主类
+│   │   └── Resource.h          # 资源定义
+│   ├── ui/
+│   │   ├── MainWindow.h/cpp    # 主窗口
+│   │   ├── Theme.h/cpp         # 主题系统
+│   │   ├── widgets/
+│   │   │   ├── ItemGrid.h/cpp  # 项目网格
+│   │   │   └── CategoryTab.h/cpp # 分类标签
+│   │   └── dialogs/
+│   │       └── EditDialog.h/cpp  # 编辑对话框
+│   ├── core/
+│   │   ├── Types.h             # 类型定义
+│   │   ├── Config.h/cpp        # 配置管理
+│   │   ├── Storage.h/cpp       # JSON 存储
+│   │   ├── IconCache.h/cpp     # 图标缓存
+│   │   ├── IconTextureManager.h/cpp # 图标纹理管理
+│   │   ├── ItemManager.h/cpp   # 项目管理器
+│   │   ├── Runner.h/cpp        # 程序启动器
+│   │   └── HotkeyManager.h/cpp # 快捷键管理
+│   ├── platform/
+│   │   ├── Window.h/cpp        # Win32 窗口
+│   │   ├── D3D11Renderer.h/cpp # DX11 渲染器
+│   │   └── TrayIcon.h/cpp      # 托盘图标
+│   └── utils/
+│       ├── StringUtils.h/cpp   # 字符串工具
+│       └── PathUtils.h/cpp     # 路径工具
+├── res/
+│   ├── resource.rc             # Windows 资源
+│   └── icons/
+│       └── app.ico             # 应用图标
+├── lang/                       # 多语言文件
+│   ├── zh-CN.json
+│   ├── zh-TW.json
+│   └── en-US.json
+├── img/                        # 图片资源
+├── SDK/                        # 插件开发 SDK
+└── ToGoRun/                 # 数据迁移工具
+```
 
+## 数据存储
 
-**🔎 搜索**
+**配置文件路径**：`%APPDATA%/GoRun/config.json`
 
-* 多维动态赋权 | 搜索结果精准调优
-* 灵活搜索变量 | 支持多字段参数化，打破固定筛选局限。
+首次运行时自动创建目录和默认配置文件。
 
+**图标缓存**：`%APPDATA%/GoRun/icons/`
 
-### 截图
+## 参数变量
 
-![Maye Nano](https://github.com/25H/MayeNano/blob/main/img/01.png?raw=true)
+GoRun 支持 Windows 环境变量同时并内置参数变量：
+
+| 变量名 | 说明 | 支持版本 |
+|-------|------|---------|
+| `%mp%` | 当前目录 | 1.0.0.1+ |
+| `%mr%` | 当前盘符 | 1.0.0.1+ |
+| `%so%` | 搜索参数 | 2.8.0.0+ |
+| `%so-url%` | 搜索参数 URL 编码 | 2.8.0.0+ |
+
+## 开发规划
+
+### MVP 阶段（当前）
+- [x] 窗口框架
+- [x] 拖放添加
+- [x] 分类管理
+- [x] 项目运行
+- [x] 全局快捷键
+- [x] 托盘图标
+
+### 后续扩展
+- [ ] 搜索功能
+- [ ] 主题编辑器
+- [ ] 插件系统
+- [ ] 任务计划
+- [ ] 脚本支持
+- [ ] 密码保护分类
+- [ ] 列表/平铺视图
+
+## 截图
+
+![GoRun](img/01.png)
 
 <table>
   <tr>
-    <td><img src="https://github.com/25H/MayeNano/blob/main/img/ScrriptTest.gif?raw=true" alt="Maye Nano"></td>
-    <td><img src="https://github.com/25H/MayeNano/blob/main/img/02.png?raw=true" alt="Maye Nano"></td>
-    <td><img src="https://github.com/25H/MayeNano/blob/main/img/03.png?raw=true" alt="Maye Nano"></td>
+    <td><img src="img/ScrriptTest.gif" alt="脚本测试"></td>
+    <td><img src="img/02.png" alt="界面截图"></td>
+    <td><img src="img/03.png" alt="界面截图"></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/25H/MayeNano/blob/main/img/04.png?raw=true" alt="Maye Nano"></td>
-    <td><img src="https://github.com/25H/MayeNano/blob/main/img/05.png?raw=true" alt="Maye Nano"></td>
-    <td><img src="https://github.com/25H/MayeNano/blob/main/img/06.png?raw=true" alt="Maye Nano"></td>
+    <td><img src="img/04.png" alt="界面截图"></td>
+    <td><img src="img/05.png" alt="界面截图"></td>
+    <td><img src="img/06.png" alt="界面截图"></td>
   </tr>
 </table>
 
+**主题预览**
 
 <table>
-<tr>
-<td><img src="https://github.com/25H/MayeNano/blob/main/img/theme/01.png?raw=true" alt="Maye Nano"></td>
-<td><img src="https://github.com/25H/MayeNano/blob/main/img/theme/02.png?raw=true" alt="Maye Nano"></td>
-<td><img src="https://github.com/25H/MayeNano/blob/main/img/theme/03.png?raw=true" alt="Maye Nano"></td>
-</tr>
-<tr>
-<td><img src="https://github.com/25H/MayeNano/blob//main/img/theme/04.png?raw=true" alt="Maye Nano"></td>
-<td><img src="https://github.com/25H/MayeNano/blob//main/img/theme/05.png?raw=true" alt="Maye Nano"></td>
-<td><img src="https://github.com/25H/MayeNano/blob//main/img/theme/06.png?raw=true" alt="Maye Nano"></td>
-</tr>
-<tr>
-<td><img src="https://github.com/25H/MayeNano/blob/main/img/theme/07.png?raw=true" alt="Maye Nano"></td>
-<td><img src="https://github.com/25H/MayeNano/blob/main/img/theme/08.png?raw=true" alt="Maye Nano"></td>
-<td><img src="https://github.com/25H/MayeNano/blob/main/img/theme/09.png?raw=true" alt="Maye Nano"></td>
-</tr>
+  <tr>
+    <td><img src="img/theme/01.png" alt="主题"></td>
+    <td><img src="img/theme/02.png" alt="主题"></td>
+    <td><img src="img/theme/03.png" alt="主题"></td>
+  </tr>
+  <tr>
+    <td><img src="img/theme/04.png" alt="主题"></td>
+    <td><img src="img/theme/05.png" alt="主题"></td>
+    <td><img src="img/theme/06.png" alt="主题"></td>
+  </tr>
+  <tr>
+    <td><img src="img/theme/07.png" alt="主题"></td>
+    <td><img src="img/theme/08.png" alt="主题"></td>
+    <td><img src="img/theme/09.png" alt="主题"></td>
+  </tr>
 </table>
 
+## 相关链接
 
+- **官方网站**: https://GoRun.arae.cc/
+- **GitHub**: https://github.com/AoThen/GoRun
+- **原版仓库**: https://github.com/25H/GoRun
+- **更新日志**: https://soft.arae.cc/ChangeLog/GoRun.txt
 
-### 🧩 参数变量
-Maye Nano 支持 Windows 环境变量同时并内置 2 个 参数变量 (变量尾不含 \ ) ，涉及范围：目标、起始位置、启动参数、图标。
-```
-变量名  说明            支持版本
-%mp%    当前目录        1.0.0.1+
-%mr%    当前盘符        1.0.0.1+
+## 贡献
 
-变量名		说明				支持版本		支持属性							支持项目类型
-%so%		搜索参数			2.8.0.0+		目标; 起始位置; 启动参数;			常规; URL;
-%so-url%	搜索参数URL编码		2.8.0.0+		目标; 起始位置; 启动参数;			常规; URL;
+欢迎提交 Issue 和 Pull Request！
 
-```
+## 许可证
 
-[查看参数变量详解](https://t.arae.cc/p-25942/)
+本项目采用 MIT 许可证。
 
+## 致谢
 
-### 🔎 搜索
-主窗口显示后，直接输入即可，无需手动打开搜索页。
+感谢 [25H](https://github.com/25H) 创建的原版 GoRun 项目。
 
-或通过搜索快捷键唤醒搜索页。
+---
 
-
-### 📅 更新日志
-
-<https://soft.arae.cc/ChangeLog/MayeNano.txt>
-
-## 📥 下载 -> 安装
-
-项目主页：<https://t.arae.cc/p-25933/>
-
-项目主页：<https://mayenano.arae.cc/>
-
-<https://github.com/25H/MayeNano/releases/latest>
-
-<https://wwi.lanzouq.com/b02ij7idze>
-
-<https://wwaom.lanzoub.com/b02ij7idze>
-
-
-### ToMayeNano
-
-将Maye 或 Maye Lite的数据库(JDB.json)转换到 Maye Nano
-
-[Github](https://github.com/25H/MayeNano/raw/main/ToMayeNano/ToMayeNano.zip?raw=true)
-
-[蓝奏](https://wwaom.lanzoub.com/idOcH3j2wf1i)
-
-
-### QQ群
-
-* <kbd>588516128</kbd> <kbd>满</kbd>
-* <kbd>588183137</kbd> <kbd>满</kbd>
-* <kbd>588046177</kbd> <kbd>满</kbd>
-* <kbd>579798599</kbd> <kbd>满</kbd>
-* <kbd>579800327</kbd> <kbd>新</kbd>
-* <kbd>579338221</kbd> <kbd>新</kbd>
-* <kbd>579799808</kbd> <kbd>新</kbd>
-
-
-### 微信群
-
-请扫描以下二维码(X1982882666)添加群主后说明加入Maye群
-
-<img src="https://github.com/25H/MayeNano/blob/main/img/vx-25H.jpg?raw=true" alt="" width="200" height="200">
-
-
-### 🧡  赞助
-
-**[点击进入赞助页 >>](https://t.arae.cc/donate/)**
-
-
-### 📝 备注
-* 名称：Maye Nano 快速启动工具
-* 大小：3 MB+
-* 语言：多语言
-* 运行环境：Win10+
-* 授权方式：免费软件
-* 软件类别：桌面工具
-* 编写语言：`c++` / `ImGui`
-
-
-
-
-
-
-
-
+**备注**
+- 名称：GoRun 快速启动工具
+- 大小：约 3 MB+
+- 语言：多语言
+- 运行环境：Windows 10+
+- 授权方式：免费软件
+- 软件类别：桌面工具
+- 编写语言：C++ / ImGui

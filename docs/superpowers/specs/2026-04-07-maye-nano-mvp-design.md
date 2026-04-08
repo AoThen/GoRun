@@ -1,8 +1,8 @@
-# Maye Nano MVP 设计规格
+# GoRun MVP 设计规格
 
 ## 概述
 
-Maye Nano 是一款 Windows 平台的快速启动工具，使用 C++ 和 ImGui 开发。本文档定义 MVP（最小可行产品）的设计规格，包含核心启动功能。
+GoRun 是一款 Windows 平台的快速启动工具，使用 C++ 和 ImGui 开发。本文档定义 MVP（最小可行产品）的设计规格，包含核心启动功能。
 
 ## 技术栈
 
@@ -25,7 +25,7 @@ Maye Nano 是一款 Windows 平台的快速启动工具，使用 C++ 和 ImGui �
 
 ## 数据存储
 
-**配置文件路径**：`%APPDATA%/MayeNano/config.json`
+**配置文件路径**：`%APPDATA%/GoRun/config.json`
 
 首次运行时自动创建目录和默认配置文件。
 
@@ -33,7 +33,7 @@ Maye Nano 是一款 Windows 平台的快速启动工具，使用 C++ 和 ImGui �
 
 ## 图标缓存机制
 
-**缓存目录**：`%APPDATA%/MayeNano/icons/`
+**缓存目录**：`%APPDATA%/GoRun/icons/`
 
 **提取时机**：
 - 添加项目时自动提取图标并缓存
@@ -620,7 +620,7 @@ private:
 ## 项目结构
 
 ```
-MayeNano/
+GoRun/
 ├── CMakeLists.txt
 ├── cmake/
 │   └── FetchDependencies.cmake
@@ -674,7 +674,7 @@ MayeNano/
 
 ```cmake
 cmake_minimum_required(VERSION 3.16)
-project(MayeNano VERSION 1.0.0 LANGUAGES CXX)
+project(GoRun VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -684,13 +684,13 @@ include(cmake/FetchDependencies.cmake)
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 file(GLOB_RECURSE HEADERS "src/*.h")
 
-add_executable(MayeNano WIN32 ${SOURCES} ${HEADERS})
+add_executable(GoRun WIN32 ${SOURCES} ${HEADERS})
 
-target_link_libraries(MayeNano
+target_link_libraries(GoRun
     PRIVATE imgui nlohmann_json d3d11 dxgi shell32 ole32)
 
-target_include_directories(MayeNano PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_sources(MayeNano PRIVATE "res/resource.rc")
+target_include_directories(GoRun PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_sources(GoRun PRIVATE "res/resource.rc")
 ```
 
 **构建命令：**

@@ -95,7 +95,7 @@
 //=======================================================================================
 
 
-// Maye Nano - API
+// GoRun - API
 namespace mn {
 
     using _MN_RESULT   = long long;
@@ -184,7 +184,7 @@ namespace mn {
     }
 
 
-    // 获取 Maye Nano 版本号
+    // 获取 GoRun 版本号
     // @return std::string 如:"1.0.0.1"
     std::string GetVersion() {
         std::string buf(50, '\0');

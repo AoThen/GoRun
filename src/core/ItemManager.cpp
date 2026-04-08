@@ -49,6 +49,16 @@ void ItemManager::AddCategory(Category category) {
     m_storage->AddCategory(category);
 }
 
+void ItemManager::UpdateCategory(const Category& category) {
+    for (auto& cat : m_categories) {
+        if (cat.id == category.id) {
+            cat = category;
+            m_storage->UpdateCategory(category);
+            break;
+        }
+    }
+}
+
 void ItemManager::DeleteCategory(const std::wstring& id) {
     auto it = m_itemsByCategory.find(id);
     if (it != m_itemsByCategory.end()) {
@@ -92,6 +102,28 @@ void ItemManager::AddItem(Item item) {
     m_itemsByCategory[item.categoryId].push_back(item);
     m_allItems.push_back(item);
     m_storage->AddItem(item);
+}
+
+void ItemManager::UpdateItem(const Item& item) {
+    // 更新 m_allItems
+    for (auto& i : m_allItems) {
+        if (i.id == item.id) {
+            i = item;
+            break;
+        }
+    }
+    
+    // 更新 m_itemsByCategory
+    for (auto& [catId, items] : m_itemsByCategory) {
+        for (auto& i : items) {
+            if (i.id == item.id) {
+                i = item;
+                break;
+            }
+        }
+    }
+    
+    m_storage->UpdateItem(item);
 }
 
 void ItemManager::MoveItem(const std::wstring& itemId, const std::wstring& targetCategoryId) {

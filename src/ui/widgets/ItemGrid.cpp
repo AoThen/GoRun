@@ -15,10 +15,16 @@ void ItemGrid::SetIconTextureManager(IconTextureManager* manager) {
 }
 
 void ItemGrid::Render() {
-    if (!m_items) return;
-    
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 16));
     ImGui::BeginChild("Items", ImVec2(0, 0), false);
+    
+    if (!m_items || m_items->empty()) {
+        // 空结果提示
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "暂无项目");
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        return;
+    }
     
     float windowWidth = ImGui::GetContentRegionAvail().x;
     int columns = std::max(1, (int)(windowWidth / 95));
@@ -85,8 +91,8 @@ void ItemGrid::Render() {
             }
         }
         
-        // 右键菜单
-        if (ImGui::BeginPopupContextItem("item_context")) {
+        // 右键菜单 - 使用 ImGuiPopupFlags_MouseButtonRight 确保右键触发
+        if (ImGui::BeginPopupContextItem("item_context", ImGuiPopupFlags_MouseButtonRight)) {
             RenderContextMenu(item);
             ImGui::EndPopup();
         }

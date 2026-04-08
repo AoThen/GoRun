@@ -1,4 +1,4 @@
-# Maye Nano MVP 实现计划
+# GoRun MVP 实现计划
 
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
@@ -96,7 +96,7 @@ target_include_directories(imgui PUBLIC
 ```cmake
 # CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
-project(MayeNano VERSION 1.0.0 LANGUAGES CXX)
+project(GoRun VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -106,12 +106,12 @@ include(cmake/FetchDependencies.cmake)
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 file(GLOB_RECURSE HEADERS "src/*.h")
 
-add_executable(MayeNano WIN32 ${SOURCES} ${HEADERS})
+add_executable(GoRun WIN32 ${SOURCES} ${HEADERS})
 
-target_link_libraries(MayeNano
+target_link_libraries(GoRun
     PRIVATE imgui nlohmann_json d3d11 dxgi shell32 ole32)
 
-target_include_directories(MayeNano PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_include_directories(GoRun PRIVATE "${CMAKE_SOURCE_DIR}/src")
 ```
 
 - [ ] **步骤 3：创建目录结构**
@@ -353,7 +353,7 @@ namespace mn::PathUtils {
 std::wstring GetAppDataPath() {
     wchar_t path[MAX_PATH];
     SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, path);
-    return std::wstring(path) + L"\\MayeNano";
+    return std::wstring(path) + L"\\GoRun";
 }
 
 std::wstring GetExePath() {
@@ -480,7 +480,7 @@ private:
 
 namespace mn {
 
-static const wchar_t* CLASS_NAME = L"MayeNanoWindowClass";
+static const wchar_t* CLASS_NAME = L"GoRunWindowClass";
 
 bool Window::Create(const std::wstring& title, int width, int height, int x, int y) {
     // 注册窗口类
@@ -2676,7 +2676,7 @@ bool App::Initialize(HINSTANCE hInstance) {
     int width = m_config->GetWindowWidth();
     int height = m_config->GetWindowHeight();
     
-    if (!m_window->Create(L"Maye Nano", width, height, x, y)) {
+    if (!m_window->Create(L"GoRun", width, height, x, y)) {
         return false;
     }
     
@@ -2865,13 +2865,13 @@ cmake -B build -A x64
 cmake --build build --config Release
 ```
 
-预期：构建成功，生成 MayeNano.exe
+预期：构建成功，生成 GoRun.exe
 
 - [ ] **步骤 3：最终 Commit**
 
 ```bash
 git add .
-git commit -m "feat: complete Maye Nano MVP implementation"
+git commit -m "feat: complete GoRun MVP implementation"
 ```
 
 ---

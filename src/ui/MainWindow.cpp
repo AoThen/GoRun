@@ -55,8 +55,10 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     // 设置图标纹理管理器
     m_itemGrid.SetIconTextureManager(iconTextureManager);
     
-    // 编辑保存后刷新
+    // 编辑保存后刷新并保存
     m_editDialog.OnSave([this](const Item& item) {
+        // 更新项目到存储
+        m_itemManager->UpdateItem(item);
         RefreshItems();
     });
     
@@ -104,7 +106,14 @@ void MainWindow::Render() {
         }
         if (ImGui::BeginMenu("编辑")) {
             if (ImGui::MenuItem("重命名当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
-                // TODO: 实现分类重命名对话框
+                // 打开重命名对话框
+                Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
+                if (cat) {
+                    std::string name = StringUtils::WStringToUtf8(cat->name);
+                    strncpy(m_renameCategoryBuf, name.c_str(), sizeof(m_renameCategoryBuf) - 1);
+                    m_renameCategoryBuf[sizeof(m_renameCategoryBuf) - 1] = '\0';
+                    m_showRenameCategory = true;
+                }
             }
             ImGui::EndMenu();
         }
@@ -128,6 +137,9 @@ void MainWindow::Render() {
     ImGui::EndChild();
     
     m_editDialog.Render();
+    
+    // 分类重命名对话框
+    RenderRenameCategoryDialog();
     
     if (m_showError) {
         ImGui::OpenPopup("错误");
@@ -230,6 +242,50 @@ void MainWindow::SetCurrentCategory(const std::wstring& categoryId) {
 void MainWindow::ShowError(const std::wstring& message) {
     m_errorMessage = message;
     m_showError = true;
+}
+
+void MainWindow::RenderRenameCategoryDialog() {
+    if (!m_showRenameCategory) return;
+    
+    ImGui::OpenPopup("重命名分类");
+    
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(300, 0));
+    
+    if (ImGui::BeginPopupModal("重命名分类", nullptr, ImGuiWindowFlags_NoResize)) {
+        if (ImGui::InputText("分类名称", m_renameCategoryBuf, sizeof(m_renameCategoryBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+            // 回车确认
+            Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
+            if (cat) {
+                cat->name = StringUtils::Utf8ToWString(m_renameCategoryBuf);
+                m_itemManager->UpdateCategory(*cat);
+                m_categoryTab.SetCategories(&m_itemManager->GetCategories());
+            }
+            m_showRenameCategory = false;
+            ImGui::CloseCurrentPopup();
+        }
+        
+        ImGui::Separator();
+        
+        if (ImGui::Button("确定", ImVec2(100, 0))) {
+            Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
+            if (cat) {
+                cat->name = StringUtils::Utf8ToWString(m_renameCategoryBuf);
+                m_itemManager->UpdateCategory(*cat);
+                m_categoryTab.SetCategories(&m_itemManager->GetCategories());
+            }
+            m_showRenameCategory = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("取消", ImVec2(100, 0))) {
+            m_showRenameCategory = false;
+            ImGui::CloseCurrentPopup();
+        }
+        
+        ImGui::EndPopup();
+    }
 }
 
 } // namespace mn

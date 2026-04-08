@@ -16,11 +16,13 @@ public:
     std::vector<Category>& GetCategories();
     Category* GetCategory(const std::wstring& id);
     void AddCategory(Category category);
+    void UpdateCategory(const Category& category);
     void DeleteCategory(const std::wstring& id);
     
     std::vector<Item>& GetItems(const std::wstring& categoryId);
     Item* GetItem(const std::wstring& id);
     void AddItem(Item item);
+    void UpdateItem(const Item& item);
     void MoveItem(const std::wstring& itemId, const std::wstring& targetCategoryId);
     void DeleteItem(const std::wstring& id);
     

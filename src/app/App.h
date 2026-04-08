@@ -25,6 +25,7 @@ public:
     App();  // 显式声明构造函数
 #ifdef _WIN32
     bool Initialize(HINSTANCE hInstance);
+    HINSTANCE GetInstance() const { return m_hInstance; }
 #endif
     ~App();
     
@@ -41,8 +42,14 @@ public:
 private:
     void HandleHotkey(int id);
     void SaveWindowPosition();
+    void ToggleWindow();
     
     static App* s_instance;
+    
+#ifdef _WIN32
+    HINSTANCE m_hInstance = nullptr;
+    HANDLE m_hMutex = nullptr;
+#endif
     
     std::unique_ptr<Storage> m_storage;
     std::unique_ptr<IconCache> m_iconCache;

@@ -30,6 +30,7 @@ private:
     void UpdateSearchResults();
     void RefreshItems();
     void ShowError(const std::wstring& message);
+    void RenderRenameCategoryDialog();
     
     ItemManager* m_itemManager = nullptr;
     Config* m_config = nullptr;
@@ -50,6 +51,10 @@ private:
     
     std::wstring m_errorMessage;
     bool m_showError = false;
+    
+    // 分类重命名对话框
+    bool m_showRenameCategory = false;
+    char m_renameCategoryBuf[256] = {};
 };
 
 } // namespace mn
