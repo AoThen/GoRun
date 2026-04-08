@@ -69,6 +69,7 @@ bool App::Initialize(HINSTANCE hInstance) {
     m_iconCache->Initialize(iconsPath);
     
     std::wstring configPath = appDataPath + L"\\config.json";
+    m_storage->Initialize(configPath);
     if (PathUtils::Exists(configPath)) {
         m_storage->Load(configPath);
     }

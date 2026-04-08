@@ -1,5 +1,6 @@
 #include "Storage.h"
 #include "utils/StringUtils.h"
+#include "utils/PathUtils.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <algorithm>
@@ -8,6 +9,14 @@
 namespace mn {
 
 using json = nlohmann::json;
+
+void Storage::Initialize(const std::wstring& path) {
+    m_path = path;
+    // 创建空的 JSON 结构，确保后续保存时有数据
+    if (!PathUtils::Exists(path)) {
+        SaveToFile();
+    }
+}
 
 bool Storage::Load(const std::wstring& path) {
     m_path = path;

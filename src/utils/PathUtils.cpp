@@ -85,6 +85,14 @@ std::wstring GetFileName(const std::wstring& path) {
     }
 }
 
+std::wstring GetFileBaseName(const std::wstring& path) {
+    try {
+        return std::filesystem::path(path).stem().wstring();
+    } catch (...) {
+        return L"";
+    }
+}
+
 bool EnsureDirectory(const std::wstring& path) {
     try {
         return std::filesystem::create_directories(path);

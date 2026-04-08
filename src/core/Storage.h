@@ -9,6 +9,7 @@ namespace mn {
 
 class Storage {
 public:
+    void Initialize(const std::wstring& path);
     bool Load(const std::wstring& path);
     bool Save(const std::wstring& path);
     

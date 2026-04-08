@@ -182,7 +182,7 @@ void ItemManager::HandleDrop(const std::vector<std::wstring>& files, const std::
         Item item;
         item.id = GenerateId(L"item");
         item.categoryId = categoryId;
-        item.name = PathUtils::GetFileName(file);
+        item.name = PathUtils::GetFileBaseName(file);
         item.target = file;
         item.workingDir = PathUtils::GetParentDir(file);
         
