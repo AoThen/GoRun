@@ -10,14 +10,17 @@ namespace mn::PathUtils {
 
 std::wstring GetAppDataPath() {
 #ifdef _WIN32
-    wchar_t path[MAX_PATH] = {};
-    HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, path);
-    if (FAILED(hr)) {
-        return L"C:\\GoRun";  // 回退到默认路径
+    // 便携化：使用程序所在目录下的 data 文件夹
+    wchar_t exePath[MAX_PATH] = {};
+    DWORD len = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) {
+        return L".\\data";  // 回退到当前目录
     }
-    return std::wstring(path) + L"\\GoRun";
+    // 获取程序所在目录
+    std::filesystem::path exeDir = std::filesystem::path(exePath).parent_path();
+    return (exeDir / L"data").wstring();
 #else
-    return L"/tmp/GoRun";
+    return L"./data";
 #endif
 }
 

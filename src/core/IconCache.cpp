@@ -67,18 +67,35 @@ void IconCache::RefreshIcon(const Item& item) {
 #ifdef _WIN32
     std::wstring cachePath = m_cacheDir + L"\\" + item.id + L".png";
     
-    SHFILEINFOW sfi = {};
-    DWORD_PTR result = SHGetFileInfoW(
-        item.target.c_str(),
-        0,
-        &sfi,
-        sizeof(sfi),
-        SHGFI_ICON | SHGFI_LARGEICON
-    );
+    // 优先使用自定义图标路径
+    std::wstring iconSource = item.iconPath.empty() ? item.target : item.iconPath;
     
-    if (result && sfi.hIcon) {
+    // 提取图标
+    HICON hIcon = nullptr;
+    
+    // 如果有图标路径和索引，使用 ExtractIconEx 提取
+    if (!item.iconPath.empty()) {
+        ExtractIconExW(item.iconPath.c_str(), item.iconIndex, &hIcon, nullptr, 1);
+    }
+    
+    // 如果提取失败或没有自定义图标，使用 SHGetFileInfo
+    if (!hIcon) {
+        SHFILEINFOW sfi = {};
+        DWORD_PTR result = SHGetFileInfoW(
+            iconSource.c_str(),
+            0,
+            &sfi,
+            sizeof(sfi),
+            SHGFI_ICON | SHGFI_LARGEICON
+        );
+        if (result && sfi.hIcon) {
+            hIcon = sfi.hIcon;
+        }
+    }
+    
+    if (hIcon) {
         // 使用 GDI+ 保存图标为 PNG
-        Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromHICON(sfi.hIcon);
+        Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromHICON(hIcon);
         if (bitmap) {
             CLSID clsid;
             if (GetEncoderClsid(L"image/png", &clsid) != -1) {
@@ -86,7 +103,7 @@ void IconCache::RefreshIcon(const Item& item) {
             }
             delete bitmap;
         }
-        DestroyIcon(sfi.hIcon);
+        DestroyIcon(hIcon);
     }
 #endif
 }

@@ -114,7 +114,7 @@ void ItemGrid::RenderIconView() {
         // 尝试加载图标纹理
         void* iconTexture = nullptr;
         if (m_iconTextureManager) {
-            iconTexture = m_iconTextureManager->GetIconTexture(item.id, item.target);
+            iconTexture = m_iconTextureManager->GetIconTexture(item);
         }
         
         // 计算居中偏移
@@ -248,7 +248,7 @@ void ItemGrid::RenderListView() {
         
         void* iconTexture = nullptr;
         if (m_iconTextureManager) {
-            iconTexture = m_iconTextureManager->GetIconTexture(item.id, item.target);
+            iconTexture = m_iconTextureManager->GetIconTexture(item);
         }
         
         // 整行可点击

@@ -198,6 +198,13 @@ void ItemManager::HandleDrop(const std::vector<std::wstring>& files, const std::
                     item.iconPath = shortcut.iconPath;
                     item.iconIndex = shortcut.iconIndex;
                 }
+                // 如果快捷方式有描述名称，优先使用
+                if (!shortcut.name.empty()) {
+                    item.name = shortcut.name;
+                } else {
+                    // 否则从目标文件获取名称
+                    item.name = PathUtils::GetFileBaseName(shortcut.target);
+                }
             }
         }
         
@@ -268,6 +275,13 @@ ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPa
     if (SUCCEEDED(hr) && iconPath[0] != L'\0') {
         info.iconPath = iconPath;
         info.iconIndex = iconIndex;
+    }
+    
+    // 获取快捷方式描述名称
+    wchar_t description[MAX_PATH] = {0};
+    hr = pShellLink->GetDescription(description, MAX_PATH);
+    if (SUCCEEDED(hr) && description[0] != L'\0') {
+        info.name = description;
     }
     
     // 如果没有自定义图标，使用目标路径作为图标路径

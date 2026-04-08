@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include "Types.h"
 
 namespace mn {
 
@@ -10,7 +11,7 @@ public:
     void Initialize(class D3D11Renderer* renderer, class IconCache* iconCache);
     
     // 获取图标纹理，返回 ImGui 可用的纹理指针
-    void* GetIconTexture(const std::wstring& itemId, const std::wstring& target);
+    void* GetIconTexture(const Item& item);
     
     // 清除缓存
     void ClearCache();

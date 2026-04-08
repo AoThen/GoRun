@@ -40,6 +40,7 @@ public:
         std::wstring iconPath;
         int iconIndex = 0;
         bool success = false;
+        std::wstring name;  // 快捷方式描述名称
     };
     ShortcutInfo ResolveShortcut(const std::wstring& lnkPath);
 

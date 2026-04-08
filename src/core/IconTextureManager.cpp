@@ -10,21 +10,17 @@ void IconTextureManager::Initialize(D3D11Renderer* renderer, IconCache* iconCach
     m_iconCache = iconCache;
 }
 
-void* IconTextureManager::GetIconTexture(const std::wstring& itemId, const std::wstring& target) {
+void* IconTextureManager::GetIconTexture(const Item& item) {
     // 检查缓存
-    auto it = m_textureCache.find(itemId);
+    auto it = m_textureCache.find(item.id);
     if (it != m_textureCache.end()) {
         return it->second;
     }
     
     if (!m_renderer || !m_iconCache) return nullptr;
     
-    // 构建缓存图标路径
-    Item tempItem;
-    tempItem.id = itemId;
-    tempItem.target = target;
-    
-    std::wstring iconPath = m_iconCache->GetIconPath(tempItem);
+    // 获取缓存图标路径
+    std::wstring iconPath = m_iconCache->GetIconPath(item);
     
     if (iconPath.empty() || !PathUtils::Exists(iconPath)) {
         return nullptr;
@@ -33,7 +29,7 @@ void* IconTextureManager::GetIconTexture(const std::wstring& itemId, const std::
     // 加载纹理
     void* texture = m_renderer->LoadTexture(iconPath);
     if (texture) {
-        m_textureCache[itemId] = texture;
+        m_textureCache[item.id] = texture;
     }
     
     return texture;
