@@ -1,10 +1,6 @@
 # GoRun - 极速启动工具
 
-**GoRun** 是一款专注于"快速启动"的纯粹工具。我们深知效率的本质是减法而非加法，因此摒弃一切冗余，仅保留最极致的启动体验。
-
-> 本项目为 GoRun 的开源重写版本，使用 C++ 和 ImGui 开发，采用原生架构。
-
-![GoRun Logo](img/Logo.png)
+**GoRun** 是一款专注于"快速启动"的纯粹工具。
 
 ## 特色亮点
 
@@ -162,47 +158,10 @@ GoRun 支持 Windows 环境变量同时并内置参数变量：
 
 ## 截图
 
-![GoRun](img/01.png)
-
-<table>
-  <tr>
-    <td><img src="img/ScrriptTest.gif" alt="脚本测试"></td>
-    <td><img src="img/02.png" alt="界面截图"></td>
-    <td><img src="img/03.png" alt="界面截图"></td>
-  </tr>
-  <tr>
-    <td><img src="img/04.png" alt="界面截图"></td>
-    <td><img src="img/05.png" alt="界面截图"></td>
-    <td><img src="img/06.png" alt="界面截图"></td>
-  </tr>
-</table>
-
-**主题预览**
-
-<table>
-  <tr>
-    <td><img src="img/theme/01.png" alt="主题"></td>
-    <td><img src="img/theme/02.png" alt="主题"></td>
-    <td><img src="img/theme/03.png" alt="主题"></td>
-  </tr>
-  <tr>
-    <td><img src="img/theme/04.png" alt="主题"></td>
-    <td><img src="img/theme/05.png" alt="主题"></td>
-    <td><img src="img/theme/06.png" alt="主题"></td>
-  </tr>
-  <tr>
-    <td><img src="img/theme/07.png" alt="主题"></td>
-    <td><img src="img/theme/08.png" alt="主题"></td>
-    <td><img src="img/theme/09.png" alt="主题"></td>
-  </tr>
-</table>
 
 ## 相关链接
 
-- **官方网站**: https://GoRun.arae.cc/
 - **GitHub**: https://github.com/AoThen/GoRun
-- **原版仓库**: https://github.com/25H/GoRun
-- **更新日志**: https://soft.arae.cc/ChangeLog/GoRun.txt
 
 ## 贡献
 
@@ -212,9 +171,6 @@ GoRun 支持 Windows 环境变量同时并内置参数变量：
 
 本项目采用 MIT 许可证。
 
-## 致谢
-
-感谢 [25H](https://github.com/25H) 创建的原版 GoRun 项目。
 
 ---
 
