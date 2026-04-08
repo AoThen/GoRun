@@ -26,6 +26,49 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         m_itemGrid.SetItems(&m_itemManager->GetItems(id));
     });
     
+    // 新建分类
+    m_categoryTab.OnCategoryAdd([this]() {
+        Category cat;
+        cat.id = GenerateId(L"cat");
+        cat.name = L"新分类";
+        m_itemManager->AddCategory(cat);
+        m_categoryTab.SetCategories(&m_itemManager->GetCategories());
+        m_categoryTab.SetCurrentCategory(cat.id);
+        m_currentCategoryId = cat.id;
+        m_itemGrid.SetItems(&m_itemManager->GetItems(cat.id));
+        // 自动打开重命名对话框
+        strncpy(m_renameCategoryBuf, "新分类", sizeof(m_renameCategoryBuf) - 1);
+        m_showRenameCategory = true;
+    });
+    
+    // 删除分类
+    m_categoryTab.OnCategoryDelete([this](const std::wstring& id) {
+        if (m_itemManager->GetCategories().size() > 1) {
+            m_itemManager->DeleteCategory(id);
+            m_categoryTab.SetCategories(&m_itemManager->GetCategories());
+            auto& cats = m_itemManager->GetCategories();
+            if (!cats.empty()) {
+                m_currentCategoryId = cats[0].id;
+                m_categoryTab.SetCurrentCategory(m_currentCategoryId);
+                m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+            }
+        } else {
+            ShowError(L"至少需要保留一个分类");
+        }
+    });
+    
+    // 重命名分类
+    m_categoryTab.OnCategoryRename([this](const std::wstring& id) {
+        Category* cat = m_itemManager->GetCategory(id);
+        if (cat) {
+            m_currentCategoryId = id;
+            std::string name = StringUtils::WStringToUtf8(cat->name);
+            strncpy(m_renameCategoryBuf, name.c_str(), sizeof(m_renameCategoryBuf) - 1);
+            m_renameCategoryBuf[sizeof(m_renameCategoryBuf) - 1] = '\0';
+            m_showRenameCategory = true;
+        }
+    });
+    
     // 设置 Runner 回调，运行成功后递增运行次数
     m_runner->SetRunCallback([this](const Item& item, bool success) {
         if (success) {
@@ -58,6 +101,11 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     m_itemGrid.OnItemDelete([this](const Item& item) {
         m_itemManager->DeleteItem(item.id);
         RefreshItems();
+    });
+    
+    // 刷新图标
+    m_itemGrid.OnItemRefreshIcon([this](const Item& item) {
+        m_iconTextureManager->RefreshIcon(item);
     });
     
     // 设置图标纹理管理器
@@ -196,6 +244,12 @@ void MainWindow::RenderSearchBar() {
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.92f, 0.92f, 0.92f, 1.0f));
     
+    // 首次显示时聚焦搜索框
+    if (m_focusSearch) {
+        ImGui::SetKeyboardFocusHere();
+        m_focusSearch = false;
+    }
+    
     ImGui::SetNextItemWidth(-FLT_MIN);
     bool searchChanged = ImGui::InputTextWithHint("##search", "搜索...", m_searchBuf, sizeof(m_searchBuf));
     
@@ -244,6 +298,7 @@ void MainWindow::RefreshItems() {
 
 void MainWindow::Show() {
     m_visible = true;
+    m_focusSearch = true;  // 显示时聚焦搜索框
 }
 
 void MainWindow::Hide() {

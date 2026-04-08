@@ -39,4 +39,15 @@ void IconTextureManager::ClearCache() {
     m_textureCache.clear();
 }
 
+void IconTextureManager::RefreshIcon(const Item& item) {
+    // 移除内存中的纹理缓存
+    m_textureCache.erase(item.id);
+    
+    // 删除磁盘上的缓存文件并重新提取
+    if (m_iconCache) {
+        m_iconCache->DeleteCache(item.id);
+        m_iconCache->RefreshIcon(item);
+    }
+}
+
 } // namespace mn

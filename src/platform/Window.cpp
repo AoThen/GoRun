@@ -16,12 +16,19 @@ static const wchar_t* CLASS_NAME = L"GoRunWindowClass";
 
 bool Window::Create(const std::wstring& title, int width, int height, int x, int y) {
 #ifdef _WIN32
+    // 加载应用图标
+    HICON hIcon = LoadIconW(GetModuleHandle(nullptr), MAKEINTRESOURCEW(IDI_APP_ICON));
+    HICON hIconSm = (HICON)LoadImageW(GetModuleHandle(nullptr), MAKEINTRESOURCEW(IDI_APP_ICON), 
+                                       IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
+    
     // 注册窗口类
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(WNDCLASSEXW);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = StaticWndProc;
     wc.hInstance = GetModuleHandle(nullptr);
+    wc.hIcon = hIcon;
+    wc.hIconSm = hIconSm;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.lpszClassName = CLASS_NAME;
     RegisterClassExW(&wc);

@@ -15,6 +15,9 @@ public:
     
     // 清除缓存
     void ClearCache();
+    
+    // 刷新指定项目的图标缓存
+    void RefreshIcon(const Item& item);
 
 private:
     D3D11Renderer* m_renderer = nullptr;

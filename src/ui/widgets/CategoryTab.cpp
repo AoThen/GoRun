@@ -46,9 +46,28 @@ void CategoryTab::Render() {
             }
         }
         
+        // 右键菜单
+        if (ImGui::BeginPopupContextItem("category_context", ImGuiPopupFlags_MouseButtonRight)) {
+            RenderContextMenu(cat);
+            ImGui::EndPopup();
+        }
+        
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
     }
+    
+    // 底部添加分类按钮
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+    if (ImGui::Button("+ 新建分类", ImVec2(-FLT_MIN, 0))) {
+        if (m_onAdd) {
+            m_onAdd();
+        }
+    }
+    ImGui::PopStyleVar();
     
     ImGui::EndChild();
     
@@ -56,8 +75,36 @@ void CategoryTab::Render() {
     ImGui::PopStyleVar();
 }
 
+void CategoryTab::RenderContextMenu(const Category& cat) {
+    if (ImGui::MenuItem("重命名")) {
+        if (m_onRename) {
+            m_onRename(cat.id);
+        }
+        ImGui::CloseCurrentPopup();
+    }
+    
+    if (ImGui::MenuItem("删除", nullptr, false, m_categories && m_categories->size() > 1)) {
+        if (m_onDelete) {
+            m_onDelete(cat.id);
+        }
+        ImGui::CloseCurrentPopup();
+    }
+}
+
 void CategoryTab::OnCategoryChanged(std::function<void(const std::wstring&)> callback) {
     m_onChanged = callback;
+}
+
+void CategoryTab::OnCategoryAdd(std::function<void()> callback) {
+    m_onAdd = callback;
+}
+
+void CategoryTab::OnCategoryDelete(std::function<void(const std::wstring&)> callback) {
+    m_onDelete = callback;
+}
+
+void CategoryTab::OnCategoryRename(std::function<void(const std::wstring&)> callback) {
+    m_onRename = callback;
 }
 
 void CategoryTab::SetCurrentCategory(const std::wstring& id) {

@@ -21,6 +21,7 @@ public:
     void OnItemRunAsAdmin(std::function<void(const Item&)> callback);
     void OnItemEdit(std::function<void(Item&)> callback);
     void OnItemDelete(std::function<void(const Item&)> callback);
+    void OnItemRefreshIcon(std::function<void(const Item&)> callback);
 
 private:
     void RenderIconView();
@@ -43,6 +44,7 @@ private:
     std::function<void(const Item&)> m_onRunAsAdmin;
     std::function<void(Item&)> m_onEdit;
     std::function<void(const Item&)> m_onDelete;
+    std::function<void(const Item&)> m_onRefreshIcon;
 };
 
 } // namespace mn

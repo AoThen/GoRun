@@ -312,6 +312,15 @@ void ItemGrid::RenderContextMenu(const Item& item) {
     
     ImGui::Separator();
     
+    if (ImGui::MenuItem("刷新图标")) {
+        if (m_onRefreshIcon) {
+            m_onRefreshIcon(item);
+        }
+        ImGui::CloseCurrentPopup();
+    }
+    
+    ImGui::Separator();
+    
     if (ImGui::MenuItem("编辑")) {
         if (m_onEdit) {
             for (auto& i : *m_items) {
@@ -356,6 +365,10 @@ void ItemGrid::OnItemEdit(std::function<void(Item&)> callback) {
 
 void ItemGrid::OnItemDelete(std::function<void(const Item&)> callback) {
     m_onDelete = callback;
+}
+
+void ItemGrid::OnItemRefreshIcon(std::function<void(const Item&)> callback) {
+    m_onRefreshIcon = callback;
 }
 
 } // namespace mn

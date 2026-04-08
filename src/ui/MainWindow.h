@@ -53,6 +53,7 @@ private:
     float m_searchDelay = 0.3f;  // 300ms 延迟
     char m_pendingSearchBuf[256] = {};
     bool m_searchPending = false;
+    bool m_focusSearch = true;   // 首次显示时聚焦搜索框
     
     std::wstring m_errorMessage;
     bool m_showError = false;
