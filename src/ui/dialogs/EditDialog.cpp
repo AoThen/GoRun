@@ -18,6 +18,7 @@ namespace mn {
 void EditDialog::Show(Item* item) {
     m_item = item;
     m_visible = true;
+    m_openPopup = true;  // 标记需要打开弹窗
     if (item) {
         LoadFromItem();
     }
@@ -35,7 +36,11 @@ bool EditDialog::IsVisible() const {
 void EditDialog::Render() {
     if (!m_visible || !m_item) return;
     
-    ImGui::OpenPopup("编辑项目");
+    // 只在首次显示时打开弹窗
+    if (m_openPopup) {
+        ImGui::OpenPopup("编辑项目");
+        m_openPopup = false;
+    }
     
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -51,7 +56,8 @@ void EditDialog::Render() {
         }
         
         // 目标路径（带浏览按钮）
-        ImGui::BeginGroup();
+        ImGui::Text("目标");
+        ImGui::SameLine();
         char targetBuf[1024] = {};
         copyLen = (std::min)(m_targetBuf.size(), sizeof(targetBuf) - 1);
         memcpy(targetBuf, m_targetBuf.c_str(), copyLen);
@@ -64,9 +70,6 @@ void EditDialog::Render() {
         if (ImGui::Button("浏览...", ImVec2(60, 0))) {
             BrowseTarget();
         }
-        ImGui::EndGroup();
-        ImGui::SameLine(0, -1);
-        ImGui::Text("目标");
         
         // 参数
         char argsBuf[512] = {};
@@ -104,7 +107,8 @@ void EditDialog::Render() {
         }
         
         // 图标路径
-        ImGui::BeginGroup();
+        ImGui::Text("图标路径");
+        ImGui::SameLine();
         char iconPathBuf[1024] = {};
         copyLen = (std::min)(m_iconPathBuf.size(), sizeof(iconPathBuf) - 1);
         memcpy(iconPathBuf, m_iconPathBuf.c_str(), copyLen);
@@ -117,9 +121,6 @@ void EditDialog::Render() {
         if (ImGui::Button("选择...", ImVec2(60, 0))) {
             BrowseIcon();
         }
-        ImGui::EndGroup();
-        ImGui::SameLine(0, -1);
-        ImGui::Text("图标路径");
         
         // 图标索引
         ImGui::PushItemWidth(80);

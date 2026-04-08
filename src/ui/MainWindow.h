@@ -60,6 +60,7 @@ private:
     
     // 分类重命名对话框
     bool m_showRenameCategory = false;
+    bool m_openRenamePopup = false;  // 控制弹窗首次打开
     char m_renameCategoryBuf[256] = {};
     
     // 视图切换

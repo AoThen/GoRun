@@ -16,6 +16,7 @@ public:
     void SetViewType(ViewType viewType);
     ViewType GetViewType() const { return m_viewType; }
     void Render();
+    void ClearHoverAnimation(const std::wstring& itemId);  // 清理指定项目的动画状态
     
     void OnItemClicked(std::function<void(const Item&)> callback);
     void OnItemRunAsAdmin(std::function<void(const Item&)> callback);
@@ -26,7 +27,7 @@ public:
 private:
     void RenderIconView();
     void RenderListView();
-    void RenderContextMenu(const Item& item);
+    void RenderContextMenu(Item& item);
     
     // 悬停动画辅助
     float GetHoverScale(const std::wstring& itemId, bool isHovered);

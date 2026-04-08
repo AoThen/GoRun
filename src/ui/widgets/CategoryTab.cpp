@@ -54,8 +54,9 @@ void CategoryTab::Render() {
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
         
-        // 右键菜单（必须在 PushID/PopID 内）
-        if (ImGui::BeginPopupContextItem("category_context", ImGuiPopupFlags_MouseButtonRight)) {
+        // 右键菜单（使用分类 ID 作为弹窗 ID 的一部分）
+        std::string popupId = "category_context_" + StringUtils::WStringToUtf8(cat.id);
+        if (ImGui::BeginPopupContextItem(popupId.c_str(), ImGuiPopupFlags_MouseButtonRight)) {
             RenderContextMenu(cat);
             ImGui::EndPopup();
         }

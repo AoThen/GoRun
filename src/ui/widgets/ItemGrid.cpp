@@ -20,6 +20,10 @@ void ItemGrid::SetViewType(ViewType viewType) {
     m_viewType = viewType;
 }
 
+void ItemGrid::ClearHoverAnimation(const std::wstring& itemId) {
+    m_hoverAnimState.erase(itemId);
+}
+
 void ItemGrid::Render() {
     if (m_viewType == ViewType::Icon) {
         RenderIconView();
@@ -97,31 +101,16 @@ void ItemGrid::RenderIconView() {
         
         ImVec2 baseIconSize(64, 64);
         
-        // 预先检测悬停
-        ImVec2 mousePos = ImGui::GetIO().MousePos;
-        ImVec2 itemMin = ImGui::GetCursorScreenPos();
-        ImVec2 itemMax = ImVec2(itemMin.x + baseIconSize.x + 8, itemMin.y + baseIconSize.y + 8);
-        bool isHovered = (mousePos.x >= itemMin.x && mousePos.x <= itemMax.x &&
-                         mousePos.y >= itemMin.y && mousePos.y <= itemMax.y);
-        
-        float scale = GetHoverScale(item.id, isHovered);
-        ImVec2 iconSize(baseIconSize.x * scale, baseIconSize.y * scale);
-        
         // 尝试加载图标纹理
         void* iconTexture = nullptr;
         if (m_iconTextureManager) {
             iconTexture = m_iconTextureManager->GetIconTexture(item);
         }
         
-        // 计算居中偏移
-        float offsetX = (baseIconSize.x - iconSize.x) / 2;
-        float offsetY = (baseIconSize.y - iconSize.y) / 2;
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
-        
+        // 先创建按钮获取悬停状态
         if (iconTexture) {
             // 显示图标纹理
-            if (ImGui::ImageButton("##icon", iconTexture, iconSize)) {
+            if (ImGui::ImageButton("##icon", iconTexture, baseIconSize)) {
                 m_selectedIndex = index;
                 if (m_onClick) {
                     m_onClick(item);
@@ -129,7 +118,7 @@ void ItemGrid::RenderIconView() {
             }
         } else {
             // 显示占位符
-            if (ImGui::Button("##icon", iconSize)) {
+            if (ImGui::Button("##icon", baseIconSize)) {
                 m_selectedIndex = index;
                 if (m_onClick) {
                     m_onClick(item);
@@ -157,6 +146,10 @@ void ItemGrid::RenderIconView() {
             }
         }
         
+        // 使用 ImGui API 获取悬停状态
+        bool isHovered = ImGui::IsItemHovered();
+        float scale = GetHoverScale(item.id, isHovered);
+        
         // 悬停时绘制发光效果
         if (scale > 1.01f) {
             ImVec2 min = ImGui::GetItemRectMin();
@@ -181,8 +174,6 @@ void ItemGrid::RenderIconView() {
         ImGui::PopStyleColor(3);
         
         // 名称标签
-        float labelOffset = (baseIconSize.x - 64) / 2;
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + labelOffset);
         ImGui::PushStyleColor(ImGuiCol_Text, textColor);
         
         std::string displayName = StringUtils::TruncateUtf8(name, 6);
@@ -216,9 +207,12 @@ void ItemGrid::RenderListView() {
     }
     
     bool isDark = (GetCurrentTheme() == ThemeType::Dark);
-    ImVec4 hoverBgColor = isDark ? ImVec4(0.157f, 0.157f, 0.157f, 1.0f) : ImVec4(0.94f, 0.94f, 0.94f, 1.0f);
-    ImVec4 activeBgColor = isDark ? ImVec4(0.2f, 0.2f, 0.2f, 1.0f) : ImVec4(0.91f, 0.92f, 0.95f, 1.0f);
     ImVec4 textColor = isDark ? ImVec4(0.8f, 0.8f, 0.8f, 1.0f) : ImVec4(0.33f, 0.33f, 0.33f, 1.0f);
+    ImVec4 placeholderColor = isDark ? ImVec4(0.3f, 0.3f, 0.3f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+    ImVec4 hoverColor = isDark ? ImVec4(0.157f, 0.157f, 0.157f, 1.0f) : ImVec4(0.94f, 0.94f, 0.94f, 1.0f);
+    
+    ImVec2 iconSize(24, 24);
+    float contentWidth = ImGui::GetContentRegionAvail().x;
     
     int index = 0;
     for (auto& item : *m_items) {
@@ -226,60 +220,84 @@ void ItemGrid::RenderListView() {
         
         std::string name = StringUtils::WStringToUtf8(item.name);
         
-        ImGui::BeginGroup();
-        
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverBgColor);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, activeBgColor);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
-        
-        // 列表项：小图标 + 名称
-        ImVec2 iconSize(24, 24);
-        
+        // 获取图标纹理
         void* iconTexture = nullptr;
         if (m_iconTextureManager) {
             iconTexture = m_iconTextureManager->GetIconTexture(item);
         }
         
-        // 整行可点击
-        float itemWidth = ImGui::GetContentRegionAvail().x;
-        if (ImGui::Button("##item", ImVec2(itemWidth, 32))) {
+        // 计算行高
+        float rowHeight = iconSize.y + 8;
+        
+        // 先创建不可见按钮占据整行（用于点击和悬停检测）
+        ImVec2 rowPos = ImGui::GetCursorScreenPos();
+        bool clicked = ImGui::InvisibleButton("##row", ImVec2(contentWidth, rowHeight));
+        bool hovered = ImGui::IsItemHovered();
+        
+        // 在悬停时绘制背景高亮
+        if (hovered) {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImU32 bgColor = isDark ? IM_COL32(40, 40, 40, 255) : IM_COL32(240, 240, 240, 255);
+            drawList->AddRectFilled(rowPos, ImVec2(rowPos.x + contentWidth, rowPos.y + rowHeight), bgColor, 4.0f);
+        }
+        
+        // 回到行起始位置绘制内容
+        ImGui::SetCursorScreenPos(rowPos);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 4);  // 左侧内边距
+        
+        // 图标区域
+        if (iconTexture) {
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (rowHeight - iconSize.y) / 2);
+            ImGui::Image(iconTexture, iconSize);
+        } else {
+            // 占位符 - 显示首字符
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (rowHeight - iconSize.y) / 2);
+            ImGui::PushStyleColor(ImGuiCol_Button, isDark ? ImVec4(0.2f, 0.2f, 0.2f, 1.0f) : ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+            ImGui::Button("##placeholder", iconSize);
+            ImGui::PopStyleColor();
+            
+            // 在占位符上显示首字符
+            if (!name.empty()) {
+                ImVec2 min = ImGui::GetItemRectMin();
+                ImVec2 max = ImGui::GetItemRectMax();
+                ImVec2 center((min.x + max.x) / 2, (min.y + max.y) / 2);
+                
+                char firstChar[8] = {};
+                int charLen = 0;
+                for (int i = 0; i < name.size() && charLen < 4; i++) {
+                    firstChar[charLen++] = name[i];
+                    if ((name[i] & 0xC0) != 0x80) break;
+                }
+                firstChar[charLen] = '\0';
+                
+                ImGui::SetCursorScreenPos(ImVec2(center.x - 5, center.y - 6));
+                ImGui::PushStyleColor(ImGuiCol_Text, placeholderColor);
+                ImGui::TextUnformatted(firstChar);
+                ImGui::PopStyleColor();
+            }
+        }
+        
+        ImGui::SameLine(0, 8);
+        
+        // 文本 - 垂直居中
+        ImGui::SetCursorPosY(rowPos.y - ImGui::GetWindowPos().y + (rowHeight - ImGui::GetTextLineHeight()) / 2 + ImGui::GetScrollY());
+        ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+        ImGui::Text("%s", name.c_str());
+        ImGui::PopStyleColor();
+        
+        // 处理点击事件
+        if (clicked) {
             m_selectedIndex = index;
             if (m_onClick) {
                 m_onClick(item);
             }
         }
         
-        // 右键菜单
+        // 右键菜单 - 绑定到 InvisibleButton
         if (ImGui::BeginPopupContextItem("item_context", ImGuiPopupFlags_MouseButtonRight)) {
             RenderContextMenu(item);
             ImGui::EndPopup();
         }
-        
-        // 在按钮上绘制图标和文本
-        ImVec2 min = ImGui::GetItemRectMin();
-        ImGui::SetCursorScreenPos(ImVec2(min.x + 4, min.y + 4));
-        
-        if (iconTexture) {
-            ImGui::Image(iconTexture, iconSize);
-            ImGui::SameLine(0, 8);
-        } else {
-            // 占位符
-            ImGui::PushStyleColor(ImGuiCol_Button, isDark ? ImVec4(0.2f, 0.2f, 0.2f, 1.0f) : ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
-            ImGui::Button("##placeholder", iconSize);
-            ImGui::PopStyleColor();
-            ImGui::SameLine(0, 8);
-        }
-        
-        ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-        ImGui::Text("%s", name.c_str());
-        ImGui::PopStyleColor();
-        
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(3);
-        
-        ImGui::EndGroup();
         
         ImGui::PopID();
         index++;
@@ -289,7 +307,7 @@ void ItemGrid::RenderListView() {
     ImGui::PopStyleVar();
 }
 
-void ItemGrid::RenderContextMenu(const Item& item) {
+void ItemGrid::RenderContextMenu(Item& item) {
     if (ImGui::MenuItem("运行")) {
         if (m_onClick) {
             m_onClick(item);
@@ -317,12 +335,7 @@ void ItemGrid::RenderContextMenu(const Item& item) {
     
     if (ImGui::MenuItem("编辑")) {
         if (m_onEdit) {
-            for (auto& i : *m_items) {
-                if (i.id == item.id) {
-                    m_onEdit(i);
-                    break;
-                }
-            }
+            m_onEdit(item);
         }
         ImGui::CloseCurrentPopup();
     }

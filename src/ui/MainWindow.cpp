@@ -39,6 +39,7 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         // 自动打开重命名对话框
         strncpy(m_renameCategoryBuf, "新分类", sizeof(m_renameCategoryBuf) - 1);
         m_showRenameCategory = true;
+        m_openRenamePopup = true;
     });
     
     // 删除分类
@@ -66,6 +67,7 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
             strncpy(m_renameCategoryBuf, name.c_str(), sizeof(m_renameCategoryBuf) - 1);
             m_renameCategoryBuf[sizeof(m_renameCategoryBuf) - 1] = '\0';
             m_showRenameCategory = true;
+            m_openRenamePopup = true;
         }
     });
     
@@ -99,6 +101,7 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     
     // 删除项目
     m_itemGrid.OnItemDelete([this](const Item& item) {
+        m_itemGrid.ClearHoverAnimation(item.id);  // 清理动画状态
         m_itemManager->DeleteItem(item.id);
         RefreshItems();
     });
@@ -169,6 +172,7 @@ void MainWindow::Render() {
                     strncpy(m_renameCategoryBuf, name.c_str(), sizeof(m_renameCategoryBuf) - 1);
                     m_renameCategoryBuf[sizeof(m_renameCategoryBuf) - 1] = '\0';
                     m_showRenameCategory = true;
+                    m_openRenamePopup = true;
                 }
             }
             ImGui::EndMenu();
@@ -335,7 +339,11 @@ void MainWindow::ShowError(const std::wstring& message) {
 void MainWindow::RenderRenameCategoryDialog() {
     if (!m_showRenameCategory) return;
     
-    ImGui::OpenPopup("重命名分类");
+    // 只在首次显示时打开弹窗
+    if (m_openRenamePopup) {
+        ImGui::OpenPopup("重命名分类");
+        m_openRenamePopup = false;
+    }
     
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
