@@ -26,9 +26,9 @@ bool Window::Create(const std::wstring& title, int width, int height, int x, int
     wc.lpszClassName = CLASS_NAME;
     RegisterClassExW(&wc);
     
-    // 创建窗口 - 使用 WS_EX_LAYERED 支持阴影效果
+    // 创建窗口
     m_hwnd = CreateWindowExW(
-        WS_EX_APPWINDOW | WS_EX_LAYERED,
+        WS_EX_APPWINDOW,
         CLASS_NAME,
         title.c_str(),
         WS_OVERLAPPEDWINDOW,
@@ -40,8 +40,8 @@ bool Window::Create(const std::wstring& title, int width, int height, int x, int
     
     // 启用 DWM 窗口阴影效果
     if (m_hwnd) {
-        // 设置窗口阴影边距
-        MARGINS margins = { 1, 1, 1, 1 };
+        // 设置窗口阴影边距（负值表示阴影延伸到窗口外）
+        MARGINS margins = { -1, -1, -1, -1 };
         DwmExtendFrameIntoClientArea(m_hwnd, &margins);
     }
     
