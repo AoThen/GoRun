@@ -159,11 +159,15 @@ int App::Run() {
             if (m_mainWindow->IsVisible()) {
                 ImGui::SetNextWindowPos(ImVec2(0, 0));
                 ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-                ImGui::Begin("Main", nullptr, 
-                    ImGuiWindowFlags_NoTitleBar | 
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+                ImGui::Begin("GoRun", nullptr, 
                     ImGuiWindowFlags_NoResize | 
                     ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoCollapse |
                     ImGuiWindowFlags_MenuBar);
+                ImGui::PopStyleVar(3);
                 
                 m_mainWindow->Render();
                 
