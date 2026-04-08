@@ -187,24 +187,142 @@ void ItemManager::HandleDrop(const std::vector<std::wstring>& files, const std::
         item.target = file;
         item.workingDir = PathUtils::GetParentDir(file);
         
+        // 检查是否为快捷方式
+        if (file.size() > 4 && file.substr(file.size() - 4) == L".lnk") {
+            ShortcutInfo shortcut = ResolveShortcut(file);
+            if (shortcut.success) {
+                item.target = shortcut.target;
+                item.arguments = shortcut.arguments;
+                item.workingDir = shortcut.workingDir;
+                if (!shortcut.iconPath.empty()) {
+                    item.iconPath = shortcut.iconPath;
+                    item.iconIndex = shortcut.iconIndex;
+                }
+            }
+        }
+        
         AddItem(item);
     }
 }
 
+ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPath) {
+    ShortcutInfo info;
+    
+#ifdef _WIN32
+    HRESULT hr = CoInitialize(nullptr);
+    bool needUninitialize = SUCCEEDED(hr);
+    
+    IShellLinkW* pShellLink = nullptr;
+    IPersistFile* pPersistFile = nullptr;
+    
+    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, 
+                          IID_IShellLinkW, reinterpret_cast<void**>(&pShellLink));
+    if (FAILED(hr)) {
+        if (needUninitialize) CoUninitialize();
+        return info;
+    }
+    
+    hr = pShellLink->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&pPersistFile));
+    if (FAILED(hr)) {
+        pShellLink->Release();
+        if (needUninitialize) CoUninitialize();
+        return info;
+    }
+    
+    hr = pPersistFile->Load(lnkPath.c_str(), STGM_READ);
+    if (FAILED(hr)) {
+        pPersistFile->Release();
+        pShellLink->Release();
+        if (needUninitialize) CoUninitialize();
+        return info;
+    }
+    
+    // 解析快捷方式（查找原始目标）
+    hr = pShellLink->Resolve(nullptr, SLR_NO_UI | SLR_NOUPDATE);
+    
+    // 获取目标路径
+    wchar_t targetPath[MAX_PATH] = {0};
+    hr = pShellLink->GetPath(targetPath, MAX_PATH, nullptr, 0);
+    if (SUCCEEDED(hr) && targetPath[0] != L'\0') {
+        info.target = targetPath;
+    }
+    
+    // 获取参数
+    wchar_t arguments[1024] = {0};
+    hr = pShellLink->GetArguments(arguments, 1024);
+    if (SUCCEEDED(hr) && arguments[0] != L'\0') {
+        info.arguments = arguments;
+    }
+    
+    // 获取工作目录
+    wchar_t workingDir[MAX_PATH] = {0};
+    hr = pShellLink->GetWorkingDirectory(workingDir, MAX_PATH);
+    if (SUCCEEDED(hr) && workingDir[0] != L'\0') {
+        info.workingDir = workingDir;
+    }
+    
+    // 获取图标路径和索引
+    wchar_t iconPath[MAX_PATH] = {0};
+    int iconIndex = 0;
+    hr = pShellLink->GetIconLocation(iconPath, MAX_PATH, &iconIndex);
+    if (SUCCEEDED(hr) && iconPath[0] != L'\0') {
+        info.iconPath = iconPath;
+        info.iconIndex = iconIndex;
+    }
+    
+    // 如果没有自定义图标，使用目标路径作为图标路径
+    if (info.iconPath.empty() && !info.target.empty()) {
+        info.iconPath = info.target;
+        info.iconIndex = 0;
+    }
+    
+    pPersistFile->Release();
+    pShellLink->Release();
+    
+    if (needUninitialize) CoUninitialize();
+    
+    info.success = !info.target.empty();
+#endif
+    
+    return info;
+}
+
 std::vector<Item> ItemManager::SearchItems(const std::wstring& query) {
-    std::vector<Item> results;
+    std::vector<std::pair<Item, int>> scoredResults;
     
     if (query.empty()) {
-        return results;
+        return {};
     }
     
     for (const auto& item : m_allItems) {
-        if (StringUtils::FuzzyMatch(item.name, query)) {
-            results.push_back(item);
+        auto matchResult = StringUtils::SearchMatch(item.name, item.keywords, query);
+        if (matchResult.matched) {
+            // 综合得分 = 匹配得分 + 运行次数权重
+            int totalScore = matchResult.score + item.runCount;
+            scoredResults.push_back({item, totalScore});
         }
     }
     
+    // 按得分降序排序
+    std::sort(scoredResults.begin(), scoredResults.end(),
+        [](const auto& a, const auto& b) {
+            return a.second > b.second;
+        });
+    
+    std::vector<Item> results;
+    for (const auto& pair : scoredResults) {
+        results.push_back(pair.first);
+    }
+    
     return results;
+}
+
+void ItemManager::IncrementRunCount(const std::wstring& itemId) {
+    Item* item = GetItem(itemId);
+    if (item) {
+        item->runCount++;
+        UpdateItem(*item);
+    }
 }
 
 } // namespace mn

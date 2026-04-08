@@ -30,6 +30,18 @@ public:
     void HandleDrop(const std::vector<std::wstring>& files, const std::wstring& categoryId);
     
     std::vector<Item> SearchItems(const std::wstring& query);
+    void IncrementRunCount(const std::wstring& itemId);
+    
+    // 快捷方式解析
+    struct ShortcutInfo {
+        std::wstring target;
+        std::wstring arguments;
+        std::wstring workingDir;
+        std::wstring iconPath;
+        int iconIndex = 0;
+        bool success = false;
+    };
+    ShortcutInfo ResolveShortcut(const std::wstring& lnkPath);
 
 private:
     Storage* m_storage = nullptr;

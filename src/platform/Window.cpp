@@ -4,6 +4,8 @@
 #ifdef _WIN32
 #include <Windows.h>
 #include <ShellApi.h>
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 #endif
 
 namespace mn {
@@ -24,9 +26,9 @@ bool Window::Create(const std::wstring& title, int width, int height, int x, int
     wc.lpszClassName = CLASS_NAME;
     RegisterClassExW(&wc);
     
-    // 创建窗口
+    // 创建窗口 - 使用 WS_EX_LAYERED 支持阴影效果
     m_hwnd = CreateWindowExW(
-        WS_EX_APPWINDOW,
+        WS_EX_APPWINDOW | WS_EX_LAYERED,
         CLASS_NAME,
         title.c_str(),
         WS_OVERLAPPEDWINDOW,
@@ -35,6 +37,13 @@ bool Window::Create(const std::wstring& title, int width, int height, int x, int
         GetModuleHandle(nullptr),
         this
     );
+    
+    // 启用 DWM 窗口阴影效果
+    if (m_hwnd) {
+        // 设置窗口阴影边距
+        MARGINS margins = { 1, 1, 1, 1 };
+        DwmExtendFrameIntoClientArea(m_hwnd, &margins);
+    }
     
     return m_hwnd != nullptr;
 #else

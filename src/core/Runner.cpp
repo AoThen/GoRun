@@ -32,6 +32,7 @@ RunResult Runner::Run(const Item& item) {
         result.success = false;
         result.error = MapError(err);
         result.errorMessage = GetErrorMessage(err);
+        if (m_runCallback) m_runCallback(item, false);
         return result;
     }
     
@@ -41,6 +42,7 @@ RunResult Runner::Run(const Item& item) {
     }
     
     result.success = true;
+    if (m_runCallback) m_runCallback(item, true);
 #else
     result.success = false;
     result.errorMessage = L"仅支持 Windows 平台";
@@ -72,11 +74,13 @@ RunResult Runner::RunAsAdmin(const Item& item) {
         unsigned long err = GetLastError();
         if (err == ERROR_CANCELLED) {
             result.success = true;
+            if (m_runCallback) m_runCallback(item, true);
             return result;
         }
         result.success = false;
         result.error = MapError(err);
         result.errorMessage = GetErrorMessage(err);
+        if (m_runCallback) m_runCallback(item, false);
         return result;
     }
     
@@ -86,6 +90,7 @@ RunResult Runner::RunAsAdmin(const Item& item) {
     }
     
     result.success = true;
+    if (m_runCallback) m_runCallback(item, true);
 #else
     result.success = false;
     result.errorMessage = L"仅支持 Windows 平台";

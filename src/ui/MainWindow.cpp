@@ -4,6 +4,7 @@
 #include "core/Runner.h"
 #include "core/IconTextureManager.h"
 #include "utils/StringUtils.h"
+#include "ui/Theme.h"
 #include <imgui.h>
 #include <algorithm>
 #include <windows.h>
@@ -23,6 +24,13 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         m_searchBuf[0] = '\0';
         m_isSearching = false;
         m_itemGrid.SetItems(&m_itemManager->GetItems(id));
+    });
+    
+    // 设置 Runner 回调，运行成功后递增运行次数
+    m_runner->SetRunCallback([this](const Item& item, bool success) {
+        if (success) {
+            m_itemManager->IncrementRunCount(item.id);
+        }
     });
     
     // 单击运行
@@ -165,6 +173,16 @@ void MainWindow::RenderSearchBar() {
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", (m_currentViewType == ViewType::Icon) ? "切换到列表视图" : "切换到图标视图");
+    }
+    
+    // 主题切换按钮
+    ImGui::SameLine(0, 4);
+    const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "浅色" : "深色";
+    if (ImGui::Button(themeLabel, ImVec2(50, 0))) {
+        ToggleTheme();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", (GetCurrentTheme() == ThemeType::Light) ? "切换到深色主题" : "切换到浅色主题");
     }
     
     ImGui::PopStyleVar(2);

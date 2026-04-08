@@ -3,6 +3,7 @@
 #include "core/Types.h"
 #include <functional>
 #include <vector>
+#include <unordered_map>
 
 namespace mn {
 
@@ -26,10 +27,17 @@ private:
     void RenderListView();
     void RenderContextMenu(const Item& item);
     
+    // 悬停动画辅助
+    float GetHoverScale(const std::wstring& itemId, bool isHovered);
+    
     std::vector<Item>* m_items = nullptr;
     IconTextureManager* m_iconTextureManager = nullptr;
     int m_selectedIndex = -1;
     ViewType m_viewType = ViewType::Icon;
+    
+    // 悬停动画状态
+    std::unordered_map<std::wstring, float> m_hoverAnimState;
+    float m_lastTime = 0.0f;
     
     std::function<void(const Item&)> m_onClick;
     std::function<void(const Item&)> m_onRunAsAdmin;

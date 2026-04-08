@@ -9,7 +9,7 @@ include(cmake/FetchDependencies.cmake)
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 file(GLOB_RECURSE HEADERS "src/*.h")
 
-add_executable(GoRun WIN32 ${SOURCES} ${HEADERS} res/resource.rc)
+add_executable(GoRun WIN32 ${SOURCES} ${HEADERS} resources/resource.rc)
 
 target_link_libraries(GoRun
     PRIVATE imgui nlohmann_json d3d11 dxgi shell32 ole32 oleaut32 uuid gdiplus shlwapi)
@@ -36,8 +36,8 @@ if(MSVC)
     set_property(TARGET GoRun PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-# 应用程序图标（需要用户提供 icons/app.ico）
-set(APP_ICON "${CMAKE_SOURCE_DIR}/res/icons/app.ico")
+# 应用程序图标
+set(APP_ICON "${CMAKE_SOURCE_DIR}/resources/icons/app.ico")
 if(NOT EXISTS "${APP_ICON}")
     message(WARNING "Application icon not found: ${APP_ICON}")
     message(WARNING "Please provide an icon file for the application.")
