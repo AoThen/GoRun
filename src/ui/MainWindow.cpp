@@ -226,7 +226,7 @@ void MainWindow::RenderSearchBar() {
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.92f, 0.92f, 0.92f, 1.0f));
     }
     
-    // 首次显示时聚焦搜索框
+    // 首次显示时聚焦搜索框（只执行一次）
     if (m_focusSearch) {
         ImGui::SetKeyboardFocusHere();
         m_focusSearch = false;

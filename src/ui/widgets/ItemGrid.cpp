@@ -97,10 +97,6 @@ void ItemGrid::RenderIconView() {
         
         ImVec2 baseIconSize(64, 64);
         
-        // 检测悬停状态并计算动画缩放
-        std::string buttonId = "##icon_" + std::to_string(index);
-        ImGui::PushID(buttonId.c_str());
-        
         // 预先检测悬停
         ImVec2 mousePos = ImGui::GetIO().MousePos;
         ImVec2 itemMin = ImGui::GetCursorScreenPos();
@@ -175,13 +171,11 @@ void ItemGrid::RenderIconView() {
             drawList->AddRect(min, max, glowColor, 8.0f, 0, 2.0f);
         }
         
-        // 右键菜单（必须在 PopID 之前绑定）
+        // 右键菜单
         if (ImGui::BeginPopupContextItem("item_context", ImGuiPopupFlags_MouseButtonRight)) {
             RenderContextMenu(item);
             ImGui::EndPopup();
         }
-        
-        ImGui::PopID();
         
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(3);
