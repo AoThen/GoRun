@@ -11,14 +11,20 @@ namespace mn {
 RunResult Runner::Run(const Item& item) {
     RunResult result;
     
-    if (!PathUtils::Exists(item.target)) {
+#ifdef _WIN32
+    // 检查是否为快捷方式（target 以 .lnk 结尾）
+    bool isShortcut = item.target.size() > 4 && 
+        item.target.substr(item.target.size() - 4) == L".lnk";
+    
+    // 对于快捷方式，直接打开即可，Windows 会自动解析
+    // 对于其他文件，检查是否存在
+    if (!isShortcut && !PathUtils::Exists(item.target)) {
         result.success = false;
         result.error = RunError::FileNotFound;
-        result.errorMessage = L"文件未找到";
+        result.errorMessage = L"文件未找到: " + item.target;
         return result;
     }
     
-#ifdef _WIN32
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(SHELLEXECUTEINFOW);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -31,7 +37,7 @@ RunResult Runner::Run(const Item& item) {
         unsigned long err = GetLastError();
         result.success = false;
         result.error = MapError(err);
-        result.errorMessage = GetErrorMessage(err);
+        result.errorMessage = GetErrorMessage(err) + L" (" + item.target + L")";
         if (m_runCallback) m_runCallback(item, false);
         return result;
     }

@@ -12,6 +12,12 @@ std::wstring Trim(const std::wstring& str);
 std::wstring ToLower(const std::wstring& str);
 bool FuzzyMatch(const std::wstring& text, const std::wstring& query);
 
+// UTF-8 安全截断，按字符数截断而非字节数
+std::string TruncateUtf8(const std::string& str, size_t maxChars, const std::string& suffix = "..");
+
+// 获取 UTF-8 字符串的字符数
+size_t Utf8CharCount(const std::string& str);
+
 // 拼音相关
 std::wstring GetPinyinInitials(const std::wstring& text);
 wchar_t GetPinyinInitial(wchar_t ch);

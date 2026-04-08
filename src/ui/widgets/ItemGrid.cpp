@@ -191,10 +191,7 @@ void ItemGrid::RenderIconView() {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + labelOffset);
         ImGui::PushStyleColor(ImGuiCol_Text, textColor);
         
-        std::string displayName = name;
-        if (displayName.length() > 8) {
-            displayName = displayName.substr(0, 7) + "..";
-        }
+        std::string displayName = StringUtils::TruncateUtf8(name, 6);
         
         ImGui::TextWrapped("%s", displayName.c_str());
         ImGui::PopStyleColor();
