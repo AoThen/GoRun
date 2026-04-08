@@ -11,7 +11,8 @@ namespace mn {
 
 // 视图类型
 enum class ViewType {
-    Icon = 0
+    Icon = 0,
+    List = 1
 };
 
 // 运行错误类型

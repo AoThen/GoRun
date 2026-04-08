@@ -155,6 +155,23 @@ void MainWindow::Render() {
 }
 
 void MainWindow::RenderSearchBar() {
+    // 视图切换按钮（左侧）
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 10));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    
+    const char* viewLabel = (m_currentViewType == ViewType::Icon) ? "图标" : "列表";
+    if (ImGui::Button(viewLabel, ImVec2(50, 0))) {
+        ToggleViewType();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", (m_currentViewType == ViewType::Icon) ? "切换到列表视图" : "切换到图标视图");
+    }
+    
+    ImGui::PopStyleVar(2);
+    
+    ImGui::SameLine(0, 8);
+    
+    // 搜索框
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 10));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.96f, 0.96f, 0.96f, 1.0f));
@@ -168,7 +185,16 @@ void MainWindow::RenderSearchBar() {
     ImGui::PopStyleVar(2);
     
     if (searchChanged) {
-        std::string searchText(m_searchBuf);
+        m_lastSearchTime = ImGui::GetTime();
+        strcpy(m_pendingSearchBuf, m_searchBuf);
+        m_searchPending = true;
+    }
+    
+    // 检查延迟搜索
+    if (m_searchPending && (ImGui::GetTime() - m_lastSearchTime) >= m_searchDelay) {
+        m_searchPending = false;
+        
+        std::string searchText(m_pendingSearchBuf);
         m_isSearching = !searchText.empty();
         
         if (m_isSearching) {
@@ -183,29 +209,10 @@ void MainWindow::RenderSearchBar() {
 }
 
 void MainWindow::UpdateSearchResults() {
-    m_searchResults.clear();
-    
     std::string searchStr(m_searchBuf);
     std::wstring searchWStr = StringUtils::Utf8ToWString(searchStr);
-    std::wstring searchLower = StringUtils::ToLower(searchWStr);
     
-    for (const auto& cat : m_itemManager->GetCategories()) {
-        for (const auto& item : m_itemManager->GetItems(cat.id)) {
-            std::wstring nameLower = StringUtils::ToLower(item.name);
-            bool matchName = nameLower.find(searchLower) != std::wstring::npos;
-            
-            std::wstring keywordsLower = StringUtils::ToLower(item.keywords);
-            bool matchKeywords = keywordsLower.find(searchLower) != std::wstring::npos;
-            
-            std::wstring targetLower = StringUtils::ToLower(item.target);
-            bool matchTarget = targetLower.find(searchLower) != std::wstring::npos;
-            
-            if (matchName || matchKeywords || matchTarget) {
-                m_searchResults.push_back(item);
-            }
-        }
-    }
-    
+    m_searchResults = m_itemManager->SearchItems(searchWStr);
     m_itemGrid.SetItems(&m_searchResults);
 }
 
@@ -286,6 +293,11 @@ void MainWindow::RenderRenameCategoryDialog() {
         
         ImGui::EndPopup();
     }
+}
+
+void MainWindow::ToggleViewType() {
+    m_currentViewType = (m_currentViewType == ViewType::Icon) ? ViewType::List : ViewType::Icon;
+    m_itemGrid.SetViewType(m_currentViewType);
 }
 
 } // namespace mn

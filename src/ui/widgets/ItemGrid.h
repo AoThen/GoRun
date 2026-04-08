@@ -12,6 +12,8 @@ class ItemGrid {
 public:
     void SetItems(std::vector<Item>* items);
     void SetIconTextureManager(IconTextureManager* manager);
+    void SetViewType(ViewType viewType);
+    ViewType GetViewType() const { return m_viewType; }
     void Render();
     
     void OnItemClicked(std::function<void(const Item&)> callback);
@@ -20,11 +22,14 @@ public:
     void OnItemDelete(std::function<void(const Item&)> callback);
 
 private:
+    void RenderIconView();
+    void RenderListView();
     void RenderContextMenu(const Item& item);
     
     std::vector<Item>* m_items = nullptr;
     IconTextureManager* m_iconTextureManager = nullptr;
     int m_selectedIndex = -1;
+    ViewType m_viewType = ViewType::Icon;
     
     std::function<void(const Item&)> m_onClick;
     std::function<void(const Item&)> m_onRunAsAdmin;

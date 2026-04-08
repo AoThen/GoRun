@@ -10,5 +10,6 @@ std::wstring Utf8ToWString(const std::string& str);
 std::vector<std::wstring> Split(const std::wstring& str, wchar_t delimiter);
 std::wstring Trim(const std::wstring& str);
 std::wstring ToLower(const std::wstring& str);
+bool FuzzyMatch(const std::wstring& text, const std::wstring& query);
 
 } // namespace mn::StringUtils

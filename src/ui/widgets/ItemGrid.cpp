@@ -14,7 +14,19 @@ void ItemGrid::SetIconTextureManager(IconTextureManager* manager) {
     m_iconTextureManager = manager;
 }
 
+void ItemGrid::SetViewType(ViewType viewType) {
+    m_viewType = viewType;
+}
+
 void ItemGrid::Render() {
+    if (m_viewType == ViewType::Icon) {
+        RenderIconView();
+    } else {
+        RenderListView();
+    }
+}
+
+void ItemGrid::RenderIconView() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 16));
     ImGui::BeginChild("Items", ImVec2(0, 0), false);
     
@@ -126,6 +138,86 @@ void ItemGrid::Render() {
     ImGui::PopStyleVar();
 }
 
+void ItemGrid::RenderListView() {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+    ImGui::BeginChild("Items", ImVec2(0, 0), false);
+    
+    if (!m_items || m_items->empty()) {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "暂无项目");
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        return;
+    }
+    
+    int index = 0;
+    for (auto& item : *m_items) {
+        ImGui::PushID(index);
+        
+        std::string name = StringUtils::WStringToUtf8(item.name);
+        
+        ImGui::BeginGroup();
+        
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.94f, 0.94f, 0.94f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.91f, 0.92f, 0.95f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+        
+        // 列表项：小图标 + 名称
+        ImVec2 iconSize(24, 24);
+        
+        void* iconTexture = nullptr;
+        if (m_iconTextureManager) {
+            iconTexture = m_iconTextureManager->GetIconTexture(item.id, item.target);
+        }
+        
+        // 整行可点击
+        float itemWidth = ImGui::GetContentRegionAvail().x;
+        if (ImGui::Button("##item", ImVec2(itemWidth, 32))) {
+            m_selectedIndex = index;
+            if (m_onClick) {
+                m_onClick(item);
+            }
+        }
+        
+        // 右键菜单
+        if (ImGui::BeginPopupContextItem("item_context", ImGuiPopupFlags_MouseButtonRight)) {
+            RenderContextMenu(item);
+            ImGui::EndPopup();
+        }
+        
+        // 在按钮上绘制图标和文本
+        ImVec2 min = ImGui::GetItemRectMin();
+        ImGui::SetCursorScreenPos(ImVec2(min.x + 4, min.y + 4));
+        
+        if (iconTexture) {
+            ImGui::Image(iconTexture, iconSize);
+            ImGui::SameLine(0, 8);
+        } else {
+            // 占位符
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+            ImGui::Button("##placeholder", iconSize);
+            ImGui::PopStyleColor();
+            ImGui::SameLine(0, 8);
+        }
+        
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.33f, 0.33f, 0.33f, 1.0f));
+        ImGui::Text("%s", name.c_str());
+        ImGui::PopStyleColor();
+        
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(3);
+        
+        ImGui::EndGroup();
+        
+        ImGui::PopID();
+        index++;
+    }
+    
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+}
+
 void ItemGrid::RenderContextMenu(const Item& item) {
     if (ImGui::MenuItem("运行")) {
         if (m_onClick) {
@@ -160,6 +252,16 @@ void ItemGrid::RenderContextMenu(const Item& item) {
             m_onDelete(item);
         }
         ImGui::CloseCurrentPopup();
+    }
+    
+    ImGui::Separator();
+    
+    if (ImGui::MenuItem("图标视图", nullptr, m_viewType == ViewType::Icon)) {
+        SetViewType(ViewType::Icon);
+    }
+    
+    if (ImGui::MenuItem("列表视图", nullptr, m_viewType == ViewType::List)) {
+        SetViewType(ViewType::List);
     }
 }
 

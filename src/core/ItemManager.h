@@ -28,6 +28,8 @@ public:
     
     void RefreshItemIcon(const std::wstring& itemId);
     void HandleDrop(const std::vector<std::wstring>& files, const std::wstring& categoryId);
+    
+    std::vector<Item> SearchItems(const std::wstring& query);
 
 private:
     Storage* m_storage = nullptr;

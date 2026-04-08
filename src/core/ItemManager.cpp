@@ -2,6 +2,7 @@
 #include "Storage.h"
 #include "IconCache.h"
 #include "utils/PathUtils.h"
+#include "utils/StringUtils.h"
 #include <algorithm>
 
 #ifdef _WIN32
@@ -188,6 +189,22 @@ void ItemManager::HandleDrop(const std::vector<std::wstring>& files, const std::
         
         AddItem(item);
     }
+}
+
+std::vector<Item> ItemManager::SearchItems(const std::wstring& query) {
+    std::vector<Item> results;
+    
+    if (query.empty()) {
+        return results;
+    }
+    
+    for (const auto& item : m_allItems) {
+        if (StringUtils::FuzzyMatch(item.name, query)) {
+            results.push_back(item);
+        }
+    }
+    
+    return results;
 }
 
 } // namespace mn

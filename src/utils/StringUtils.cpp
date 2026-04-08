@@ -72,4 +72,14 @@ std::wstring ToLower(const std::wstring& str) {
     return result;
 }
 
+bool FuzzyMatch(const std::wstring& text, const std::wstring& query) {
+    if (query.empty()) return true;
+    if (text.empty()) return false;
+    
+    std::wstring lowerText = ToLower(text);
+    std::wstring lowerQuery = ToLower(query);
+    
+    return lowerText.find(lowerQuery) != std::wstring::npos;
+}
+
 } // namespace mn::StringUtils
