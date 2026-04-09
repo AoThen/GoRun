@@ -311,13 +311,8 @@ std::string TruncateUtf8(const std::string& str, size_t maxChars, const std::str
     if (str.empty()) return str;
     
     size_t charCount = 0;
-    size_t lastValidPos = 0;
     
     for (size_t i = 0; i < str.size(); ) {
-        if (charCount >= maxChars) {
-            return str.substr(0, lastValidPos) + suffix;
-        }
-        
         unsigned char c = static_cast<unsigned char>(str[i]);
         size_t charLen = 1;
         
@@ -331,9 +326,13 @@ std::string TruncateUtf8(const std::string& str, size_t maxChars, const std::str
             charLen = 4;
         }
         
-        lastValidPos = i;
-        i += charLen;
         charCount++;
+        
+        if (charCount > maxChars) {
+            return str.substr(0, i) + suffix;
+        }
+        
+        i += charLen;
     }
     
     return str;  // 不需要截断
