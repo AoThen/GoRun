@@ -42,3 +42,10 @@ if(NOT EXISTS "${APP_ICON}")
     message(WARNING "Application icon not found: ${APP_ICON}")
     message(WARNING "Please provide an icon file for the application.")
 endif()
+
+# 单元测试
+option(GORUN_BUILD_TESTS "Build unit tests" ON)
+if(GORUN_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

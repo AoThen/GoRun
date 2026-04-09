@@ -34,3 +34,25 @@ jobs:
           name: GoRun-${{ matrix.build_type }}
           path: build/${{ matrix.build_type }}/GoRun.exe
           retention-days: 30
+
+  run-tests:
+    runs-on: windows-latest
+    needs: build-windows
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DCMAKE_BUILD_TYPE=Debug
+        
+      - name: Build tests
+        run: cmake --build build --config Debug --target GoRunTests --parallel
+        
+      - name: Run tests
+        run: |
+          cd build
+          ctest -C Debug --output-on-failure

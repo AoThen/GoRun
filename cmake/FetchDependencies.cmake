@@ -14,7 +14,14 @@ FetchContent_Declare(
     GIT_TAG v3.11.2
 )
 
-FetchContent_MakeAvailable(imgui nlohmann_json)
+# Google Test (仅用于测试)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.14.0
+)
+
+FetchContent_MakeAvailable(imgui nlohmann_json googletest)
 
 # ImGui 源文件
 set(IMGUI_SOURCES
