@@ -19,10 +19,12 @@ target_include_directories(GoRunTests PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
 )
 
-# 需要的源文件（仅测试工具类，避免平台依赖）
+# 需要的源文件（工具类和核心业务逻辑）
 set(TEST_UTIL_SOURCES
     "${CMAKE_SOURCE_DIR}/src/utils/StringUtils.cpp"
     "${CMAKE_SOURCE_DIR}/src/utils/PathUtils.cpp"
+    "${CMAKE_SOURCE_DIR}/src/core/Storage.cpp"
+    "${CMAKE_SOURCE_DIR}/src/core/Config.cpp"
 )
 
 target_sources(GoRunTests PRIVATE ${TEST_UTIL_SOURCES})

@@ -30,9 +30,11 @@ ctest -C Debug --output-on-failure
 
 | 测试文件 | 测试目标 | 测试数量 |
 |---------|---------|---------|
-| StringUtilsTest.cpp | 字符串工具函数 | ~40 |
+| StringUtilsTest.cpp | 字符串工具、拼音匹配、搜索匹配 | ~60 |
 | PathUtilsTest.cpp | 路径工具函数 | ~15 |
 | TypesTest.cpp | 数据类型和 ID 生成 | ~15 |
+| StorageTest.cpp | JSON 存储、分类/项目 CRUD | ~35 |
+| ConfigTest.cpp | 配置管理（快捷键、窗口、自启） | ~25 |
 
 ## 禁用测试构建
 

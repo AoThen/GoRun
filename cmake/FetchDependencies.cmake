@@ -15,6 +15,10 @@ FetchContent_Declare(
 )
 
 # Google Test (仅用于测试)
+# 必须在 FetchContent_Declare 之前设置，强制使用静态运行时库
+set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)
+set(gmock_force_shared_crt OFF CACHE BOOL "" FORCE)
+
 FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
@@ -22,6 +26,15 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(imgui nlohmann_json googletest)
+
+# 确保 Google Test 使用静态运行时库
+if(MSVC)
+    foreach(target gtest gtest_main gmock gmock_main)
+        if(TARGET ${target})
+            set_property(TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        endif()
+    endforeach()
+endif()
 
 # ImGui 源文件
 set(IMGUI_SOURCES
