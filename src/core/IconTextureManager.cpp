@@ -17,13 +17,13 @@ ImTextureID IconTextureManager::GetIconTexture(const Item& item) {
         return it->second;
     }
     
-    if (!m_renderer || !m_iconCache) return nullptr;
+    if (!m_renderer || !m_iconCache) return ImTextureID(0);
     
     // 获取缓存图标路径
     std::wstring iconPath = m_iconCache->GetIconPath(item);
     
     if (iconPath.empty() || !PathUtils::Exists(iconPath)) {
-        return nullptr;
+        return ImTextureID(0);
     }
     
     // 加载纹理

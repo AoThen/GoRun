@@ -357,7 +357,7 @@ ImTextureID D3D11Renderer::LoadTexture(const std::wstring& path) {
     ID3D11ShaderResourceView* srv = LoadTextureFromFile(m_device, path, &w, &h);
     return (ImTextureID)srv;
 #else
-    return nullptr;
+    return ImTextureID(0);
 #endif
 }
 
