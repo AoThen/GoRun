@@ -38,11 +38,11 @@ public:
     Config* GetConfig();
     MainWindow* GetMainWindow();
     IconTextureManager* GetIconTextureManager();
-
+    void ToggleWindow();
+    
 private:
     void HandleHotkey(int id);
     void SaveWindowPosition();
-    void ToggleWindow();
     
     static App* s_instance;
     

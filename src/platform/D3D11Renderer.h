@@ -2,6 +2,7 @@
 
 #ifdef _WIN32
 #include <d3d11.h>
+#include <imgui.h>
 #include <string>
 #endif
 
@@ -20,11 +21,11 @@ public:
     void UpdateDpiScale(float newScale);
     
     // 纹理加载
-    void* LoadTexture(const std::wstring& path);
-    void UnloadTexture(void* texture);
+    ImTextureID LoadTexture(const std::wstring& path);
+    void UnloadTexture(ImTextureID texture);
     void UnloadTextureByPath(const std::wstring& path);
-    int GetTextureWidth(void* texture);
-    int GetTextureHeight(void* texture);
+    int GetTextureWidth(ImTextureID texture);
+    int GetTextureHeight(ImTextureID texture);
 
 private:
 #ifdef _WIN32

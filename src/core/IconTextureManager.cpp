@@ -10,7 +10,7 @@ void IconTextureManager::Initialize(D3D11Renderer* renderer, IconCache* iconCach
     m_iconCache = iconCache;
 }
 
-void* IconTextureManager::GetIconTexture(const Item& item) {
+ImTextureID IconTextureManager::GetIconTexture(const Item& item) {
     // 检查缓存
     auto it = m_textureCache.find(item.id);
     if (it != m_textureCache.end()) {
@@ -27,7 +27,7 @@ void* IconTextureManager::GetIconTexture(const Item& item) {
     }
     
     // 加载纹理
-    void* texture = m_renderer->LoadTexture(iconPath);
+    ImTextureID texture = m_renderer->LoadTexture(iconPath);
     if (texture) {
         m_textureCache[item.id] = texture;
     }

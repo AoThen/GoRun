@@ -32,6 +32,7 @@ public:
 
 private:
     bool SaveToFile();
+    bool RotateBackups();
     
     std::wstring m_path;
     std::vector<Category> m_categories;

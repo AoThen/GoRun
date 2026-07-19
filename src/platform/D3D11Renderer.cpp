@@ -351,20 +351,22 @@ void D3D11Renderer::UpdateDpiScale(float newScale)
 #endif
 }
 
-void* D3D11Renderer::LoadTexture(const std::wstring& path) {
+ImTextureID D3D11Renderer::LoadTexture(const std::wstring& path) {
 #ifdef _WIN32
     int w, h;
-    return LoadTextureFromFile(m_device, path, &w, &h);
+    ID3D11ShaderResourceView* srv = LoadTextureFromFile(m_device, path, &w, &h);
+    return (ImTextureID)srv;
 #else
     return nullptr;
 #endif
 }
 
-void D3D11Renderer::UnloadTexture(void* texture) {
+void D3D11Renderer::UnloadTexture(ImTextureID texture) {
 #ifdef _WIN32
+    ID3D11ShaderResourceView* srv = (ID3D11ShaderResourceView*)texture;
     // 从缓存中移除并释放纹理
     for (auto it = s_textureCache.begin(); it != s_textureCache.end(); ++it) {
-        if (it->second == texture) {
+        if (it->second == srv) {
             if (it->second) it->second->Release();
             s_textureCache.erase(it);
             break;
@@ -383,10 +385,10 @@ void D3D11Renderer::UnloadTextureByPath(const std::wstring& path) {
 #endif
 }
 
-int D3D11Renderer::GetTextureWidth(void* texture) {
+int D3D11Renderer::GetTextureWidth(ImTextureID texture) {
 #ifdef _WIN32
     if (!texture) return 0;
-    ID3D11ShaderResourceView* srv = static_cast<ID3D11ShaderResourceView*>(texture);
+    ID3D11ShaderResourceView* srv = (ID3D11ShaderResourceView*)texture;
     ID3D11Resource* resource = nullptr;
     srv->GetResource(&resource);
     ID3D11Texture2D* tex = nullptr;
@@ -401,10 +403,10 @@ int D3D11Renderer::GetTextureWidth(void* texture) {
 #endif
 }
 
-int D3D11Renderer::GetTextureHeight(void* texture) {
+int D3D11Renderer::GetTextureHeight(ImTextureID texture) {
 #ifdef _WIN32
     if (!texture) return 0;
-    ID3D11ShaderResourceView* srv = static_cast<ID3D11ShaderResourceView*>(texture);
+    ID3D11ShaderResourceView* srv = (ID3D11ShaderResourceView*)texture;
     ID3D11Resource* resource = nullptr;
     srv->GetResource(&resource);
     ID3D11Texture2D* tex = nullptr;

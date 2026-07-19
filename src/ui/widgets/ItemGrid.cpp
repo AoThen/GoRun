@@ -108,7 +108,7 @@ void ItemGrid::RenderIconView() {
         ImVec2 baseIconSize(64, 64);
         
         // 尝试加载图标纹理
-        void* iconTexture = nullptr;
+        ImTextureID iconTexture = nullptr;
         if (m_iconTextureManager) {
             iconTexture = m_iconTextureManager->GetIconTexture(item);
         }
@@ -236,7 +236,7 @@ void ItemGrid::RenderListView() {
         std::string name = StringUtils::WStringToUtf8(item.name);
         
         // 获取图标纹理
-        void* iconTexture = nullptr;
+        ImTextureID iconTexture = nullptr;
         if (m_iconTextureManager) {
             iconTexture = m_iconTextureManager->GetIconTexture(item);
         }
