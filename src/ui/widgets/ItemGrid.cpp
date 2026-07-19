@@ -138,12 +138,14 @@ void ItemGrid::RenderIconView() {
             
             if (!name.empty()) {
                 char firstChar[8] = {};
-                int charLen = 0;
-                for (int i = 0; i < name.size() && charLen < 4; i++) {
-                    firstChar[charLen++] = name[i];
-                    if ((name[i] & 0xC0) != 0x80) break;
+                int charLen = 1;
+                unsigned char c = static_cast<unsigned char>(name[0]);
+                if ((c & 0xF8) == 0xF0) charLen = 4;
+                else if ((c & 0xF0) == 0xE0) charLen = 3;
+                else if ((c & 0xE0) == 0xC0) charLen = 2;
+                for (int i = 0; i < name.size() && i < charLen; i++) {
+                    firstChar[i] = name[i];
                 }
-                firstChar[charLen] = '\0';
                 
                 // 根据字体大小计算居中偏移
                 ImVec2 textSize = ImGui::CalcTextSize(firstChar);
@@ -278,12 +280,14 @@ void ItemGrid::RenderListView() {
                 ImVec2 center((min.x + max.x) / 2, (min.y + max.y) / 2);
                 
                 char firstChar[8] = {};
-                int charLen = 0;
-                for (int i = 0; i < name.size() && charLen < 4; i++) {
-                    firstChar[charLen++] = name[i];
-                    if ((name[i] & 0xC0) != 0x80) break;
+                int charLen = 1;
+                unsigned char c = static_cast<unsigned char>(name[0]);
+                if ((c & 0xF8) == 0xF0) charLen = 4;
+                else if ((c & 0xF0) == 0xE0) charLen = 3;
+                else if ((c & 0xE0) == 0xC0) charLen = 2;
+                for (int i = 0; i < name.size() && i < charLen; i++) {
+                    firstChar[i] = name[i];
                 }
-                firstChar[charLen] = '\0';
                 
                 // 根据字体大小计算居中偏移
                 ImVec2 textSize = ImGui::CalcTextSize(firstChar);

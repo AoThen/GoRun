@@ -26,6 +26,7 @@ bool TrayIcon::Create(HWND hwnd, UINT messageId, const wchar_t* tooltip) {
     wcscpy_s(nid.szTip, tooltip);
     
     m_created = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    if (hIcon) DestroyIcon(hIcon);
     return m_created;
 }
 

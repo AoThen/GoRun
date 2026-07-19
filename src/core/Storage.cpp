@@ -18,6 +18,24 @@ void Storage::Initialize(const std::wstring& path) {
     }
 }
 
+void Storage::BeginBatch() {
+    m_batchLevel++;
+}
+
+void Storage::EndBatch() {
+    if (m_batchLevel > 0) {
+        m_batchLevel--;
+    }
+    if (m_batchLevel == 0 && m_dirty) {
+        SaveToFile();
+    }
+}
+
+bool Storage::Flush() {
+    if (!m_dirty) return true;
+    return SaveToFile();
+}
+
 bool Storage::RotateBackups() {
     std::wstring bak1 = m_path + L".bak1";
     std::wstring bak2 = m_path + L".bak2";
@@ -39,6 +57,8 @@ bool Storage::RotateBackups() {
 }
 
 bool Storage::SaveToFile() {
+    if (!m_dirty) return true;
+    m_dirty = false;
     json j;
     j["version"] = "1.0.0";
     
@@ -179,14 +199,18 @@ Category Storage::GetCategory(const std::wstring& id) const {
 bool Storage::AddCategory(const Category& category) {
     if (category.id.empty()) return false;
     m_categories.push_back(category);
-    return SaveToFile();
+    m_dirty = true;
+    if (m_batchLevel == 0) return SaveToFile();
+    return true;
 }
 
 bool Storage::UpdateCategory(const Category& category) {
     for (auto& cat : m_categories) {
         if (cat.id == category.id) {
             cat = category;
-            return SaveToFile();
+            m_dirty = true;
+            if (m_batchLevel == 0) return SaveToFile();
+            return true;
         }
     }
     return false;
@@ -204,7 +228,9 @@ bool Storage::DeleteCategory(const std::wstring& id) {
         m_categories.end()
     );
     
-    return SaveToFile();
+    m_dirty = true;
+    if (m_batchLevel == 0) return SaveToFile();
+    return true;
 }
 
 std::vector<Item> Storage::GetItems(const std::wstring& categoryId) const {
@@ -229,14 +255,18 @@ Item Storage::GetItem(const std::wstring& id) const {
 bool Storage::AddItem(const Item& item) {
     if (item.id.empty()) return false;
     m_items.push_back(item);
-    return SaveToFile();
+    m_dirty = true;
+    if (m_batchLevel == 0) return SaveToFile();
+    return true;
 }
 
 bool Storage::UpdateItem(const Item& item) {
     for (auto& i : m_items) {
         if (i.id == item.id) {
             i = item;
-            return SaveToFile();
+            m_dirty = true;
+            if (m_batchLevel == 0) return SaveToFile();
+            return true;
         }
     }
     return false;
@@ -248,7 +278,9 @@ bool Storage::DeleteItem(const std::wstring& id) {
             [&](const Item& i) { return i.id == id; }),
         m_items.end()
     );
-    return SaveToFile();
+    m_dirty = true;
+    if (m_batchLevel == 0) return SaveToFile();
+    return true;
 }
 
 std::vector<std::wstring> Storage::GetItemIdsByCategory(const std::wstring& categoryId) const {
@@ -269,7 +301,9 @@ std::wstring Storage::GetConfig(const std::string& key, const std::wstring& defa
 
 bool Storage::SetConfig(const std::string& key, const std::wstring& value) {
     m_config[key] = value;
-    return SaveToFile();
+    m_dirty = true;
+    if (m_batchLevel == 0) return SaveToFile();
+    return true;
 }
 
 } // namespace mn

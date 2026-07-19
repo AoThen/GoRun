@@ -185,6 +185,7 @@ void ItemManager::RefreshItemIcon(const std::wstring& itemId) {
 }
 
 void ItemManager::HandleDrop(const std::vector<std::wstring>& files, const std::wstring& categoryId) {
+    if (m_storage) m_storage->BeginBatch();
     for (const auto& file : files) {
         Item item;
         item.id = GenerateId(L"item");
@@ -218,29 +219,27 @@ void ItemManager::HandleDrop(const std::vector<std::wstring>& files, const std::
         
         AddItem(item);
     }
+    if (m_storage) m_storage->EndBatch();
 }
 
 ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPath) {
     ShortcutInfo info;
     
 #ifdef _WIN32
-    HRESULT hr = CoInitialize(nullptr);
-    bool needUninitialize = (hr == S_OK);
-    
+    // COM 已在 App::Initialize() 中初始化
     IShellLinkW* pShellLink = nullptr;
     IPersistFile* pPersistFile = nullptr;
+    HRESULT hr;
     
     hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, 
                           IID_IShellLinkW, reinterpret_cast<void**>(&pShellLink));
     if (FAILED(hr)) {
-        if (needUninitialize) CoUninitialize();
         return info;
     }
     
     hr = pShellLink->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&pPersistFile));
     if (FAILED(hr)) {
         pShellLink->Release();
-        if (needUninitialize) CoUninitialize();
         return info;
     }
     
@@ -248,7 +247,6 @@ ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPa
     if (FAILED(hr)) {
         pPersistFile->Release();
         pShellLink->Release();
-        if (needUninitialize) CoUninitialize();
         return info;
     }
     
@@ -300,8 +298,6 @@ ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPa
     
     pPersistFile->Release();
     pShellLink->Release();
-    
-    if (needUninitialize) CoUninitialize();
     
     info.success = !info.target.empty();
 #endif

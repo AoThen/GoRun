@@ -20,10 +20,17 @@ void Config::SetGlobalHotkey(const std::wstring& hotkey) {
     if (m_storage) m_storage->SetConfig("globalHotkey", hotkey);
 }
 
-static int ClampToScreen(int pos) {
-    // 只检查极端值，防止 JSON 篡改导致窗口不可见
-    if (pos < -10000) return 100;
-    if (pos > 10000) return 100;
+static int ClampToScreenX(int pos) {
+    int minX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int maxX = minX + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    if (pos < minX - 100 || pos > maxX - 100) return 100;
+    return pos;
+}
+
+static int ClampToScreenY(int pos) {
+    int minY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int maxY = minY + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (pos < minY - 100 || pos > maxY - 100) return 100;
     return pos;
 }
 
@@ -31,7 +38,7 @@ int Config::GetWindowX() const {
     if (!m_storage) return 100;
     try {
         int x = std::stoi(m_storage->GetConfig("windowX", L"100"));
-        return ClampToScreen(x);
+        return ClampToScreenX(x);
     } catch (...) {
         return 100;
     }
@@ -41,7 +48,7 @@ int Config::GetWindowY() const {
     if (!m_storage) return 100;
     try {
         int y = std::stoi(m_storage->GetConfig("windowY", L"100"));
-        return ClampToScreen(y);
+        return ClampToScreenY(y);
     } catch (...) {
         return 100;
     }

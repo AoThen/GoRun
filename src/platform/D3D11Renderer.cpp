@@ -6,9 +6,10 @@
 #include <imgui_impl_dx11.h>
 #include <windows.h>
 #include <gdiplus.h>
+#include <ShlObj.h>
 #include <unordered_map>
 #include "../ui/Theme.h"
-#include "utils/Logger.h"
+#include "../utils/Logger.h"
 #pragma comment(lib, "gdiplus.lib")
 #endif
 
@@ -19,6 +20,17 @@ namespace mn {
 static std::unordered_map<std::wstring, ID3D11ShaderResourceView*> s_textureCache;
 static Gdiplus::GdiplusStartupInput s_gdiplusInput;
 static ULONG_PTR s_gdiplusToken = 0;
+
+static std::string GetFontPath(const char* filename) {
+    wchar_t fontDir[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_FONTS, nullptr, 0, fontDir))) {
+        int len = WideCharToMultiByte(CP_UTF8, 0, fontDir, -1, nullptr, 0, nullptr, nullptr);
+        std::string utf8Dir(len - 1, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, fontDir, -1, &utf8Dir[0], len, nullptr, nullptr);
+        return utf8Dir + "\\" + filename;
+    }
+    return std::string("C:\\Windows\\Fonts\\") + filename;
+}
 
 static ID3D11ShaderResourceView* LoadTextureFromFile(ID3D11Device* device, const std::wstring& path, int* width, int* height) {
     // 检查缓存
@@ -171,20 +183,27 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     // 基础字体大小（根据 DPI 缩放）
     float fontSize = 16.0f * dpiScale;
     
-    // 尝试加载微软雅黑
-    const char* fontPaths[] = {
-        "C:\\Windows\\Fonts\\msyh.ttc",
-        "C:\\Windows\\Fonts\\msyhbd.ttc",
-        "C:\\Windows\\Fonts\\simhei.ttf",
-        "C:\\Windows\\Fonts\\simsun.ttc",
-        "C:\\Windows\\Fonts\\dengxian.ttf",  // 等线字体
+// 尝试加载微软雅黑
+    const char* fontNames[] = {
+        "msyh.ttc",
+        "msyhbd.ttc",
+        "simhei.ttf",
+        "simsun.ttc",
+        "dengxian.ttf",
     };
     
+    std::string fontPaths[5];
+    for (int i = 0; i < 5; i++) {
+        fontPaths[i] = GetFontPath(fontNames[i]);
+    }
+    
     ImFont* font = nullptr;
-    for (const char* path : fontPaths) {
-        font = io.Fonts->AddFontFromFileTTF(path, fontSize, &config, ranges.Data);
+    for (const auto& path : fontPaths) {
+        font = io.Fonts->AddFontFromFileTTF(path.c_str(), fontSize, &config, ranges.Data);
         if (font) {
-            LOG_INFO(std::string("Font loaded: ") + path);
+            OutputDebugStringA("Font loaded: ");
+            OutputDebugStringA(path.c_str());
+            OutputDebugStringA("\n");
             break;
         }
     }
@@ -215,26 +234,28 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
 void D3D11Renderer::Shutdown()
 {
 #ifdef _WIN32
-    // 释放纹理缓存
     for (auto& [path, srv] : s_textureCache) {
         if (srv) srv->Release();
     }
     s_textureCache.clear();
-    
+
     if (s_gdiplusToken) {
         Gdiplus::GdiplusShutdown(s_gdiplusToken);
         s_gdiplusToken = 0;
     }
-    
-    ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
-    ImGui_ImplDX11_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext(static_cast<ImGuiContext*>(m_imguiContext));
-    
-    if (m_rtv) m_rtv->Release();
-    if (m_swapChain) m_swapChain->Release();
-    if (m_context) m_context->Release();
-    if (m_device) m_device->Release();
+
+    if (m_imguiContext) {
+        ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
+        ImGui_ImplDX11_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext(static_cast<ImGuiContext*>(m_imguiContext));
+        m_imguiContext = nullptr;
+    }
+
+    if (m_rtv) { m_rtv->Release(); m_rtv = nullptr; }
+    if (m_swapChain) { m_swapChain->Release(); m_swapChain = nullptr; }
+    if (m_context) { m_context->Release(); m_context = nullptr; }
+    if (m_device) { m_device->Release(); m_device = nullptr; }
 #endif
 }
 
@@ -253,6 +274,8 @@ void D3D11Renderer::Render()
 #ifdef _WIN32
     ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
     ImGui::Render();
+    
+    if (!m_rtv) return;
     
     float clear_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     m_context->OMSetRenderTargets(1, &m_rtv, nullptr);
@@ -320,17 +343,22 @@ void D3D11Renderer::UpdateDpiScale(float newScale)
     float fontSize = 16.0f * newScale;
     
     // 尝试加载微软雅黑
-    const char* fontPaths[] = {
-        "C:\\Windows\\Fonts\\msyh.ttc",
-        "C:\\Windows\\Fonts\\msyhbd.ttc",
-        "C:\\Windows\\Fonts\\simhei.ttf",
-        "C:\\Windows\\Fonts\\simsun.ttc",
-        "C:\\Windows\\Fonts\\dengxian.ttf",
+    const char* fontNames[] = {
+        "msyh.ttc",
+        "msyhbd.ttc",
+        "simhei.ttf",
+        "simsun.ttc",
+        "dengxian.ttf",
     };
     
+    std::string fontPaths[5];
+    for (int i = 0; i < 5; i++) {
+        fontPaths[i] = GetFontPath(fontNames[i]);
+    }
+    
     ImFont* font = nullptr;
-    for (const char* path : fontPaths) {
-        font = io.Fonts->AddFontFromFileTTF(path, fontSize, &config, ranges.Data);
+    for (const auto& path : fontPaths) {
+        font = io.Fonts->AddFontFromFileTTF(path.c_str(), fontSize, &config, ranges.Data);
         if (font) break;
     }
     
@@ -390,8 +418,12 @@ int D3D11Renderer::GetTextureWidth(ImTextureID texture) {
     ID3D11ShaderResourceView* srv = (ID3D11ShaderResourceView*)texture;
     ID3D11Resource* resource = nullptr;
     srv->GetResource(&resource);
+    if (!resource) return 0;
     ID3D11Texture2D* tex = nullptr;
-    resource->QueryInterface(&tex);
+    if (FAILED(resource->QueryInterface(&tex)) || !tex) {
+        resource->Release();
+        return 0;
+    }
     D3D11_TEXTURE2D_DESC desc;
     tex->GetDesc(&desc);
     tex->Release();
@@ -408,8 +440,12 @@ int D3D11Renderer::GetTextureHeight(ImTextureID texture) {
     ID3D11ShaderResourceView* srv = (ID3D11ShaderResourceView*)texture;
     ID3D11Resource* resource = nullptr;
     srv->GetResource(&resource);
+    if (!resource) return 0;
     ID3D11Texture2D* tex = nullptr;
-    resource->QueryInterface(&tex);
+    if (FAILED(resource->QueryInterface(&tex)) || !tex) {
+        resource->Release();
+        return 0;
+    }
     D3D11_TEXTURE2D_DESC desc;
     tex->GetDesc(&desc);
     tex->Release();

@@ -62,6 +62,9 @@ bool App::Initialize(HINSTANCE hInstance) {
     }
     m_hMutex = hMutex;
     
+    // 初始化 COM（单线程单元）
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    
     m_storage = std::make_unique<Storage>();
     m_iconCache = std::make_unique<IconCache>();
     m_iconTextureManager = std::make_unique<IconTextureManager>();
@@ -224,14 +227,16 @@ int App::Run() {
 
 void App::Shutdown() {
     SaveWindowPosition();
-    
-    m_trayIcon->Destroy();
-    m_renderer->Shutdown();
-    m_hotkeyManager->UnregisterGlobalHotkey(1);
+
+    if (m_storage) m_storage->Flush();
+    if (m_trayIcon) m_trayIcon->Destroy();
+    if (m_renderer) m_renderer->Shutdown();
+    if (m_hotkeyManager) m_hotkeyManager->UnregisterGlobalHotkey(1);
 
     Logger::Shutdown();
 
-    // 释放单实例互斥体
+    CoUninitialize();
+
     if (m_hMutex) {
         ReleaseMutex(m_hMutex);
         CloseHandle(m_hMutex);
@@ -268,6 +273,7 @@ void App::HandleHotkey(int id) {
 }
 
 void App::ToggleWindow() {
+    if (!m_window || !m_mainWindow) return;
     if (m_window->IsVisible()) {
         m_window->Hide();
         m_mainWindow->Hide();
@@ -278,6 +284,7 @@ void App::ToggleWindow() {
 }
 
 void App::SaveWindowPosition() {
+    if (!m_window || !m_config) return;
     int x, y, w, h;
     m_window->GetPosition(x, y);
     m_window->GetSize(w, h);

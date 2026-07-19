@@ -13,6 +13,10 @@ public:
     bool Load(const std::wstring& path);
     bool Save(const std::wstring& path);
     
+    void BeginBatch();
+    void EndBatch();
+    bool Flush();
+    
     std::vector<Category> GetCategories() const;
     Category GetCategory(const std::wstring& id) const;
     bool AddCategory(const Category& category);
@@ -38,6 +42,8 @@ private:
     std::vector<Category> m_categories;
     std::vector<Item> m_items;
     std::unordered_map<std::string, std::wstring> m_config;
+    bool m_dirty = false;
+    int m_batchLevel = 0;
 };
 
 } // namespace mn

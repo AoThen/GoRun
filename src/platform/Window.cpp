@@ -96,6 +96,7 @@ void Window::SetSize(int width, int height) {
 
 void Window::GetPosition(int& x, int& y) {
 #ifdef _WIN32
+    if (!m_hwnd) { x = 0; y = 0; return; }
     RECT rect;
     GetWindowRect(m_hwnd, &rect);
     x = rect.left;
@@ -107,6 +108,7 @@ void Window::GetPosition(int& x, int& y) {
 
 void Window::GetSize(int& width, int& height) {
 #ifdef _WIN32
+    if (!m_hwnd) { width = 800; height = 600; return; }
     RECT rect;
     GetWindowRect(m_hwnd, &rect);
     width = rect.right - rect.left;
