@@ -1,5 +1,6 @@
 #include "Window.h"
 #include "app/Resource.h"
+#include "utils/Logger.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -44,6 +45,11 @@ bool Window::Create(const std::wstring& title, int width, int height, int x, int
         GetModuleHandle(nullptr),
         this
     );
+    
+    if (!m_hwnd) {
+        LOG_ERRORW(L"Window::Create: CreateWindowExW failed");
+        return false;
+    }
     
     // 启用 DWM 窗口阴影效果
     if (m_hwnd) {

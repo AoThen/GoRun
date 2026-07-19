@@ -1,5 +1,6 @@
 #include "TrayIcon.h"
 #include "app/Resource.h"
+#include "utils/Logger.h"
 
 #ifdef _WIN32
 #include <ShellApi.h>
@@ -13,6 +14,7 @@ bool TrayIcon::Create(HWND hwnd, UINT messageId, const wchar_t* tooltip) {
     // 加载自定义图标
     HICON hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
     if (!hIcon) {
+        LOG_ERRORW(L"TrayIcon::Create: failed to load app icon, using default");
         hIcon = LoadIcon(nullptr, IDI_APPLICATION);
     }
     
@@ -26,6 +28,9 @@ bool TrayIcon::Create(HWND hwnd, UINT messageId, const wchar_t* tooltip) {
     wcscpy_s(nid.szTip, tooltip);
     
     m_created = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    if (!m_created) {
+        LOG_ERRORW(L"TrayIcon::Create: Shell_NotifyIconW failed");
+    }
     if (hIcon) DestroyIcon(hIcon);
     return m_created;
 }

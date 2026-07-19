@@ -3,6 +3,7 @@
 #include "IconCache.h"
 #include "utils/PathUtils.h"
 #include "utils/StringUtils.h"
+#include "utils/Logger.h"
 #include <algorithm>
 #include <cwctype>
 
@@ -49,6 +50,7 @@ void ItemManager::AddCategory(Category category) {
     }
     m_categories.push_back(category);
     m_storage->AddCategory(category);
+    LOG_INFOW(L"ItemManager::AddCategory: " + category.name);
 }
 
 void ItemManager::UpdateCategory(const Category& category) {
@@ -56,6 +58,7 @@ void ItemManager::UpdateCategory(const Category& category) {
         if (cat.id == category.id) {
             cat = category;
             m_storage->UpdateCategory(category);
+            LOG_INFOW(L"ItemManager::UpdateCategory: " + category.name);
             break;
         }
     }
@@ -82,6 +85,7 @@ void ItemManager::DeleteCategory(const std::wstring& id) {
             [&](const Category& c) { return c.id == id; }),
         m_categories.end()
     );
+    LOG_INFOW(L"ItemManager::DeleteCategory: " + id);
 }
 
 std::vector<Item>& ItemManager::GetItems(const std::wstring& categoryId) {
@@ -109,6 +113,7 @@ void ItemManager::AddItem(Item item) {
     m_itemsByCategory[item.categoryId].push_back(item);
     m_allItems.push_back(item);
     m_storage->AddItem(item);
+    LOG_INFOW(L"ItemManager::AddItem: " + item.name);
 }
 
 void ItemManager::UpdateItem(const Item& item) {
@@ -131,6 +136,7 @@ void ItemManager::UpdateItem(const Item& item) {
     }
     
     m_storage->UpdateItem(item);
+    LOG_INFOW(L"ItemManager::UpdateItem: " + item.name);
 }
 
 void ItemManager::MoveItem(const std::wstring& itemId, const std::wstring& targetCategoryId) {
@@ -148,12 +154,14 @@ void ItemManager::MoveItem(const std::wstring& itemId, const std::wstring& targe
         m_itemsByCategory[targetCategoryId].push_back(*item);
         
         m_storage->UpdateItem(*item);
+        LOG_INFOW(L"ItemManager::MoveItem: " + item->name + L" -> " + targetCategoryId);
     }
 }
 
 void ItemManager::DeleteItem(const std::wstring& id) {
     Item* item = GetItem(id);
     if (item) {
+        LOG_INFOW(L"ItemManager::DeleteItem: " + item->name);
         std::wstring catId = item->categoryId;
         
         if (m_iconCache) {
@@ -234,17 +242,20 @@ ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPa
     hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, 
                           IID_IShellLinkW, reinterpret_cast<void**>(&pShellLink));
     if (FAILED(hr)) {
+        LOG_ERRORW(L"ItemManager::ResolveShortcut: CoCreateInstance failed");
         return info;
     }
     
     hr = pShellLink->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&pPersistFile));
     if (FAILED(hr)) {
+        LOG_ERRORW(L"ItemManager::ResolveShortcut: QueryInterface failed");
         pShellLink->Release();
         return info;
     }
     
     hr = pPersistFile->Load(lnkPath.c_str(), STGM_READ);
     if (FAILED(hr)) {
+        LOG_ERRORW(L"ItemManager::ResolveShortcut: IPersistFile::Load failed");
         pPersistFile->Release();
         pShellLink->Release();
         return info;
@@ -300,6 +311,11 @@ ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPa
     pShellLink->Release();
     
     info.success = !info.target.empty();
+    if (info.success) {
+        LOG_INFOW(L"ItemManager::ResolveShortcut: resolved " + lnkPath + L" -> " + info.target);
+    } else {
+        LOG_ERRORW(L"ItemManager::ResolveShortcut: failed to resolve " + lnkPath);
+    }
 #endif
     
     return info;

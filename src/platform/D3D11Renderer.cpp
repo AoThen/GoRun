@@ -145,7 +145,10 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
         &featureLevel, &m_context
     );
     
-    if (FAILED(hr)) return false;
+    if (FAILED(hr)) {
+        LOG_ERROR("D3D11Renderer::Initialize: D3D11CreateDeviceAndSwapChain failed");
+        return false;
+    }
     
     ID3D11Texture2D* pBackBuffer;
     m_swapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));

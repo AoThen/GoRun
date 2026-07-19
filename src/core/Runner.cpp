@@ -1,5 +1,6 @@
 #include "Runner.h"
 #include "utils/PathUtils.h"
+#include "utils/Logger.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -21,6 +22,7 @@ RunResult Runner::Run(const Item& item) {
         result.success = false;
         result.error = RunError::FileNotFound;
         result.errorMessage = L"文件未找到: " + item.target;
+        LOG_ERRORW(L"Runner::Run failed: " + result.errorMessage);
         return result;
     }
     
@@ -37,6 +39,7 @@ RunResult Runner::Run(const Item& item) {
         result.success = false;
         result.error = MapError(err);
         result.errorMessage = GetErrorMessage(err) + L" (" + item.target + L")";
+        LOG_ERRORW(L"Runner::Run ShellExecuteExW failed: " + result.errorMessage);
         if (m_runCallback) m_runCallback(item, false);
         return result;
     }
@@ -62,6 +65,7 @@ RunResult Runner::RunAsAdmin(const Item& item) {
         result.success = false;
         result.error = RunError::FileNotFound;
         result.errorMessage = L"文件未找到";
+        LOG_ERRORW(L"Runner::RunAsAdmin failed: file not found - " + item.target);
         return result;
     }
     
@@ -81,12 +85,14 @@ RunResult Runner::RunAsAdmin(const Item& item) {
             result.success = false;
             result.error = RunError::AccessDenied;
             result.errorMessage = L"用户取消了提权请求";
+            LOG_ERRORW(L"Runner::RunAsAdmin cancelled by user: " + item.target);
             if (m_runCallback) m_runCallback(item, false);
             return result;
         }
         result.success = false;
         result.error = MapError(err);
         result.errorMessage = GetErrorMessage(err);
+        LOG_ERRORW(L"Runner::RunAsAdmin failed: " + result.errorMessage);
         if (m_runCallback) m_runCallback(item, false);
         return result;
     }

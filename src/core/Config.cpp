@@ -1,5 +1,6 @@
 #include "Config.h"
 #include "Storage.h"
+#include "utils/Logger.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -126,26 +127,35 @@ bool Config::UpdateRegistryAutoStart(bool enabled) {
     
     if (enabled) {
         // 添加开机自启
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, runKeyPath, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-            // 获取当前程序路径
-            wchar_t exePath[MAX_PATH] = {0};
-            GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-            
-            LONG result = RegSetValueExW(hKey, L"GoRun", 0, REG_SZ,
-                reinterpret_cast<const BYTE*>(exePath),
-                static_cast<DWORD>((wcslen(exePath) + 1) * sizeof(wchar_t)));
-            RegCloseKey(hKey);
-            
-            return result == ERROR_SUCCESS;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, runKeyPath, 0, KEY_WRITE, &hKey) != ERROR_SUCCESS) {
+            LOG_ERRORW(L"Config::UpdateRegistryAutoStart: failed to open registry key");
+            return false;
         }
+        wchar_t exePath[MAX_PATH] = {0};
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        
+        LONG result = RegSetValueExW(hKey, L"GoRun", 0, REG_SZ,
+            reinterpret_cast<const BYTE*>(exePath),
+            static_cast<DWORD>((wcslen(exePath) + 1) * sizeof(wchar_t)));
+        bool regSuccess = (result == ERROR_SUCCESS);
+        if (!regSuccess) {
+            LOG_ERRORW(L"Config::UpdateRegistryAutoStart: RegSetValueExW failed");
+        }
+        RegCloseKey(hKey);
+        return regSuccess;
     } else {
         // 移除开机自启
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, runKeyPath, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-            LONG result = RegDeleteValueW(hKey, L"GoRun");
-            RegCloseKey(hKey);
-            
-            return result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, runKeyPath, 0, KEY_WRITE, &hKey) != ERROR_SUCCESS) {
+            LOG_ERRORW(L"Config::UpdateRegistryAutoStart: failed to open registry key");
+            return false;
         }
+        LONG result = RegDeleteValueW(hKey, L"GoRun");
+        bool regSuccess = (result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND);
+        if (!regSuccess) {
+            LOG_ERRORW(L"Config::UpdateRegistryAutoStart: RegDeleteValueW failed");
+        }
+        RegCloseKey(hKey);
+        return regSuccess;
     }
 #endif
     return false;

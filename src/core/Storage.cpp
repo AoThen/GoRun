@@ -43,15 +43,22 @@ bool Storage::RotateBackups() {
     
     // bak2 -> bak3
     if (PathUtils::Exists(bak2)) {
-        MoveFileExW(bak2.c_str(), bak3.c_str(), MOVEFILE_REPLACE_EXISTING);
+        if (!MoveFileExW(bak2.c_str(), bak3.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            LOG_ERROR("Storage::RotateBackups: failed to rotate bak2 -> bak3");
+        }
     }
     // bak1 -> bak2
     if (PathUtils::Exists(bak1)) {
-        MoveFileExW(bak1.c_str(), bak2.c_str(), MOVEFILE_REPLACE_EXISTING);
+        if (!MoveFileExW(bak1.c_str(), bak2.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            LOG_ERROR("Storage::RotateBackups: failed to rotate bak1 -> bak2");
+        }
     }
     // current -> bak1
     if (PathUtils::Exists(m_path)) {
-        return CopyFileW(m_path.c_str(), bak1.c_str(), FALSE) != FALSE;
+        if (!CopyFileW(m_path.c_str(), bak1.c_str(), FALSE)) {
+            LOG_ERROR("Storage::RotateBackups: failed to copy current -> bak1");
+            return false;
+        }
     }
     return true;
 }
@@ -101,6 +108,7 @@ bool Storage::SaveToFile() {
     {
         std::ofstream file(tmpPath);
         if (!file.is_open()) {
+            LOG_ERROR("Storage::SaveToFile: failed to open temp file");
             DeleteFileW(tmpPath.c_str());
             return false;
         }
@@ -108,6 +116,7 @@ bool Storage::SaveToFile() {
     }
     
     if (!MoveFileExW(tmpPath.c_str(), m_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        LOG_ERROR("Storage::SaveToFile: failed to rename temp file");
         DeleteFileW(tmpPath.c_str());
         return false;
     }
