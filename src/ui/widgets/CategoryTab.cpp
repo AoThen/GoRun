@@ -22,11 +22,12 @@ void CategoryTab::Render() {
     
     ImGui::BeginChild("Categories", ImVec2(150, 0), false);
     
-    for (const auto& cat : *m_categories) {
+    for (size_t i = 0; i < m_categories->size(); i++) {
+        auto& cat = (*m_categories)[i];
         bool selected = (cat.id == m_currentId);
         std::string name = StringUtils::WStringToUtf8(cat.name);
         
-        ImGui::PushID(cat.id.c_str());
+        ImGui::PushID(static_cast<int>(i));
         
         // 自定义选中样式
         if (selected) {
@@ -117,10 +118,6 @@ void CategoryTab::OnCategoryRename(std::function<void(const std::wstring&)> call
 
 void CategoryTab::SetCurrentCategory(const std::wstring& id) {
     m_currentId = id;
-}
-
-std::wstring CategoryTab::GetCurrentCategory() const {
-    return m_currentId;
 }
 
 } // namespace mn

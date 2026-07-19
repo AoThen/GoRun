@@ -14,9 +14,6 @@ public:
     // 获取图标纹理，返回 ImGui 可用的纹理指针
     ImTextureID GetIconTexture(const Item& item);
     
-    // 清除缓存
-    void ClearCache();
-    
     // 刷新指定项目的图标缓存
     void RefreshIcon(const Item& item);
 

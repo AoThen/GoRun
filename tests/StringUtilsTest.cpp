@@ -94,53 +94,6 @@ TEST(StringUtilsTest, ToLower_WithNumbers) {
     EXPECT_EQ(ToLower(L"ABC123"), L"abc123");
 }
 
-// ==================== FuzzyMatch 测试 ====================
-
-TEST(StringUtilsTest, FuzzyMatch_EmptyQuery) {
-    EXPECT_TRUE(FuzzyMatch(L"hello", L""));
-}
-
-TEST(StringUtilsTest, FuzzyMatch_EmptyText) {
-    EXPECT_FALSE(FuzzyMatch(L"", L"query"));
-}
-
-TEST(StringUtilsTest, FuzzyMatch_ExactMatch) {
-    EXPECT_TRUE(FuzzyMatch(L"hello", L"hello"));
-}
-
-TEST(StringUtilsTest, FuzzyMatch_SubstringMatch) {
-    EXPECT_TRUE(FuzzyMatch(L"hello world", L"world"));
-}
-
-TEST(StringUtilsTest, FuzzyMatch_CaseInsensitive) {
-    EXPECT_TRUE(FuzzyMatch(L"Hello World", L"world"));
-    EXPECT_TRUE(FuzzyMatch(L"hello world", L"WORLD"));
-}
-
-TEST(StringUtilsTest, FuzzyMatch_NoMatch) {
-    EXPECT_FALSE(FuzzyMatch(L"hello", L"xyz"));
-}
-
-// ==================== Utf8CharCount 测试 ====================
-
-TEST(StringUtilsTest, Utf8CharCount_EmptyString) {
-    EXPECT_EQ(Utf8CharCount(""), 0);
-}
-
-TEST(StringUtilsTest, Utf8CharCount_AsciiOnly) {
-    EXPECT_EQ(Utf8CharCount("hello"), 5);
-}
-
-TEST(StringUtilsTest, Utf8CharCount_Chinese) {
-    // 每个中文字符占 3 字节，但算 1 个字符
-    EXPECT_EQ(Utf8CharCount("你好"), 2);
-}
-
-TEST(StringUtilsTest, Utf8CharCount_Mixed) {
-    // "hello世界" = 5 ASCII + 2 中文 = 7 字符
-    EXPECT_EQ(Utf8CharCount("hello世界"), 7);
-}
-
 // ==================== TruncateUtf8 测试 ====================
 
 TEST(StringUtilsTest, TruncateUtf8_EmptyString) {
@@ -257,20 +210,6 @@ TEST(StringUtilsTest, GetPinyinInitials_MixedCase) {
     EXPECT_EQ(GetPinyinInitials(L"ABC"), L"abc");
 }
 
-// ==================== PinyinMatch 测试 ====================
-
-TEST(StringUtilsTest, PinyinMatch_EmptyQuery) {
-    EXPECT_TRUE(PinyinMatch(L"测试", L""));
-}
-
-TEST(StringUtilsTest, PinyinMatch_EmptyText) {
-    EXPECT_FALSE(PinyinMatch(L"", L"cs"));
-}
-
-TEST(StringUtilsTest, PinyinMatch_AsciiMatch) {
-    EXPECT_TRUE(PinyinMatch(L"abc", L"ab"));
-}
-
 // ==================== 中文拼音匹配测试 ====================
 
 TEST(StringUtilsTest, GetPinyinInitial_Chinese) {
@@ -303,20 +242,6 @@ TEST(StringUtilsTest, GetPinyinInitials_MixedText) {
     std::wstring initials = GetPinyinInitials(L"GoRun应用");
     // "GoRun应用" -> "gr" + 中文首字母
     EXPECT_TRUE(initials.find(L"g") != std::wstring::npos || initials.find(L'r') != std::wstring::npos);
-}
-
-TEST(StringUtilsTest, PinyinMatch_ChineseQuery) {
-    // 中文拼音首字母匹配
-    // 由于平台差异，这里只测试不崩溃
-    bool result = PinyinMatch(L"中国", L"zg");
-    // 结果取决于 Windows API 或 GB2312 表是否可用
-    EXPECT_TRUE(result || !result);  // 总是 true，仅验证不崩溃
-}
-
-TEST(StringUtilsTest, PinyinMatch_ChinesePartial) {
-    // 部分拼音匹配
-    bool result = PinyinMatch(L"中国软件", L"zg");
-    EXPECT_TRUE(result || !result);  // 验证不崩溃
 }
 
 TEST(StringUtilsTest, SearchMatch_ChineseName) {

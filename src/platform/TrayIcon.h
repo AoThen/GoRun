@@ -12,8 +12,6 @@ public:
 #ifdef _WIN32
     bool Create(HWND hwnd, UINT messageId, const wchar_t* tooltip);
     void Destroy();
-    void SetTooltip(const wchar_t* tooltip);
-    
     using ShowCallback = std::function<void()>;
     using ExitCallback = std::function<void()>;
     

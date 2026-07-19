@@ -28,6 +28,11 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         m_searchBuf[0] = '\0';
         m_isSearching = false;
         m_itemGrid.SetItems(&m_itemManager->GetItems(id));
+        Category* cat = m_itemManager->GetCategory(id);
+        if (cat) {
+            m_currentViewType = cat->viewType;
+            m_itemGrid.SetViewType(m_currentViewType);
+        }
     });
     
     // 新建分类
@@ -140,6 +145,11 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     if (!categories.empty()) {
         m_currentCategoryId = categories[0].id;
         m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+        Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
+        if (cat) {
+            m_currentViewType = cat->viewType;
+            m_itemGrid.SetViewType(m_currentViewType);
+        }
     }
 }
 
@@ -198,7 +208,7 @@ void MainWindow::Render() {
             }
             ImGui::Separator();
             if (ImGui::MenuItem("退出")) {
-                PostQuitMessage(0);
+                App::Get()->Quit();
             }
             ImGui::EndMenu();
         }
@@ -213,6 +223,37 @@ void MainWindow::Render() {
                     m_showRenameCategory = true;
                     m_openRenamePopup = true;
                 }
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("视图")) {
+            if (ImGui::MenuItem("图标视图", nullptr, m_currentViewType == ViewType::Icon)) {
+                if (m_currentViewType != ViewType::Icon) ToggleViewType();
+            }
+            if (ImGui::MenuItem("列表视图", nullptr, m_currentViewType == ViewType::List)) {
+                if (m_currentViewType != ViewType::List) ToggleViewType();
+            }
+            ImGui::Separator();
+            const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "切换到深色主题" : "切换到浅色主题";
+            if (ImGui::MenuItem(themeLabel)) {
+                ToggleTheme();
+                if (m_config) {
+                    m_config->SetTheme(static_cast<int>(GetCurrentTheme()));
+                }
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("设置")) {
+            if (ImGui::MenuItem("开机自启", nullptr, m_config && m_config->GetAutoStart())) {
+                if (m_config) {
+                    m_config->SetAutoStart(!m_config->GetAutoStart());
+                }
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("帮助")) {
+            if (ImGui::MenuItem("关于 GoRun")) {
+                ShowError(L"GoRun v1.0.0\n快速启动工具");
             }
             ImGui::EndMenu();
         }
@@ -345,7 +386,7 @@ void MainWindow::RenderSearchBar() {
     
     // 主题切换按钮
     ImGui::SameLine(0, 4);
-    const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "浅色" : "深色";
+    const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "暗色模式" : "亮色模式";
     if (ImGui::Button(themeLabel, ImVec2(50, 0))) {
         ToggleTheme();
         if (m_config) {
@@ -500,6 +541,11 @@ void MainWindow::RenderDeleteConfirmDialog() {
 void MainWindow::ToggleViewType() {
     m_currentViewType = (m_currentViewType == ViewType::Icon) ? ViewType::List : ViewType::Icon;
     m_itemGrid.SetViewType(m_currentViewType);
+    Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
+    if (cat) {
+        cat->viewType = m_currentViewType;
+        m_itemManager->UpdateCategory(*cat);
+    }
 }
 
 void MainWindow::HandleNewItem() {

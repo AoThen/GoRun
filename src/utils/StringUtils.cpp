@@ -76,40 +76,6 @@ std::wstring ToLower(const std::wstring& str) {
     return result;
 }
 
-bool FuzzyMatch(const std::wstring& text, const std::wstring& query) {
-    if (query.empty()) return true;
-    if (text.empty()) return false;
-    
-    std::wstring lowerText = ToLower(text);
-    std::wstring lowerQuery = ToLower(query);
-    
-    return lowerText.find(lowerQuery) != std::wstring::npos;
-}
-
-// 拼音首字母表（基于 Unicode 区间）
-// 常用汉字范围: 0x4E00 - 0x9FA5
-static const wchar_t* PINYIN_TABLE = 
-    L"啊芭擦搭蛾发噶哈击喀垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开垃妈拿哦啪期然撒塌挖昔压匝击开垃妈拿哦啪期然撒塌挖昔压匝"
-    L"击开";
-
 // 拼音首字母区间表（基于 Unicode 编码范围）
 // 格式: {起始Unicode, 结束Unicode, 拼音首字母}
 static const struct PinyinRange {
@@ -198,17 +164,6 @@ std::wstring GetPinyinInitials(const std::wstring& text) {
     return result;
 }
 
-bool PinyinMatch(const std::wstring& text, const std::wstring& query) {
-    if (query.empty()) return true;
-    if (text.empty()) return false;
-    
-    std::wstring initials = GetPinyinInitials(text);
-    std::wstring lowerInitials = ToLower(initials);
-    std::wstring lowerQuery = ToLower(query);
-    
-    return lowerInitials.find(lowerQuery) != std::wstring::npos;
-}
-
 MatchResult SearchMatch(const std::wstring& text, const std::wstring& keywords, const std::wstring& query) {
     MatchResult result;
     
@@ -280,31 +235,6 @@ MatchResult SearchMatch(const std::wstring& text, const std::wstring& keywords, 
     
     result.matched = false;
     return result;
-}
-
-size_t Utf8CharCount(const std::string& str) {
-    size_t count = 0;
-    for (size_t i = 0; i < str.size(); ) {
-        unsigned char c = static_cast<unsigned char>(str[i]);
-        if ((c & 0x80) == 0) {
-            // ASCII 字符
-            i += 1;
-        } else if ((c & 0xE0) == 0xC0) {
-            // 2 字节 UTF-8
-            i += 2;
-        } else if ((c & 0xF0) == 0xE0) {
-            // 3 字节 UTF-8 (中文)
-            i += 3;
-        } else if ((c & 0xF8) == 0xF0) {
-            // 4 字节 UTF-8
-            i += 4;
-        } else {
-            // 无效字节，跳过
-            i += 1;
-        }
-        count++;
-    }
-    return count;
 }
 
 std::string TruncateUtf8(const std::string& str, size_t maxChars, const std::string& suffix) {

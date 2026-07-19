@@ -35,10 +35,6 @@ ImTextureID IconTextureManager::GetIconTexture(const Item& item) {
     return texture;
 }
 
-void IconTextureManager::ClearCache() {
-    m_textureCache.clear();
-}
-
 void IconTextureManager::RefreshIcon(const Item& item) {
     // 移除内存中的纹理缓存
     m_textureCache.erase(item.id);

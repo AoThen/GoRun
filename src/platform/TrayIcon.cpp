@@ -31,7 +31,6 @@ bool TrayIcon::Create(HWND hwnd, UINT messageId, const wchar_t* tooltip) {
     if (!m_created) {
         LOG_ERRORW(L"TrayIcon::Create: Shell_NotifyIconW failed");
     }
-    if (hIcon) DestroyIcon(hIcon);
     return m_created;
 }
 
@@ -45,19 +44,6 @@ void TrayIcon::Destroy() {
     
     Shell_NotifyIconW(NIM_DELETE, &nid);
     m_created = false;
-}
-
-void TrayIcon::SetTooltip(const wchar_t* tooltip) {
-    if (!m_created) return;
-    
-    NOTIFYICONDATAW nid = {};
-    nid.cbSize = sizeof(NOTIFYICONDATAW);
-    nid.hWnd = m_hwnd;
-    nid.uID = 1;
-    nid.uFlags = NIF_TIP;
-    wcscpy_s(nid.szTip, tooltip);
-    
-    Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
 void TrayIcon::HandleMessage(WPARAM wParam, LPARAM lParam) {

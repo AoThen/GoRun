@@ -14,7 +14,6 @@ public:
     void SetItems(std::vector<Item>* items);
     void SetIconTextureManager(IconTextureManager* manager);
     void SetViewType(ViewType viewType);
-    ViewType GetViewType() const { return m_viewType; }
     void Render();
     void ClearHoverAnimation(const std::wstring& itemId);  // 清理指定项目的动画状态
     

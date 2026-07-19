@@ -6,8 +6,8 @@
 #include <Windows.h>
 #include <ShellApi.h>
 #include <comdef.h>
-#include <gdiplus.h>
 #include <shlwapi.h>
+#include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 #endif
 
@@ -38,21 +38,9 @@ static int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 void IconCache::Initialize(const std::wstring& cacheDir) {
     m_cacheDir = cacheDir;
     PathUtils::EnsureDirectory(cacheDir);
-    
-#ifdef _WIN32
-    // 初始化 GDI+
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&m_gdiplusToken, &gdiplusStartupInput, nullptr);
-#endif
 }
 
-IconCache::~IconCache() {
-#ifdef _WIN32
-    if (m_gdiplusToken) {
-        Gdiplus::GdiplusShutdown(m_gdiplusToken);
-    }
-#endif
-}
+IconCache::~IconCache() = default;
 
 std::wstring IconCache::GetCachePath(const std::wstring& itemId) const {
     return m_cacheDir + L"\\" + itemId + L".png";

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cstdint>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -8,6 +9,7 @@
 
 namespace mn {
 
+class Localization;
 class Storage;
 class IconCache;
 class IconTextureManager;
@@ -51,6 +53,9 @@ private:
     HANDLE m_hMutex = nullptr;
 #endif
     
+    uintptr_t m_gdiplusToken = 0;
+
+    std::unique_ptr<Localization> m_localization;
     std::unique_ptr<Storage> m_storage;
     std::unique_ptr<IconCache> m_iconCache;
     std::unique_ptr<IconTextureManager> m_iconTextureManager;

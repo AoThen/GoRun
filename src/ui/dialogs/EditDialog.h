@@ -24,6 +24,7 @@ private:
     Item* m_item = nullptr;
     bool m_visible = false;
     bool m_openPopup = false;  // 控制弹窗首次打开
+    bool m_showInputError = false;
     
     std::string m_nameBuf;
     std::string m_targetBuf;

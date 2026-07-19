@@ -1,5 +1,6 @@
 #include "App.h"
 #include "Resource.h"
+#include "core/Localization.h"
 #include "core/Storage.h"
 #include "core/IconCache.h"
 #include "core/IconTextureManager.h"
@@ -14,6 +15,8 @@
 #include "utils/PathUtils.h"
 #include "utils/Logger.h"
 #include <imgui.h>
+#include <gdiplus.h>
+#pragma comment(lib, "gdiplus.lib")
 
 namespace mn {
 
@@ -67,6 +70,14 @@ bool App::Initialize(HINSTANCE hInstance) {
     // 初始化 COM（单线程单元）
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     
+    // GDI+ initialization (single point for entire app)
+    Gdiplus::GdiplusStartupInput gdiplusInput;
+    Gdiplus::GdiplusStartup(&m_gdiplusToken, &gdiplusInput, nullptr);
+    
+    std::wstring langPath = PathUtils::GetExeDir() + L"\\resources\\lang";
+    m_localization = std::make_unique<Localization>();
+    m_localization->Initialize(langPath);
+
     m_storage = std::make_unique<Storage>();
     m_iconCache = std::make_unique<IconCache>();
     m_iconTextureManager = std::make_unique<IconTextureManager>();
@@ -158,6 +169,10 @@ bool App::Initialize(HINSTANCE hInstance) {
         HandleHotkey(id);
     });
     
+    m_window->OnHotkey([this](int id) {
+        m_hotkeyManager->ProcessHotkey(id);
+    });
+    
     std::wstring hotkey = m_config->GetGlobalHotkey();
     unsigned int modifiers, vk;
     if (m_hotkeyManager->ParseHotkeyString(hotkey, modifiers, vk)) {
@@ -238,6 +253,11 @@ void App::Shutdown() {
 #ifdef _DEBUG
     Logger::Shutdown();
 #endif
+
+    if (m_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(m_gdiplusToken);
+        m_gdiplusToken = 0;
+    }
 
     CoUninitialize();
 

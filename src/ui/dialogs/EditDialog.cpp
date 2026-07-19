@@ -136,7 +136,7 @@ void EditDialog::Render() {
         if (ImGui::Button("保存", ImVec2(120, 0))) {
             // 输入验证
             if (m_nameBuf.empty() || m_targetBuf.empty()) {
-                ImGui::OpenPopup("输入错误");
+                m_showInputError = true;
             } else {
                 SaveToItem();
                 if (m_onSave) {
@@ -151,7 +151,11 @@ void EditDialog::Render() {
         }
         
         // 输入错误提示
-        if (ImGui::BeginPopupModal("输入错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (m_showInputError) {
+            ImGui::OpenPopup("输入错误");
+            m_showInputError = false;
+        }
+        if (ImGui::BeginPopup("输入错误", ImGuiWindowFlags_AlwaysAutoResize)) {
             if (m_nameBuf.empty() && m_targetBuf.empty()) {
                 ImGui::Text("名称和目标路径不能为空");
             } else if (m_nameBuf.empty()) {

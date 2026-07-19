@@ -8,6 +8,7 @@
 #include <gdiplus.h>
 #include <ShlObj.h>
 #include <unordered_map>
+#include <vector>
 #include "../ui/Theme.h"
 #include "../utils/Logger.h"
 #pragma comment(lib, "gdiplus.lib")
@@ -18,8 +19,6 @@ namespace mn {
 #ifdef _WIN32
 // 纹理缓存
 static std::unordered_map<std::wstring, ID3D11ShaderResourceView*> s_textureCache;
-static Gdiplus::GdiplusStartupInput s_gdiplusInput;
-static ULONG_PTR s_gdiplusToken = 0;
 
 static std::string GetFontPath(const char* filename) {
     wchar_t fontDir[MAX_PATH] = {0};
@@ -37,13 +36,6 @@ static ID3D11ShaderResourceView* LoadTextureFromFile(ID3D11Device* device, const
     auto it = s_textureCache.find(path);
     if (it != s_textureCache.end()) {
         return it->second;
-    }
-    
-    // 初始化 GDI+
-    static bool gdiplusInit = false;
-    if (!gdiplusInit) {
-        Gdiplus::GdiplusStartup(&s_gdiplusToken, &s_gdiplusInput, nullptr);
-        gdiplusInit = true;
     }
     
     // 加载图片
@@ -79,16 +71,18 @@ static ID3D11ShaderResourceView* LoadTextureFromFile(ID3D11Device* device, const
     texDesc.Usage = D3D11_USAGE_DEFAULT;
     texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     
-    // 转换 BGRA 到 RGBA
-    unsigned char* pixels = (unsigned char*)bmpData.Scan0;
+    // 复制到临时缓冲区并转换 BGRA 到 RGBA
+    std::vector<unsigned char> convertedPixels(bmpData.Stride * bitmap->GetHeight());
+    unsigned char* src = (unsigned char*)bmpData.Scan0;
     for (int i = 0; i < bitmap->GetWidth() * bitmap->GetHeight(); i++) {
-        unsigned char b = pixels[i * 4];
-        pixels[i * 4] = pixels[i * 4 + 2];
-        pixels[i * 4 + 2] = b;
+        convertedPixels[i * 4 + 0] = src[i * 4 + 2]; // R
+        convertedPixels[i * 4 + 1] = src[i * 4 + 1]; // G
+        convertedPixels[i * 4 + 2] = src[i * 4 + 0]; // B
+        convertedPixels[i * 4 + 3] = src[i * 4 + 3]; // A
     }
     
     D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = pixels;
+    initData.pSysMem = convertedPixels.data();
     initData.SysMemPitch = bmpData.Stride;
     
     ID3D11Texture2D* texture = nullptr;
@@ -241,11 +235,6 @@ void D3D11Renderer::Shutdown()
         if (srv) srv->Release();
     }
     s_textureCache.clear();
-
-    if (s_gdiplusToken) {
-        Gdiplus::GdiplusShutdown(s_gdiplusToken);
-        s_gdiplusToken = 0;
-    }
 
     if (m_imguiContext) {
         ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));

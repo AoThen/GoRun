@@ -3,29 +3,6 @@
 
 using namespace mn::PathUtils;
 
-// ==================== GetFileName 测试 ====================
-
-TEST(PathUtilsTest, GetFileName_EmptyPath) {
-    EXPECT_EQ(GetFileName(L""), L"");
-}
-
-TEST(PathUtilsTest, GetFileName_SimpleName) {
-    EXPECT_EQ(GetFileName(L"file.txt"), L"file.txt");
-}
-
-TEST(PathUtilsTest, GetFileName_WithDirectory) {
-    EXPECT_EQ(GetFileName(L"/path/to/file.txt"), L"file.txt");
-}
-
-TEST(PathUtilsTest, GetFileName_WindowsPath) {
-    EXPECT_EQ(GetFileName(L"C:\\path\\to\\file.txt"), L"file.txt");
-}
-
-TEST(PathUtilsTest, GetFileName_TrailingSlash) {
-    // 空文件名的情况
-    EXPECT_EQ(GetFileName(L"/path/to/"), L"");
-}
-
 // ==================== GetFileBaseName 测试 ====================
 
 TEST(PathUtilsTest, GetFileBaseName_EmptyPath) {
@@ -99,13 +76,6 @@ TEST(PathUtilsTest, ToAbsolute_AlreadyAbsolute) {
     auto result = ToAbsolute(L"/path/to/file");
     // 结果应该是绝对路径
     EXPECT_TRUE(!result.empty());
-}
-
-// ==================== ToRelative 测试 ====================
-
-TEST(PathUtilsTest, ToRelative_EmptyPath) {
-    auto result = ToRelative(L"");
-    EXPECT_TRUE(result.empty() || !result.empty());  // 不应抛出异常
 }
 
 // ==================== GetExePath 测试 ====================

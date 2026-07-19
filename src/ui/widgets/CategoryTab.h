@@ -17,7 +17,6 @@ public:
     void OnCategoryRename(std::function<void(const std::wstring& id)> callback);
     
     void SetCurrentCategory(const std::wstring& id);
-    std::wstring GetCurrentCategory() const;
 
 private:
     void RenderContextMenu(const Category& cat);

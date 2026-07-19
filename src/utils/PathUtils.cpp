@@ -54,16 +54,6 @@ std::wstring ToAbsolute(const std::wstring& path) {
 #endif
 }
 
-std::wstring ToRelative(const std::wstring& path) {
-    std::filesystem::path p(path);
-    std::filesystem::path base(GetExeDir());
-    try {
-        return std::filesystem::relative(p, base).wstring();
-    } catch (...) {
-        return path;
-    }
-}
-
 bool Exists(const std::wstring& path) {
     try {
         return std::filesystem::exists(path);
@@ -75,14 +65,6 @@ bool Exists(const std::wstring& path) {
 std::wstring GetParentDir(const std::wstring& path) {
     try {
         return std::filesystem::path(path).parent_path().wstring();
-    } catch (...) {
-        return L"";
-    }
-}
-
-std::wstring GetFileName(const std::wstring& path) {
-    try {
-        return std::filesystem::path(path).filename().wstring();
     } catch (...) {
         return L"";
     }

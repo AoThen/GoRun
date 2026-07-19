@@ -61,7 +61,10 @@ RunResult Runner::Run(const Item& item) {
 RunResult Runner::RunAsAdmin(const Item& item) {
     RunResult result;
     
-    if (!PathUtils::Exists(item.target)) {
+    bool isUrl = item.target.size() > 4 && 
+        (item.target.substr(0, 7) == L"http://" || item.target.substr(0, 8) == L"https://");
+    
+    if (!isUrl && !PathUtils::Exists(item.target)) {
         result.success = false;
         result.error = RunError::FileNotFound;
         result.errorMessage = L"文件未找到";

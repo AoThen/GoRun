@@ -27,7 +27,6 @@ public:
     void ToggleViewType();
 
 private:
-    void RenderMenuBar();
     void RenderSearchBar();
     void UpdateSearchResults();
     void RefreshItems();
