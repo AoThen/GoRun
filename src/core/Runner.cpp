@@ -78,8 +78,10 @@ RunResult Runner::RunAsAdmin(const Item& item) {
     if (!ShellExecuteExW(&sei)) {
         unsigned long err = GetLastError();
         if (err == ERROR_CANCELLED) {
-            result.success = true;
-            if (m_runCallback) m_runCallback(item, true);
+            result.success = false;
+            result.error = RunError::AccessDenied;
+            result.errorMessage = L"用户取消了提权请求";
+            if (m_runCallback) m_runCallback(item, false);
             return result;
         }
         result.success = false;

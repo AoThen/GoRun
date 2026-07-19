@@ -45,6 +45,11 @@ void IconTextureManager::RefreshIcon(const Item& item) {
     
     // 删除磁盘上的缓存文件并重新提取
     if (m_iconCache) {
+        // 获取旧缓存路径，释放 D3D11 中的旧纹理
+        std::wstring oldPath = m_iconCache->GetCachePath(item.id);
+        if (m_renderer) {
+            m_renderer->UnloadTextureByPath(oldPath);
+        }
         m_iconCache->DeleteCache(item.id);
         m_iconCache->RefreshIcon(item);
     }

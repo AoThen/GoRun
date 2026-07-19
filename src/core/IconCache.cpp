@@ -53,6 +53,10 @@ IconCache::~IconCache() {
 #endif
 }
 
+std::wstring IconCache::GetCachePath(const std::wstring& itemId) const {
+    return m_cacheDir + L"\\" + itemId + L".png";
+}
+
 std::wstring IconCache::GetIconPath(const Item& item) {
     std::wstring cachePath = m_cacheDir + L"\\" + item.id + L".png";
     

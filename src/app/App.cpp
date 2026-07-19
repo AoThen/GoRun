@@ -83,7 +83,23 @@ bool App::Initialize(HINSTANCE hInstance) {
     std::wstring configPath = appDataPath + L"\\config.json";
     m_storage->Initialize(configPath);
     if (PathUtils::Exists(configPath)) {
-        m_storage->Load(configPath);
+        if (!m_storage->Load(configPath)) {
+            // 尝试从备份恢复
+            bool restored = false;
+            std::wstring bak1 = configPath + L".bak1";
+            std::wstring bak2 = configPath + L".bak2";
+            std::wstring bak3 = configPath + L".bak3";
+            if (PathUtils::Exists(bak1)) {
+                restored = m_storage->Load(bak1);
+            } else if (PathUtils::Exists(bak2)) {
+                restored = m_storage->Load(bak2);
+            } else if (PathUtils::Exists(bak3)) {
+                restored = m_storage->Load(bak3);
+            }
+            if (!restored) {
+                OutputDebugStringW(L"App: Failed to load config, starting with empty data\n");
+            }
+        }
     }
     
     m_config->Initialize(m_storage.get());
@@ -109,7 +125,11 @@ bool App::Initialize(HINSTANCE hInstance) {
     
     m_window->OnDropFiles([this](const std::vector<std::wstring>& files) {
         if (m_mainWindow->IsVisible() && !m_itemManager->GetCategories().empty()) {
-            m_itemManager->HandleDrop(files, m_itemManager->GetCategories()[0].id);
+            std::wstring targetCatId = m_mainWindow->GetCurrentCategoryId();
+            if (targetCatId.empty()) {
+                targetCatId = m_itemManager->GetCategories()[0].id;
+            }
+            m_itemManager->HandleDrop(files, targetCatId);
         }
     });
     
@@ -134,7 +154,9 @@ bool App::Initialize(HINSTANCE hInstance) {
     std::wstring hotkey = m_config->GetGlobalHotkey();
     unsigned int modifiers, vk;
     if (m_hotkeyManager->ParseHotkeyString(hotkey, modifiers, vk)) {
-        m_hotkeyManager->RegisterGlobalHotkey(1, modifiers, vk);
+        if (!m_hotkeyManager->RegisterGlobalHotkey(1, modifiers, vk)) {
+            OutputDebugStringW(L"App: Failed to register global hotkey\n");
+        }
     }
     
     m_mainWindow->Initialize(m_itemManager.get(), m_config.get(), m_runner.get(), m_iconTextureManager.get());
@@ -170,29 +192,29 @@ int App::Run() {
             if (msg.message == WM_HOTKEY) {
                 m_hotkeyManager->ProcessHotkey(static_cast<int>(msg.wParam));
             }
-        } else {
+        } else if (m_mainWindow->IsVisible()) {
             m_renderer->NewFrame();
             
-            if (m_mainWindow->IsVisible()) {
-                ImGui::SetNextWindowPos(ImVec2(0, 0));
-                ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-                ImGui::Begin("GoRun", nullptr, 
-                    ImGuiWindowFlags_NoResize | 
-                    ImGuiWindowFlags_NoMove |
-                    ImGuiWindowFlags_NoCollapse |
-                    ImGuiWindowFlags_NoTitleBar |
-                    ImGuiWindowFlags_MenuBar);
-                ImGui::PopStyleVar(3);
-                
-                m_mainWindow->Render();
-                
-                ImGui::End();
-            }
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+            ImGui::Begin("GoRun", nullptr, 
+                ImGuiWindowFlags_NoResize | 
+                ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoCollapse |
+                ImGuiWindowFlags_NoTitleBar |
+                ImGuiWindowFlags_MenuBar);
+            ImGui::PopStyleVar(3);
+            
+            m_mainWindow->Render();
+            
+            ImGui::End();
             
             m_renderer->Render();
+        } else {
+            WaitMessage();
         }
     }
     

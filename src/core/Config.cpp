@@ -20,10 +20,18 @@ void Config::SetGlobalHotkey(const std::wstring& hotkey) {
     if (m_storage) m_storage->SetConfig("globalHotkey", hotkey);
 }
 
+static int ClampToScreen(int pos) {
+    // 只检查极端值，防止 JSON 篡改导致窗口不可见
+    if (pos < -10000) return 100;
+    if (pos > 10000) return 100;
+    return pos;
+}
+
 int Config::GetWindowX() const {
     if (!m_storage) return 100;
     try {
-        return std::stoi(m_storage->GetConfig("windowX", L"100"));
+        int x = std::stoi(m_storage->GetConfig("windowX", L"100"));
+        return ClampToScreen(x);
     } catch (...) {
         return 100;
     }
@@ -32,7 +40,8 @@ int Config::GetWindowX() const {
 int Config::GetWindowY() const {
     if (!m_storage) return 100;
     try {
-        return std::stoi(m_storage->GetConfig("windowY", L"100"));
+        int y = std::stoi(m_storage->GetConfig("windowY", L"100"));
+        return ClampToScreen(y);
     } catch (...) {
         return 100;
     }
@@ -133,6 +142,21 @@ bool Config::UpdateRegistryAutoStart(bool enabled) {
     }
 #endif
     return false;
+}
+
+int Config::GetTheme() const {
+    if (!m_storage) return 0;
+    try {
+        return std::stoi(m_storage->GetConfig("theme", L"0"));
+    } catch (...) {
+        return 0;
+    }
+}
+
+void Config::SetTheme(int theme) {
+    if (m_storage) {
+        m_storage->SetConfig("theme", std::to_wstring(theme));
+    }
 }
 
 } // namespace mn

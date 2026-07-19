@@ -12,78 +12,29 @@ using json = nlohmann::json;
 
 void Storage::Initialize(const std::wstring& path) {
     m_path = path;
-    // 创建空的 JSON 结构，确保后续保存时有数据
     if (!PathUtils::Exists(path)) {
         SaveToFile();
     }
 }
 
-bool Storage::Load(const std::wstring& path) {
-    m_path = path;
+bool Storage::RotateBackups() {
+    std::wstring bak1 = m_path + L".bak1";
+    std::wstring bak2 = m_path + L".bak2";
+    std::wstring bak3 = m_path + L".bak3";
     
-    std::ifstream file(path);
-    if (!file.is_open()) return false;
-    
-    try {
-        json j;
-        file >> j;
-        
-        if (j.contains("categories") && j["categories"].is_array()) {
-            for (const auto& cat : j["categories"]) {
-                Category c;
-                c.id = StringUtils::Utf8ToWString(cat.value("id", ""));
-                c.name = StringUtils::Utf8ToWString(cat.value("name", ""));
-                c.sortOrder = cat.value("sortOrder", 0);
-                c.viewType = static_cast<ViewType>(cat.value("viewType", 0));
-                c.iconSize = cat.value("iconSize", 48);
-                m_categories.push_back(c);
-            }
-        }
-        
-        if (j.contains("items") && j["items"].is_array()) {
-            for (const auto& item : j["items"]) {
-                Item i;
-                i.id = StringUtils::Utf8ToWString(item.value("id", ""));
-                i.name = StringUtils::Utf8ToWString(item.value("name", ""));
-                i.target = StringUtils::Utf8ToWString(item.value("target", ""));
-                i.arguments = StringUtils::Utf8ToWString(item.value("arguments", ""));
-                i.workingDir = StringUtils::Utf8ToWString(item.value("workingDir", ""));
-                i.iconPath = StringUtils::Utf8ToWString(item.value("iconPath", ""));
-                i.iconIndex = item.value("iconIndex", 0);
-                i.runAsAdmin = item.value("runAsAdmin", false);
-                i.runCount = item.value("runCount", 0);
-                i.keywords = StringUtils::Utf8ToWString(item.value("keywords", ""));
-                i.remark = StringUtils::Utf8ToWString(item.value("remark", ""));
-                i.categoryId = StringUtils::Utf8ToWString(item.value("categoryId", ""));
-                i.sortOrder = item.value("sortOrder", 0);
-                m_items.push_back(i);
-            }
-        }
-        
-        if (j.contains("config") && j["config"].is_object()) {
-            for (auto& [key, val] : j["config"].items()) {
-                if (val.is_string()) {
-                    m_config[key] = StringUtils::Utf8ToWString(val.get<std::string>());
-                }
-            }
-        }
-        
-        return true;
-    } catch (const std::exception& e) {
-        // 输出错误日志到调试窗口
-        OutputDebugStringA("Storage::Load failed: ");
-        OutputDebugStringA(e.what());
-        OutputDebugStringA("\n");
-        return false;
-    } catch (...) {
-        OutputDebugStringA("Storage::Load failed: unknown error\n");
-        return false;
+    // bak2 -> bak3
+    if (PathUtils::Exists(bak2)) {
+        MoveFileExW(bak2.c_str(), bak3.c_str(), MOVEFILE_REPLACE_EXISTING);
     }
-}
-
-bool Storage::Save(const std::wstring& path) {
-    m_path = path;
-    return SaveToFile();
+    // bak1 -> bak2
+    if (PathUtils::Exists(bak1)) {
+        MoveFileExW(bak1.c_str(), bak2.c_str(), MOVEFILE_REPLACE_EXISTING);
+    }
+    // current -> bak1
+    if (PathUtils::Exists(m_path)) {
+        return CopyFileW(m_path.c_str(), bak1.c_str(), FALSE) != FALSE;
+    }
+    return true;
 }
 
 bool Storage::SaveToFile() {
@@ -122,11 +73,97 @@ bool Storage::SaveToFile() {
         j["config"][key] = StringUtils::WStringToUtf8(val);
     }
     
-    std::ofstream file(m_path);
+    RotateBackups();
+    
+    // 写入临时文件，然后原子重命名
+    std::wstring tmpPath = m_path + L".tmp";
+    {
+        std::ofstream file(tmpPath);
+        if (!file.is_open()) {
+            DeleteFileW(tmpPath.c_str());
+            return false;
+        }
+        file << j.dump(4);
+    }
+    
+    if (!MoveFileExW(tmpPath.c_str(), m_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(tmpPath.c_str());
+        return false;
+    }
+    
+    return true;
+}
+
+bool Storage::Load(const std::wstring& path) {
+    m_path = path;
+    
+    m_categories.clear();
+    m_items.clear();
+    m_config.clear();
+    
+    std::ifstream file(path);
     if (!file.is_open()) return false;
     
-    file << j.dump(4);
-    return true;
+    try {
+        json j;
+        file >> j;
+        
+        if (j.contains("categories") && j["categories"].is_array()) {
+            for (const auto& cat : j["categories"]) {
+                Category c;
+                c.id = StringUtils::Utf8ToWString(cat.value("id", ""));
+                c.name = StringUtils::Utf8ToWString(cat.value("name", ""));
+                c.sortOrder = cat.value("sortOrder", 0);
+                int vt = cat.value("viewType", 0);
+                c.viewType = (vt == 0 || vt == 1) ? static_cast<ViewType>(vt) : ViewType::Icon;
+                c.iconSize = cat.value("iconSize", 48);
+                m_categories.push_back(c);
+            }
+        }
+        
+        if (j.contains("items") && j["items"].is_array()) {
+            for (const auto& item : j["items"]) {
+                Item i;
+                i.id = StringUtils::Utf8ToWString(item.value("id", ""));
+                i.name = StringUtils::Utf8ToWString(item.value("name", ""));
+                i.target = StringUtils::Utf8ToWString(item.value("target", ""));
+                i.arguments = StringUtils::Utf8ToWString(item.value("arguments", ""));
+                i.workingDir = StringUtils::Utf8ToWString(item.value("workingDir", ""));
+                i.iconPath = StringUtils::Utf8ToWString(item.value("iconPath", ""));
+                i.iconIndex = (std::max)(0, item.value("iconIndex", 0));
+                i.runAsAdmin = item.value("runAsAdmin", false);
+                i.runCount = (std::max)(0, item.value("runCount", 0));
+                i.keywords = StringUtils::Utf8ToWString(item.value("keywords", ""));
+                i.remark = StringUtils::Utf8ToWString(item.value("remark", ""));
+                i.categoryId = StringUtils::Utf8ToWString(item.value("categoryId", ""));
+                i.sortOrder = item.value("sortOrder", 0);
+                m_items.push_back(i);
+            }
+        }
+        
+        if (j.contains("config") && j["config"].is_object()) {
+            for (auto& [key, val] : j["config"].items()) {
+                if (val.is_string()) {
+                    m_config[key] = StringUtils::Utf8ToWString(val.get<std::string>());
+                }
+            }
+        }
+        
+        return true;
+    } catch (const std::exception& e) {
+        OutputDebugStringA("Storage::Load failed: ");
+        OutputDebugStringA(e.what());
+        OutputDebugStringA("\n");
+        return false;
+    } catch (...) {
+        OutputDebugStringA("Storage::Load failed: unknown error\n");
+        return false;
+    }
+}
+
+bool Storage::Save(const std::wstring& path) {
+    m_path = path;
+    return SaveToFile();
 }
 
 std::vector<Category> Storage::GetCategories() const {

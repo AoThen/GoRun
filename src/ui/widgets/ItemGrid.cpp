@@ -35,10 +35,7 @@ void ItemGrid::Render() {
 }
 
 float ItemGrid::GetHoverScale(const std::wstring& itemId, bool isHovered) {
-    // 获取当前时间
-    float time = ImGui::GetTime();
-    float deltaTime = time - m_lastTime;
-    m_lastTime = time;
+    float deltaTime = ImGui::GetIO().DeltaTime;
     
     // 限制 deltaTime 防止跳帧
     if (deltaTime > 0.1f) deltaTime = 0.1f;

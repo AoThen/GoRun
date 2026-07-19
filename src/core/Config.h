@@ -24,6 +24,10 @@ public:
     bool GetAutoStart() const;
     void SetAutoStart(bool enabled);
     bool IsAutoStartEnabled() const;  // 检查注册表实际状态
+    
+    // 主题
+    int GetTheme() const;
+    void SetTheme(int theme);
 
 private:
     Storage* m_storage = nullptr;

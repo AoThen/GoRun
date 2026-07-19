@@ -5,6 +5,7 @@
 #include "core/IconTextureManager.h"
 #include "utils/StringUtils.h"
 #include "ui/Theme.h"
+#include "app/App.h"
 #include <imgui.h>
 #include <algorithm>
 #include <windows.h>
@@ -16,6 +17,9 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     m_config = config;
     m_runner = runner;
     m_iconTextureManager = iconTextureManager;
+    
+    // 恢复保存的主题
+    ApplyTheme(static_cast<ThemeType>(m_config->GetTheme()));
     
     m_categoryTab.SetCategories(&itemManager->GetCategories());
     
@@ -101,9 +105,10 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     
     // 删除项目
     m_itemGrid.OnItemDelete([this](const Item& item) {
-        m_itemGrid.ClearHoverAnimation(item.id);  // 清理动画状态
-        m_itemManager->DeleteItem(item.id);
-        RefreshItems();
+        m_deleteItemId = item.id;
+        m_deleteItemName = item.name;
+        m_showDeleteConfirm = true;
+        m_openDeletePopup = true;
     });
     
     // 刷新图标
@@ -130,6 +135,19 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
 
 void MainWindow::Render() {
     if (!m_visible) return;
+    
+    // Escape 键处理：清除搜索或关闭窗口
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        if (m_isSearching) {
+            m_searchBuf[0] = '\0';
+            m_isSearching = false;
+            m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+        } else if (m_editDialog.IsVisible()) {
+            m_editDialog.Hide();
+        } else {
+            App::Get()->ToggleWindow();
+        }
+    }
     
     // 菜单栏
     if (ImGui::BeginMenuBar()) {
@@ -201,6 +219,9 @@ void MainWindow::Render() {
     // 分类重命名对话框
     RenderRenameCategoryDialog();
     
+    // 删除确认对话框
+    RenderDeleteConfirmDialog();
+    
     if (m_showError) {
         // 只在首次显示时打开弹窗
         if (m_openErrorPopup) {
@@ -265,8 +286,25 @@ void MainWindow::RenderSearchBar() {
         
         if (m_isSearching) {
             UpdateSearchResults();
+            m_searchSelectedIndex = -1;
         } else {
             m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+        }
+    }
+    
+    // 搜索键盘导航
+    if (m_isSearching && !m_searchResults.empty()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false)) {
+            m_searchSelectedIndex = (m_searchSelectedIndex + 1) % static_cast<int>(m_searchResults.size());
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false)) {
+            m_searchSelectedIndex = (m_searchSelectedIndex - 1 + static_cast<int>(m_searchResults.size())) % static_cast<int>(m_searchResults.size());
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) && m_searchSelectedIndex >= 0) {
+            RunResult result = m_runner->Run(m_searchResults[m_searchSelectedIndex]);
+            if (!result.success) {
+                ShowError(result.errorMessage);
+            }
         }
     }
     
@@ -289,6 +327,9 @@ void MainWindow::RenderSearchBar() {
     const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "浅色" : "深色";
     if (ImGui::Button(themeLabel, ImVec2(50, 0))) {
         ToggleTheme();
+        if (m_config) {
+            m_config->SetTheme(static_cast<int>(GetCurrentTheme()));
+        }
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", (GetCurrentTheme() == ThemeType::Light) ? "切换到深色主题" : "切换到浅色主题");
@@ -393,6 +434,45 @@ void MainWindow::RenderRenameCategoryDialog() {
     } else {
         // 弹窗被用户关闭（点击外部或按 ESC），重置状态
         m_showRenameCategory = false;
+    }
+}
+
+void MainWindow::RenderDeleteConfirmDialog() {
+    if (!m_showDeleteConfirm) return;
+    
+    if (m_openDeletePopup) {
+        ImGui::OpenPopup("确认删除");
+        m_openDeletePopup = false;
+    }
+    
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(320, 0));
+    
+    if (ImGui::BeginPopupModal("确认删除", nullptr, ImGuiWindowFlags_NoResize)) {
+        std::string displayName = StringUtils::WStringToUtf8(m_deleteItemName);
+        if (displayName.length() > 30) {
+            displayName = displayName.substr(0, 30) + "...";
+        }
+        ImGui::Text("确定要删除 \"%s\" 吗？", displayName.c_str());
+        ImGui::TextUnformatted("此操作不可撤销。");
+        ImGui::Separator();
+        
+        if (ImGui::Button("确定删除", ImVec2(120, 0))) {
+            m_itemGrid.ClearHoverAnimation(m_deleteItemId);
+            m_itemManager->DeleteItem(m_deleteItemId);
+            RefreshItems();
+            m_showDeleteConfirm = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("取消", ImVec2(120, 0))) {
+            m_showDeleteConfirm = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    } else {
+        m_showDeleteConfirm = false;
     }
 }
 

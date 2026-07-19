@@ -22,6 +22,7 @@ public:
     // 纹理加载
     void* LoadTexture(const std::wstring& path);
     void UnloadTexture(void* texture);
+    void UnloadTextureByPath(const std::wstring& path);
     int GetTextureWidth(void* texture);
     int GetTextureHeight(void* texture);
 

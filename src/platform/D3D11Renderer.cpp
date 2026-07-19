@@ -362,7 +362,24 @@ void* D3D11Renderer::LoadTexture(const std::wstring& path) {
 
 void D3D11Renderer::UnloadTexture(void* texture) {
 #ifdef _WIN32
-    // 纹理由缓存管理，暂不释放
+    // 从缓存中移除并释放纹理
+    for (auto it = s_textureCache.begin(); it != s_textureCache.end(); ++it) {
+        if (it->second == texture) {
+            if (it->second) it->second->Release();
+            s_textureCache.erase(it);
+            break;
+        }
+    }
+#endif
+}
+
+void D3D11Renderer::UnloadTextureByPath(const std::wstring& path) {
+#ifdef _WIN32
+    auto it = s_textureCache.find(path);
+    if (it != s_textureCache.end()) {
+        if (it->second) it->second->Release();
+        s_textureCache.erase(it);
+    }
 #endif
 }
 

@@ -211,6 +211,15 @@ TEST_F(ConfigTest, WindowPosition_Extreme) {
     m_config->SetWindowPosition(10000, 10000);
     EXPECT_EQ(m_config->GetWindowX(), 10000);
     EXPECT_EQ(m_config->GetWindowY(), 10000);
+    
+    // 超出范围的值会被限制
+    m_config->SetWindowPosition(-10001, -10001);
+    EXPECT_EQ(m_config->GetWindowX(), 100);
+    EXPECT_EQ(m_config->GetWindowY(), 100);
+
+    m_config->SetWindowPosition(10001, 10001);
+    EXPECT_EQ(m_config->GetWindowX(), 100);
+    EXPECT_EQ(m_config->GetWindowY(), 100);
 }
 
 TEST_F(ConfigTest, WindowSize_Extreme) {

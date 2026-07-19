@@ -23,6 +23,7 @@ public:
     void Toggle();
     bool IsVisible() const;
     void SetCurrentCategory(const std::wstring& categoryId);
+    const std::wstring& GetCurrentCategoryId() const { return m_currentCategoryId; }
     void ToggleViewType();
 
 private:
@@ -32,6 +33,7 @@ private:
     void RefreshItems();
     void ShowError(const std::wstring& message);
     void RenderRenameCategoryDialog();
+    void RenderDeleteConfirmDialog();
     
     ItemManager* m_itemManager = nullptr;
     Config* m_config = nullptr;
@@ -54,6 +56,7 @@ private:
     char m_pendingSearchBuf[256] = {};
     bool m_searchPending = false;
     bool m_focusSearch = true;   // 首次显示时聚焦搜索框
+    int m_searchSelectedIndex = -1;
     
     std::wstring m_errorMessage;
     bool m_showError = false;
@@ -66,7 +69,12 @@ private:
     
     // 视图切换
     ViewType m_currentViewType = ViewType::Icon;
-    std::function<void(ViewType)> m_onViewTypeChanged;
+    
+    // 删除确认对话框
+    bool m_showDeleteConfirm = false;
+    bool m_openDeletePopup = false;
+    std::wstring m_deleteItemId;
+    std::wstring m_deleteItemName;
 };
 
 } // namespace mn

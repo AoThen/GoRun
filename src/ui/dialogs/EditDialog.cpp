@@ -134,15 +134,35 @@ void EditDialog::Render() {
         ImGui::Separator();
         
         if (ImGui::Button("保存", ImVec2(120, 0))) {
-            SaveToItem();
-            if (m_onSave) {
-                m_onSave(*m_item);
+            // 输入验证
+            if (m_nameBuf.empty() || m_targetBuf.empty()) {
+                ImGui::OpenPopup("输入错误");
+            } else {
+                SaveToItem();
+                if (m_onSave) {
+                    m_onSave(*m_item);
+                }
+                Hide();
             }
-            Hide();
         }
         ImGui::SameLine();
         if (ImGui::Button("取消", ImVec2(120, 0))) {
             Hide();
+        }
+        
+        // 输入错误提示
+        if (ImGui::BeginPopupModal("输入错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (m_nameBuf.empty() && m_targetBuf.empty()) {
+                ImGui::Text("名称和目标路径不能为空");
+            } else if (m_nameBuf.empty()) {
+                ImGui::Text("名称不能为空");
+            } else {
+                ImGui::Text("目标路径不能为空");
+            }
+            if (ImGui::Button("确定", ImVec2(100, 0))) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
         
         ImGui::EndPopup();
@@ -180,7 +200,7 @@ void EditDialog::SaveToItem() {
     m_item->keywords = StringUtils::Utf8ToWString(m_keywordsBuf);
     m_item->remark = StringUtils::Utf8ToWString(m_remarkBuf);
     m_item->iconPath = StringUtils::Utf8ToWString(m_iconPathBuf);
-    m_item->iconIndex = m_iconIndex;
+    m_item->iconIndex = (std::max)(0, (std::min)(m_iconIndex, 1000));
     m_item->runAsAdmin = m_runAsAdmin;
 }
 

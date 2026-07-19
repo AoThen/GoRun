@@ -14,6 +14,7 @@ public:
     void Initialize(const std::wstring& cacheDir);
     
     std::wstring GetIconPath(const Item& item);
+    std::wstring GetCachePath(const std::wstring& itemId) const;
     void RefreshIcon(const Item& item);
     void DeleteCache(const std::wstring& itemId);
 

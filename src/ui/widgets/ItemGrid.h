@@ -39,7 +39,6 @@ private:
     
     // 悬停动画状态
     std::unordered_map<std::wstring, float> m_hoverAnimState;
-    float m_lastTime = 0.0f;
     
     std::function<void(const Item&)> m_onClick;
     std::function<void(const Item&)> m_onRunAsAdmin;
