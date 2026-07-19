@@ -26,9 +26,18 @@ private:
 } // namespace mn
 
 // 便利宏
+#ifdef _DEBUG
 #define LOG_DEBUG(msg)    ::mn::Logger::Log(::mn::LogLevel::Debug, (msg))
 #define LOG_INFO(msg)     ::mn::Logger::Log(::mn::LogLevel::Info, (msg))
 #define LOG_ERROR(msg)    ::mn::Logger::Log(::mn::LogLevel::Error, (msg))
 #define LOG_DEBUGW(msg)   ::mn::Logger::LogW(::mn::LogLevel::Debug, (msg))
 #define LOG_INFOW(msg)    ::mn::Logger::LogW(::mn::LogLevel::Info, (msg))
 #define LOG_ERRORW(msg)   ::mn::Logger::LogW(::mn::LogLevel::Error, (msg))
+#else
+#define LOG_DEBUG(msg)    ((void)0)
+#define LOG_INFO(msg)     ((void)0)
+#define LOG_ERROR(msg)    ::mn::Logger::Log(::mn::LogLevel::Error, (msg))
+#define LOG_DEBUGW(msg)   ((void)0)
+#define LOG_INFOW(msg)    ((void)0)
+#define LOG_ERRORW(msg)   ::mn::Logger::LogW(::mn::LogLevel::Error, (msg))
+#endif

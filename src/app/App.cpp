@@ -34,7 +34,9 @@ App* App::Get() {
 
 bool App::Initialize(HINSTANCE hInstance) {
     s_instance = this;
+#ifdef _DEBUG
     Logger::Init();
+#endif
     m_hInstance = hInstance;
     
     // 设置 DPI 感知，确保在高 DPI 显示器上字体清晰
@@ -233,7 +235,9 @@ void App::Shutdown() {
     if (m_renderer) m_renderer->Shutdown();
     if (m_hotkeyManager) m_hotkeyManager->UnregisterGlobalHotkey(1);
 
+#ifdef _DEBUG
     Logger::Shutdown();
+#endif
 
     CoUninitialize();
 
