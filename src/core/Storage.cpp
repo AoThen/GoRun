@@ -14,6 +14,7 @@ using json = nlohmann::json;
 void Storage::Initialize(const std::wstring& path) {
     m_path = path;
     if (!PathUtils::Exists(path)) {
+        m_dirty = true;
         SaveToFile();
     }
 }
@@ -191,6 +192,7 @@ bool Storage::Load(const std::wstring& path) {
 
 bool Storage::Save(const std::wstring& path) {
     m_path = path;
+    m_dirty = true;
     return SaveToFile();
 }
 
