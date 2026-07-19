@@ -1,6 +1,7 @@
 #include "Storage.h"
 #include "utils/StringUtils.h"
 #include "utils/PathUtils.h"
+#include "utils/Logger.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <algorithm>
@@ -151,12 +152,10 @@ bool Storage::Load(const std::wstring& path) {
         
         return true;
     } catch (const std::exception& e) {
-        OutputDebugStringA("Storage::Load failed: ");
-        OutputDebugStringA(e.what());
-        OutputDebugStringA("\n");
+        LOG_ERROR(std::string("Storage::Load failed: ") + e.what());
         return false;
     } catch (...) {
-        OutputDebugStringA("Storage::Load failed: unknown error\n");
+        LOG_ERROR("Storage::Load failed: unknown error");
         return false;
     }
 }

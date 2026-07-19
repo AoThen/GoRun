@@ -8,6 +8,7 @@
 #include <gdiplus.h>
 #include <unordered_map>
 #include "../ui/Theme.h"
+#include "utils/Logger.h"
 #pragma comment(lib, "gdiplus.lib")
 #endif
 
@@ -183,15 +184,13 @@ bool D3D11Renderer::Initialize(void* hwnd, int width, int height) {
     for (const char* path : fontPaths) {
         font = io.Fonts->AddFontFromFileTTF(path, fontSize, &config, ranges.Data);
         if (font) {
-            OutputDebugStringA("Font loaded: ");
-            OutputDebugStringA(path);
-            OutputDebugStringA("\n");
+            LOG_INFO(std::string("Font loaded: ") + path);
             break;
         }
     }
     
     if (!font) {
-        OutputDebugStringA("Failed to load Chinese font, using default\n");
+        LOG_INFO("Failed to load Chinese font, using default");
         // 默认字体不支持中文，需要使用内置的紧凑字符集
         io.Fonts->AddFontDefault();
     }

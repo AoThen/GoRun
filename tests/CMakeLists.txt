@@ -23,6 +23,7 @@ target_include_directories(GoRunTests PRIVATE
 set(TEST_UTIL_SOURCES
     "${CMAKE_SOURCE_DIR}/src/utils/StringUtils.cpp"
     "${CMAKE_SOURCE_DIR}/src/utils/PathUtils.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/Logger.cpp"
     "${CMAKE_SOURCE_DIR}/src/core/Storage.cpp"
     "${CMAKE_SOURCE_DIR}/src/core/Config.cpp"
 )

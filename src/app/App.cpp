@@ -12,6 +12,7 @@
 #include "platform/TrayIcon.h"
 #include "ui/MainWindow.h"
 #include "utils/PathUtils.h"
+#include "utils/Logger.h"
 #include <imgui.h>
 
 namespace mn {
@@ -33,6 +34,7 @@ App* App::Get() {
 
 bool App::Initialize(HINSTANCE hInstance) {
     s_instance = this;
+    Logger::Init();
     m_hInstance = hInstance;
     
     // 设置 DPI 感知，确保在高 DPI 显示器上字体清晰
@@ -97,7 +99,7 @@ bool App::Initialize(HINSTANCE hInstance) {
                 restored = m_storage->Load(bak3);
             }
             if (!restored) {
-                OutputDebugStringW(L"App: Failed to load config, starting with empty data\n");
+                LOG_ERRORW(L"App: Failed to load config, starting with empty data");
             }
         }
     }
@@ -155,7 +157,7 @@ bool App::Initialize(HINSTANCE hInstance) {
     unsigned int modifiers, vk;
     if (m_hotkeyManager->ParseHotkeyString(hotkey, modifiers, vk)) {
         if (!m_hotkeyManager->RegisterGlobalHotkey(1, modifiers, vk)) {
-            OutputDebugStringW(L"App: Failed to register global hotkey\n");
+            LOG_ERRORW(L"App: Failed to register global hotkey");
         }
     }
     
@@ -226,7 +228,9 @@ void App::Shutdown() {
     m_trayIcon->Destroy();
     m_renderer->Shutdown();
     m_hotkeyManager->UnregisterGlobalHotkey(1);
-    
+
+    Logger::Shutdown();
+
     // 释放单实例互斥体
     if (m_hMutex) {
         ReleaseMutex(m_hMutex);

@@ -1,5 +1,6 @@
 #include "IconCache.h"
 #include "utils/PathUtils.h"
+#include "utils/Logger.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -127,7 +128,7 @@ void IconCache::RefreshIcon(const Item& item) {
                 Gdiplus::Status status = bitmap->Save(cachePath.c_str(), &clsid, nullptr);
                 if (status != Gdiplus::Ok) {
                     // 保存失败
-                    OutputDebugStringW(L"IconCache: Failed to save icon\n");
+                    LOG_ERRORW(L"IconCache: Failed to save icon");
                 }
             }
             delete bitmap;
