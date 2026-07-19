@@ -4,6 +4,7 @@
 #include "utils/PathUtils.h"
 #include "utils/StringUtils.h"
 #include <algorithm>
+#include <cwctype>
 
 #ifdef _WIN32
 #include <ShObjIdl.h>
@@ -65,6 +66,11 @@ void ItemManager::DeleteCategory(const std::wstring& id) {
     if (it != m_itemsByCategory.end()) {
         for (const auto& item : it->second) {
             m_iconCache->DeleteCache(item.id);
+            m_allItems.erase(
+                std::remove_if(m_allItems.begin(), m_allItems.end(),
+                    [&](const Item& i) { return i.id == item.id; }),
+                m_allItems.end()
+            );
         }
         m_itemsByCategory.erase(it);
     }
@@ -187,8 +193,10 @@ void ItemManager::HandleDrop(const std::vector<std::wstring>& files, const std::
         item.target = file;
         item.workingDir = PathUtils::GetParentDir(file);
         
-        // 检查是否为快捷方式
-        if (file.size() > 4 && file.substr(file.size() - 4) == L".lnk") {
+        // 检查是否为快捷方式（大小写不敏感）
+        std::wstring ext = file.size() > 4 ? file.substr(file.size() - 4) : L"";
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+        if (ext == L".lnk") {
             ShortcutInfo shortcut = ResolveShortcut(file);
             if (shortcut.success) {
                 item.target = shortcut.target;
@@ -217,7 +225,7 @@ ItemManager::ShortcutInfo ItemManager::ResolveShortcut(const std::wstring& lnkPa
     
 #ifdef _WIN32
     HRESULT hr = CoInitialize(nullptr);
-    bool needUninitialize = SUCCEEDED(hr);
+    bool needUninitialize = (hr == S_OK);
     
     IShellLinkW* pShellLink = nullptr;
     IPersistFile* pPersistFile = nullptr;

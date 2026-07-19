@@ -34,6 +34,7 @@ private:
     void ShowError(const std::wstring& message);
     void RenderRenameCategoryDialog();
     void RenderDeleteConfirmDialog();
+    void HandleNewItem();
     
     ItemManager* m_itemManager = nullptr;
     Config* m_config = nullptr;
@@ -75,6 +76,10 @@ private:
     bool m_openDeletePopup = false;
     std::wstring m_deleteItemId;
     std::wstring m_deleteItemName;
+
+    // 新建项目
+    Item m_newItem;
+    bool m_editingNewItem = false;
 };
 
 } // namespace mn

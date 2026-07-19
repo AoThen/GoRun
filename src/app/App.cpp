@@ -188,10 +188,6 @@ int App::Run() {
         if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
-            
-            if (msg.message == WM_HOTKEY) {
-                m_hotkeyManager->ProcessHotkey(static_cast<int>(msg.wParam));
-            }
         } else if (m_mainWindow->IsVisible()) {
             m_renderer->NewFrame();
             

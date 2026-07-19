@@ -1,5 +1,6 @@
 #include "HotkeyManager.h"
 #include "utils/StringUtils.h"
+#include <cwctype>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -55,7 +56,7 @@ bool HotkeyManager::ParseHotkeyString(const std::wstring& hotkey, unsigned int& 
 #endif
         } else if (i == parts.size() - 1) {
             if (part.size() == 1) {
-                vk = toupper(part[0]);
+                vk = towupper(part[0]);
             }
 #ifdef _WIN32
             else if (part == L"F1") vk = VK_F1;

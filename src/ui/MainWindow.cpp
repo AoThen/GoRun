@@ -100,6 +100,7 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     
     // 编辑项目
     m_itemGrid.OnItemEdit([this](Item& item) {
+        m_editingNewItem = false;
         m_editDialog.Show(&item);
     });
     
@@ -121,9 +122,18 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     
     // 编辑保存后刷新并保存
     m_editDialog.OnSave([this](const Item& item) {
-        // 更新项目到存储
-        m_itemManager->UpdateItem(item);
+        if (m_editingNewItem) {
+            m_itemManager->AddItem(item);
+            m_editingNewItem = false;
+        } else {
+            m_itemManager->UpdateItem(item);
+        }
         RefreshItems();
+    });
+    
+    // 新建项目回调
+    m_itemGrid.OnItemAdd([this]() {
+        HandleNewItem();
     });
     
     auto& categories = itemManager->GetCategories();
@@ -152,12 +162,23 @@ void MainWindow::Render() {
     // 菜单栏
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("文件")) {
+            if (ImGui::MenuItem("新建项目")) {
+                HandleNewItem();
+            }
             if (ImGui::MenuItem("新建分类")) {
                 Category cat;
                 cat.id = GenerateId(L"cat");
                 cat.name = L"新分类";
                 m_itemManager->AddCategory(cat);
                 m_categoryTab.SetCategories(&m_itemManager->GetCategories());
+                m_currentCategoryId = cat.id;
+                m_categoryTab.SetCurrentCategory(cat.id);
+                m_itemGrid.SetItems(&m_itemManager->GetItems(cat.id));
+                std::string name = StringUtils::WStringToUtf8(cat.name);
+                strncpy(m_renameCategoryBuf, name.c_str(), sizeof(m_renameCategoryBuf) - 1);
+                m_renameCategoryBuf[sizeof(m_renameCategoryBuf) - 1] = '\0';
+                m_showRenameCategory = true;
+                m_openRenamePopup = true;
             }
             if (ImGui::MenuItem("删除当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
                 if (!m_currentCategoryId.empty()) {
@@ -479,6 +500,20 @@ void MainWindow::RenderDeleteConfirmDialog() {
 void MainWindow::ToggleViewType() {
     m_currentViewType = (m_currentViewType == ViewType::Icon) ? ViewType::List : ViewType::Icon;
     m_itemGrid.SetViewType(m_currentViewType);
+}
+
+void MainWindow::HandleNewItem() {
+    m_editingNewItem = false;
+    if (m_currentCategoryId.empty()) {
+        auto& categories = m_itemManager->GetCategories();
+        if (categories.empty()) return;
+        m_currentCategoryId = categories[0].id;
+    }
+    m_newItem = Item();
+    m_newItem.id = GenerateId(L"item");
+    m_newItem.categoryId = m_currentCategoryId;
+    m_editingNewItem = true;
+    m_editDialog.Show(&m_newItem);
 }
 
 } // namespace mn

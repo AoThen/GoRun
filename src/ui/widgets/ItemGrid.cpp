@@ -68,6 +68,13 @@ void ItemGrid::RenderIconView() {
             ? ImVec4(0.5f, 0.5f, 0.5f, 1.0f) 
             : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
         ImGui::TextColored(emptyColor, "暂无项目");
+        if (ImGui::BeginPopupContextWindow("empty_area_context", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::MenuItem("新建项目")) {
+                if (m_onAddItem) m_onAddItem();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
         ImGui::EndChild();
         ImGui::PopStyleVar();
         return;
@@ -202,6 +209,13 @@ void ItemGrid::RenderListView() {
     
     if (!m_items || m_items->empty()) {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "暂无项目");
+        if (ImGui::BeginPopupContextWindow("empty_area_context", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::MenuItem("新建项目")) {
+                if (m_onAddItem) m_onAddItem();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
         ImGui::EndChild();
         ImGui::PopStyleVar();
         return;
@@ -379,6 +393,10 @@ void ItemGrid::OnItemDelete(std::function<void(const Item&)> callback) {
 
 void ItemGrid::OnItemRefreshIcon(std::function<void(const Item&)> callback) {
     m_onRefreshIcon = callback;
+}
+
+void ItemGrid::OnItemAdd(std::function<void()> callback) {
+    m_onAddItem = callback;
 }
 
 } // namespace mn

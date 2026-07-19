@@ -23,6 +23,7 @@ public:
     void OnItemEdit(std::function<void(Item&)> callback);
     void OnItemDelete(std::function<void(const Item&)> callback);
     void OnItemRefreshIcon(std::function<void(const Item&)> callback);
+    void OnItemAdd(std::function<void()> callback);
 
 private:
     void RenderIconView();
@@ -45,6 +46,7 @@ private:
     std::function<void(Item&)> m_onEdit;
     std::function<void(const Item&)> m_onDelete;
     std::function<void(const Item&)> m_onRefreshIcon;
+    std::function<void()> m_onAddItem;
 };
 
 } // namespace mn
