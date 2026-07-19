@@ -22,16 +22,12 @@ void Config::SetGlobalHotkey(const std::wstring& hotkey) {
 }
 
 static int ClampToScreenX(int pos) {
-    int minX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int maxX = minX + GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    if (pos < minX - 100 || pos > maxX - 100) return 100;
+    if (pos < -10000 || pos > 10000) return 100;
     return pos;
 }
 
 static int ClampToScreenY(int pos) {
-    int minY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int maxY = minY + GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    if (pos < minY - 100 || pos > maxY - 100) return 100;
+    if (pos < -10000 || pos > 10000) return 100;
     return pos;
 }
 
