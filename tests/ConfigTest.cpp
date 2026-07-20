@@ -257,7 +257,7 @@ TEST_F(ConfigTest, FollowMouse_Persistence) {
     
     // 新建 storage 和 config 验证持久化
     Storage storage2;
-    storage2.Initialize(m_testFile);
+    storage2.Load(m_testFile);
     Config config2;
     config2.Initialize(&storage2);
     EXPECT_TRUE(config2.GetFollowMouse());
