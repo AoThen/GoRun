@@ -4,6 +4,8 @@ mod icon_cache;
 mod item_manager;
 mod localization;
 mod model;
+#[cfg(windows)]
+mod platform;
 mod runner;
 mod storage;
 mod tray;
@@ -39,6 +41,63 @@ fn main() {
 
     let ui = MainWindow::new().unwrap();
 
+    // Setup drag and drop message channel
+    let drop_rx = {
+        let window = ui.window();
+        #[cfg(windows)]
+        {
+            use raw_window_handle::HasWindowHandle;
+            use raw_window_handle::Win32WindowHandle;
+            if let Ok(handle) = window.window_handle() {
+                if let raw_window_handle::RawWindowHandle::Win32(Win32WindowHandle { hwn, .. }) = handle {
+                    platform::setup_dragdrop(hwn as isize)
+                } else {
+                    let (_tx, rx) = std::sync::mpsc::channel::<platform::DropMessage>();
+                    rx
+                }
+            } else {
+                let (_tx, rx) = std::sync::mpsc::channel::<platform::DropMessage>();
+                rx
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let (_tx, rx) = std::sync::mpsc::channel::<platform::DropMessage>();
+            rx
+        }
+    };
+
+    // Poll for dropped files on each UI tick
+    let ui_weak = ui.as_weak();
+    slint::Timer::default().start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(50),
+        move || {
+            if let Ok(msg) = drop_rx.try_recv() {
+                match msg {
+                    platform::DropMessage::Drop(paths) => {
+                        for path in paths {
+                            let target = path.display().to_string().into();
+                            let name = path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("Unknown")
+                                .to_string()
+                                .into();
+                            // invoke add_item callback via global state
+                            ui_weak
+                                .upgrade()
+                                .map(|ui| ui.invoke_file_dropped(name, target));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        },
+    );
+
+    wire_handler(&ui, &mut manager);
+
     let categories: Vec<CategoryModel> = manager
         .categories()
         .iter()
@@ -47,29 +106,31 @@ fn main() {
             name: c.name.clone().into(),
         })
         .collect();
-
     let category_model = slint::VecModel::from(categories);
-    ui.set_categories(category_model.clone().into());
-
-    let items: Vec<ItemModel> = manager
-        .items("")
-        .iter()
-        .map(|i| ItemModel {
-            id: i.id.clone().into(),
-            name: i.name.clone().into(),
-            target: i.target.clone().into(),
-            icon_path: i.icon_path.clone().into(),
-        })
-        .collect();
-
-    let item_model = slint::VecModel::from(items);
-    ui.set_items(item_model.into());
+    ui.set_categories(category_model.into());
 
     ui.run().unwrap();
 
     if manager.is_modified() {
         let _ = storage.save(manager.config());
     }
+}
+
+fn wire_handler(ui: &MainWindow, _manager: &mut ItemManager) {
+    let ui_weak = ui.as_weak();
+    ui.on_file_dropped(move |name, target| {
+        let _ = (name, target);
+        if let Some(ui) = ui_weak.upgrade() {
+            // Placeholder: real manager integration would go here
+            let items = ui.get_items();
+            slint::VecModel::push(&items, ItemModel {
+                id: "item_pending".into(),
+                name,
+                target,
+                icon_path: "".into(),
+            });
+        }
+    });
 }
 
 #[derive(Clone, Default, slint::PartialEq)]
@@ -84,4 +145,31 @@ pub struct ItemModel {
     pub name: slint::SharedString,
     pub target: slint::SharedString,
     pub icon_path: slint::SharedString,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::generate_id;
+
+    #[test]
+    fn test_create_category_model() {
+        let cat = CategoryModel {
+            id: "cat_1".into(),
+            name: "Games".into(),
+        };
+        assert_eq!(cat.id, "cat_1");
+        assert_eq!(cat.name, "Games");
+    }
+
+    #[test]
+    fn test_create_item_model() {
+        let item = ItemModel {
+            id: "item_1".into(),
+            name: "Notepad".into(),
+            target: "C:\\Windows\\notepad.exe".into(),
+            icon_path: "".into(),
+        };
+        assert_eq!(item.name, "Notepad");
+    }
 }

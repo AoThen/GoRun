@@ -11,75 +11,156 @@ export component MainWindow inherits Window {
     callback category-selected(index: int);
     callback new-item-clicked();
     callback refresh-icons();
+    callback file-dropped(name: string, target: string);
+    callback item-double-clicked(index: int);
+    callback item-right-clicked(index: int);
+    callback toggle-view();
+    callback toggle-theme();
 
     property <[CategoryModel]> categories;
     property <[ItemModel]> items;
+    property <string> search-text: "";
+    property <bool> is-dark-theme: true;
+    property <bool> is-icon-view: true;
+    property <string> status-text: "Ready";
+    property <bool> drop-active: false;
 
-    HorizontalBox {
-        spacing: 8px;
-        padding: 8px;
+    Rectangle {
+        background: root.drop-active ? #204060 : transparent;
 
-        // Left sidebar: categories
-        VerticalBox {
-            width: 160px;
-            spacing: 4px;
+        HorizontalBox {
+            spacing: 8px;
+            padding: 8px;
 
-            ListView {
-                for cat in categories: Rectangle {
-                    height: 32px;
-                    Text {
-                        text: cat.name;
+            // Left sidebar: categories
+            VerticalBox {
+                width: 160px;
+                spacing: 4px;
+
+                Text {
+                    text: "Categories";
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+
+                ListView {
+                    for cat in categories: Rectangle {
+                        height: 32px;
+                        background: transparent;
+                        TouchArea {
+                            clicked => { root.category-selected(index); }
+                            Text {
+                                text: cat.name;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
-            }
 
-            Button {
-                text: "+ Category";
-                clicked => { root.new-item-clicked(); }
-            }
-        }
-
-        VerticalBox {
-            // Search bar
-            HorizontalBox {
-                LineEdit {
-                    placeholder: "Search...";
-                    edited => { root.search-changed(self.text); }
-                }
                 Button {
-                    text: "New Item";
+                    text: "+ Category";
                     clicked => { root.new-item-clicked(); }
                 }
             }
 
-            // Item grid
-            ItemGrid {
-                items: root.items;
+            VerticalBox {
+                // Search bar
+                HorizontalBox {
+                    spacing: 4px;
+                    padding: 4px;
+                    background: root.is-dark-theme ? #2a2a2a : #f0f0f0;
+                    border-radius: 6px;
+
+                    LineEdit {
+                        placeholder: "Search...";
+                        text: root.search-text;
+                        edited => { root.search-changed(self.text); }
+                    }
+                    Button {
+                        text: "New Item";
+                        clicked => { root.new-item-clicked(); }
+                    }
+                    Button {
+                        text: root.is-icon-view ? "List" : "Icon";
+                        clicked => { root.toggle-view(); }
+                    }
+                    Button {
+                        text: root.is-dark-theme ? "Light" : "Dark";
+                        clicked => { root.toggle-theme(); }
+                    }
+                }
+
+                // Item grid
+                ItemGrid {
+                    items: root.items;
+                    on-item-double-clicked => { root.item-double-clicked(index); }
+                    on-item-right-clicked => { root.item-right-clicked(index); }
+                }
+
+                // Status bar
+                HorizontalBox {
+                    Text {
+                        text: root.status-text;
+                        font-size: 11px;
+                        color: root.is-dark-theme ? #888888 : #666666;
+                    }
+                }
             }
         }
     }
 }
 
 export component ItemGrid inherits Rectangle {
+    callback item-double-clicked(index: int);
+    callback item-right-clicked(index: int);
+
     property <[ItemModel]> items;
 
     ListView {
         for item in items: ItemTile {
             item: item;
+            on-double-clicked => { root.item-double-clicked(model.index); }
+            on-right-clicked => { root.item-right-clicked(model.index); }
         }
     }
 }
 
 component ItemTile inherits Rectangle {
-    property <ItemModel> item;
+    callback double-clicked();
+    callback right-clicked();
 
-    VerticalBox {
-        Image {
-            width: 64px;
-            height: 64px;
-        }
-        Text {
-            text: item.name;
+    property <ItemModel> item;
+    property <int> index;
+
+    height: 90px;
+    width: 80px;
+
+    TouchArea {
+        clicked => { root.double-clicked(); }
+        right-clicked => { root.right-clicked(); }
+
+        VerticalBox {
+            padding: 4px;
+            spacing: 4px;
+
+            Rectangle {
+                width: 64px;
+                height: 64px;
+                background: #3a3a3a;
+                border-radius: 8px;
+                Image {
+                    width: 64px;
+                    height: 64px;
+                    source: root.item.icon-path;
+                }
+            }
+            Text {
+                text: root.item.name;
+                font-size: 11px;
+                horizontal-alignment: center;
+                overflow: ellipsis;
+                max-width: 76px;
+            }
         }
     }
 }

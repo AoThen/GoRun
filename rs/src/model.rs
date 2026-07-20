@@ -13,8 +13,9 @@ impl Default for ViewType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Category {
+    #[serde(default)]
     pub id: String,
     pub name: String,
     #[serde(default)]
@@ -29,8 +30,9 @@ fn default_icon_size() -> i32 {
     48
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Item {
+    #[serde(default)]
     pub id: String,
     pub name: String,
     pub target: String,

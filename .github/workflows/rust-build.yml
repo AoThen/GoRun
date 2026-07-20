@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  rust-build:
+  rust-build-windows:
     runs-on: windows-latest
     defaults:
       run:
@@ -31,8 +31,8 @@ jobs:
       - name: Build (debug)
         run: cargo build
 
-      - name: Run tests
-        run: cargo test
+      - name: Run unit tests
+        run: cargo test --lib
 
       - name: Build (release)
         run: cargo build --release
@@ -43,3 +43,38 @@ jobs:
           name: GoRun-rs-release
           path: rs/target/release/GoRun.exe
           retention-days: 30
+
+  rust-gui-tests-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libx11-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libfontconfig1-dev libfreetype6-dev xvfb
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      - name: Build with testing feature
+        run: cargo build --features testing
+
+      - name: Run GUI integration tests (xvfb)
+        run: xvfb-run cargo test --features testing --test gui_integration_test
+
+      - name: Run all tests (xvfb)
+        run: xvfb-run cargo test --features testing
