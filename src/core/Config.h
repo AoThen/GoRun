@@ -29,6 +29,10 @@ public:
     int GetTheme() const;
     void SetTheme(int theme);
 
+    // 跟随鼠标
+    bool GetFollowMouse() const;
+    void SetFollowMouse(bool enabled);
+
 private:
     Storage* m_storage = nullptr;
     bool UpdateRegistryAutoStart(bool enabled);

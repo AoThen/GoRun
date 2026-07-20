@@ -3,12 +3,14 @@
 #include "core/Config.h"
 #include "core/Runner.h"
 #include "core/IconTextureManager.h"
+#include "core/Localization.h"
 #include "utils/StringUtils.h"
 #include "ui/Theme.h"
 #include "app/App.h"
 #include <imgui.h>
 #include <algorithm>
 #include <windows.h>
+#include <shellapi.h>
 
 namespace mn {
 
@@ -40,14 +42,15 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     m_categoryTab.OnCategoryAdd([this]() {
         Category cat;
         cat.id = GenerateId(L"cat");
-        cat.name = L"新分类";
+        cat.name = StringUtils::Utf8ToWString(TrUtf8("Default_NewCategory"));
         m_itemManager->AddCategory(cat);
         m_categoryTab.SetCategories(&m_itemManager->GetCategories());
         m_categoryTab.SetCurrentCategory(cat.id);
         m_currentCategoryId = cat.id;
         m_itemGrid.SetItems(&m_itemManager->GetItems(cat.id));
         // 自动打开重命名对话框
-        strncpy(m_renameCategoryBuf, u8"新分类", sizeof(m_renameCategoryBuf) - 1);
+        std::string defaultNewCat = TrUtf8("Default_NewCategory");
+        strncpy(m_renameCategoryBuf, defaultNewCat.c_str(), sizeof(m_renameCategoryBuf) - 1);
         m_renameCategoryBuf[sizeof(m_renameCategoryBuf) - 1] = '\0';
         m_showRenameCategory = true;
         m_openRenamePopup = true;
@@ -65,7 +68,7 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
                 m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
             }
         } else {
-            ShowError(L"至少需要保留一个分类");
+            ShowError(StringUtils::Utf8ToWString(TrUtf8("Tip_NeedOneCategory")));
         }
     });
     
@@ -143,6 +146,38 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         HandleNewItem();
     });
     
+    // 右键菜单回调
+    m_itemGrid.OnItemCopyPath([this](const Item& item) {
+        if (OpenClipboard(nullptr)) {
+            EmptyClipboard();
+            std::wstring path = item.target;
+            HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, (path.size() + 1) * sizeof(wchar_t));
+            if (hGlobal) {
+                wcscpy_s(static_cast<wchar_t*>(GlobalLock(hGlobal)), path.size() + 1, path.c_str());
+                GlobalUnlock(hGlobal);
+                SetClipboardData(CF_UNICODETEXT, hGlobal);
+            }
+            CloseClipboard();
+        }
+    });
+    m_itemGrid.OnItemOpenLocation([this](const Item& item) {
+        std::wstring dir = item.target.substr(0, item.target.find_last_of(L"\\/"));
+        if (!dir.empty()) {
+            ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"/select,\"" + item.target + L"\"").c_str(), nullptr, SW_SHOW);
+        }
+    });
+    m_itemGrid.OnItemMoveToCategory([this](const Item& item, const std::wstring& categoryId) {
+        App::Get()->GetItemManager()->MoveItem(item.id, categoryId);
+    });
+    m_itemGrid.OnItemProperties([this](const Item& item) {
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.lpVerb = L"properties";
+        sei.lpFile = item.target.c_str();
+        sei.nShow = SW_SHOW;
+        ShellExecuteExW(&sei);
+    });
+    m_itemGrid.SetAllCategories(&itemManager->GetCategories());
+    
     auto& categories = itemManager->GetCategories();
     if (!categories.empty()) {
         m_currentCategoryId = categories[0].id;
@@ -173,14 +208,14 @@ void MainWindow::Render() {
     
     // 菜单栏
     if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("文件")) {
-            if (ImGui::MenuItem("新建项目")) {
+        if (ImGui::BeginMenu(TrUtf8("Menu_File").c_str())) {
+            if (ImGui::MenuItem(TrUtf8("Menu_NewItem").c_str())) {
                 HandleNewItem();
             }
-            if (ImGui::MenuItem("新建分类")) {
+            if (ImGui::MenuItem(TrUtf8("Menu_NewC").c_str())) {
                 Category cat;
                 cat.id = GenerateId(L"cat");
-                cat.name = L"新分类";
+cat.name = StringUtils::Utf8ToWString(TrUtf8("Default_NewCategory"));
                 m_itemManager->AddCategory(cat);
                 m_categoryTab.SetCategories(&m_itemManager->GetCategories());
                 m_currentCategoryId = cat.id;
@@ -192,7 +227,7 @@ void MainWindow::Render() {
                 m_showRenameCategory = true;
                 m_openRenamePopup = true;
             }
-            if (ImGui::MenuItem("删除当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
+            if (ImGui::MenuItem(TrUtf8("Menu_DelCurrentC").c_str(), nullptr, false, !m_itemManager->GetCategories().empty())) {
                 if (!m_currentCategoryId.empty()) {
                     if (m_itemManager->GetCategories().size() > 1) {
                         m_itemManager->DeleteCategory(m_currentCategoryId);
@@ -204,18 +239,18 @@ void MainWindow::Render() {
                             m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
                         }
                     } else {
-                        ShowError(L"至少需要保留一个分类");
+                        ShowError(StringUtils::Utf8ToWString(TrUtf8("Tip_NeedOneCategory")));
                     }
                 }
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("退出")) {
+            if (ImGui::MenuItem(TrUtf8("Menu_Exit").c_str())) {
                 App::Get()->Quit();
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("编辑")) {
-            if (ImGui::MenuItem("重命名当前分类", nullptr, false, !m_itemManager->GetCategories().empty())) {
+        if (ImGui::BeginMenu(TrUtf8("Menu_Edit").c_str())) {
+            if (ImGui::MenuItem(TrUtf8("Menu_RenameCurrentC").c_str(), nullptr, false, !m_itemManager->GetCategories().empty())) {
                 // 打开重命名对话框
                 Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
                 if (cat) {
@@ -228,15 +263,15 @@ void MainWindow::Render() {
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("视图")) {
-            if (ImGui::MenuItem("图标视图", nullptr, m_currentViewType == ViewType::Icon)) {
+        if (ImGui::BeginMenu(TrUtf8("Menu_View").c_str())) {
+            if (ImGui::MenuItem(TrUtf8("Menu_ViewIcon0").c_str(), nullptr, m_currentViewType == ViewType::Icon)) {
                 if (m_currentViewType != ViewType::Icon) ToggleViewType();
             }
-            if (ImGui::MenuItem("列表视图", nullptr, m_currentViewType == ViewType::List)) {
+            if (ImGui::MenuItem(TrUtf8("Menu_ViewIcon1").c_str(), nullptr, m_currentViewType == ViewType::List)) {
                 if (m_currentViewType != ViewType::List) ToggleViewType();
             }
             ImGui::Separator();
-            const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "切换到深色主题" : "切换到浅色主题";
+            const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? TrUtf8("Menu_SwitchDark").c_str() : TrUtf8("Menu_SwitchLight").c_str();
             if (ImGui::MenuItem(themeLabel)) {
                 ToggleTheme();
                 if (m_config) {
@@ -245,17 +280,38 @@ void MainWindow::Render() {
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("设置")) {
-            if (ImGui::MenuItem("开机自启", nullptr, m_config && m_config->GetAutoStart())) {
+        if (ImGui::BeginMenu(TrUtf8("Menu_Set").c_str())) {
+            if (ImGui::MenuItem(TrUtf8("SSTR_010002").c_str(), nullptr, m_config && m_config->GetAutoStart())) {
                 if (m_config) {
                     m_config->SetAutoStart(!m_config->GetAutoStart());
                 }
             }
+            if (ImGui::BeginMenu(TrUtf8("Menu_Language").c_str())) {
+                std::string currentLang = "zh-CN";
+                if (auto* loc = Localization::Get()) {
+                    currentLang = loc->GetCurrentLanguage();
+                }
+                if (ImGui::MenuItem("简体中文", nullptr, currentLang == "zh-CN")) {
+                    if (auto* loc = Localization::Get()) loc->SetLanguage("zh-CN");
+                }
+                if (ImGui::MenuItem("繁體中文", nullptr, currentLang == "zh-TW")) {
+                    if (auto* loc = Localization::Get()) loc->SetLanguage("zh-TW");
+                }
+                if (ImGui::MenuItem("English", nullptr, currentLang == "en-US")) {
+                    if (auto* loc = Localization::Get()) loc->SetLanguage("en-US");
+                }
+if (ImGui::MenuItem(TrUtf8("Menu_FollowMouse").c_str(), nullptr, m_config && m_config->GetFollowMouse())) {
+                if (m_config) {
+                    m_config->SetFollowMouse(!m_config->GetFollowMouse());
+                }
+            }
+            ImGui::EndMenu();
+            }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("帮助")) {
-            if (ImGui::MenuItem("关于 GoRun")) {
-                ShowError(L"GoRun v1.0.0\n快速启动工具");
+        if (ImGui::BeginMenu(TrUtf8("Menu_Help").c_str())) {
+            if (ImGui::MenuItem(TrUtf8("Menu_About").c_str())) {
+                ShowError(StringUtils::Utf8ToWString(TrUtf8("About_Info")));
             }
             ImGui::EndMenu();
         }
@@ -278,6 +334,7 @@ void MainWindow::Render() {
     
     ImGui::EndChild();
     
+    m_editDialog.SetCategories(m_itemManager->GetCategories());
     m_editDialog.Render();
     
     // 分类重命名对话框
@@ -289,13 +346,13 @@ void MainWindow::Render() {
     if (m_showError) {
         // 只在首次显示时打开弹窗
         if (m_openErrorPopup) {
-            ImGui::OpenPopup("错误");
+            ImGui::OpenPopup(TrUtf8("Title_Error").c_str());
             m_openErrorPopup = false;
         }
         
-        if (ImGui::BeginPopupModal("错误", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal(TrUtf8("Title_Error").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("%s", StringUtils::WStringToUtf8(m_errorMessage).c_str());
-            if (ImGui::Button("确定", ImVec2(100, 0))) {
+            if (ImGui::Button(TrUtf8("Btn_OK").c_str(), ImVec2(100, 0))) {
                 m_showError = false;
                 ImGui::CloseCurrentPopup();
             }
@@ -330,7 +387,7 @@ void MainWindow::RenderSearchBar() {
     }
     
     ImGui::SetNextItemWidth(-FLT_MIN);
-    bool searchChanged = ImGui::InputTextWithHint("##search", "搜索...", m_searchBuf, sizeof(m_searchBuf));
+    bool searchChanged = ImGui::InputTextWithHint("##search", TrUtf8("Tip_Search").c_str(), m_searchBuf, sizeof(m_searchBuf));
     
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);
@@ -379,17 +436,17 @@ void MainWindow::RenderSearchBar() {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 8));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
     
-    const char* viewLabel = (m_currentViewType == ViewType::Icon) ? "图标" : "列表";
+    const char* viewLabel = (m_currentViewType == ViewType::Icon) ? TrUtf8("Menu_ViewIcon0").c_str() : TrUtf8("Menu_ViewIcon1").c_str();
     if (ImGui::Button(viewLabel, ImVec2(50, 0))) {
         ToggleViewType();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", (m_currentViewType == ViewType::Icon) ? "切换到列表视图" : "切换到图标视图");
+        ImGui::SetTooltip("%s", (m_currentViewType == ViewType::Icon) ? TrUtf8("Tip_SwitchListView").c_str() : TrUtf8("Tip_SwitchIconView").c_str());
     }
     
     // 主题切换按钮
     ImGui::SameLine(0, 4);
-    const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? "暗色模式" : "亮色模式";
+    const char* themeLabel = (GetCurrentTheme() == ThemeType::Light) ? TrUtf8("Btn_DarkMode").c_str() : TrUtf8("Btn_LightMode").c_str();
     if (ImGui::Button(themeLabel, ImVec2(50, 0))) {
         ToggleTheme();
         if (m_config) {
@@ -397,7 +454,7 @@ void MainWindow::RenderSearchBar() {
         }
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", (GetCurrentTheme() == ThemeType::Light) ? "切换到深色主题" : "切换到浅色主题");
+        ImGui::SetTooltip("%s", (GetCurrentTheme() == ThemeType::Light) ? TrUtf8("Tip_SwitchDark").c_str() : TrUtf8("Tip_SwitchLight").c_str());
     }
     
     ImGui::PopStyleVar(2);
@@ -456,7 +513,7 @@ void MainWindow::RenderRenameCategoryDialog() {
     
     // 只在首次显示时打开弹窗
     if (m_openRenamePopup) {
-        ImGui::OpenPopup("重命名分类");
+        ImGui::OpenPopup(TrUtf8("Title_RenameCategory").c_str());
         m_openRenamePopup = false;
     }
     
@@ -464,8 +521,8 @@ void MainWindow::RenderRenameCategoryDialog() {
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(300, 0));
     
-    if (ImGui::BeginPopupModal("重命名分类", nullptr, ImGuiWindowFlags_NoResize)) {
-        if (ImGui::InputText("分类名称", m_renameCategoryBuf, sizeof(m_renameCategoryBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (ImGui::BeginPopupModal(TrUtf8("Title_RenameCategory").c_str(), nullptr, ImGuiWindowFlags_NoResize)) {
+        if (ImGui::InputText(TrUtf8("STR_CategoryName").c_str(), m_renameCategoryBuf, sizeof(m_renameCategoryBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
             // 回车确认
             Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
             if (cat) {
@@ -479,7 +536,7 @@ void MainWindow::RenderRenameCategoryDialog() {
         
         ImGui::Separator();
         
-        if (ImGui::Button("确定", ImVec2(100, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_OK").c_str(), ImVec2(100, 0))) {
             Category* cat = m_itemManager->GetCategory(m_currentCategoryId);
             if (cat) {
                 cat->name = StringUtils::Utf8ToWString(m_renameCategoryBuf);
@@ -490,7 +547,7 @@ void MainWindow::RenderRenameCategoryDialog() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("取消", ImVec2(100, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_Cancel").c_str(), ImVec2(100, 0))) {
             m_showRenameCategory = false;
             ImGui::CloseCurrentPopup();
         }
@@ -506,7 +563,7 @@ void MainWindow::RenderDeleteConfirmDialog() {
     if (!m_showDeleteConfirm) return;
     
     if (m_openDeletePopup) {
-        ImGui::OpenPopup("确认删除");
+        ImGui::OpenPopup(TrUtf8("Title_ConfirmDelete").c_str());
         m_openDeletePopup = false;
     }
     
@@ -514,16 +571,21 @@ void MainWindow::RenderDeleteConfirmDialog() {
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(320, 0));
     
-    if (ImGui::BeginPopupModal("确认删除", nullptr, ImGuiWindowFlags_NoResize)) {
+    if (ImGui::BeginPopupModal(TrUtf8("Title_ConfirmDelete").c_str(), nullptr, ImGuiWindowFlags_NoResize)) {
         std::string displayName = StringUtils::WStringToUtf8(m_deleteItemName);
         if (displayName.length() > 30) {
             displayName = displayName.substr(0, 30) + "...";
         }
-        ImGui::Text("确定要删除 \"%s\" 吗？", displayName.c_str());
-        ImGui::TextUnformatted("此操作不可撤销。");
+        std::string delFmt = TrUtf8("Tip_DelItemFormat");
+        size_t pos = delFmt.find("%s");
+        if (pos != std::string::npos) {
+            delFmt.replace(pos, 2, displayName);
+        }
+        ImGui::Text("%s", delFmt.c_str());
+        ImGui::Text("%s", TrUtf8("Tip_UndoNotPossible").c_str());
         ImGui::Separator();
         
-        if (ImGui::Button("确定删除", ImVec2(120, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_ConfirmDelete").c_str(), ImVec2(120, 0))) {
             m_itemGrid.ClearHoverAnimation(m_deleteItemId);
             m_itemManager->DeleteItem(m_deleteItemId);
             RefreshItems();
@@ -531,7 +593,7 @@ void MainWindow::RenderDeleteConfirmDialog() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("取消", ImVec2(120, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_Cancel").c_str(), ImVec2(120, 0))) {
             m_showDeleteConfirm = false;
             ImGui::CloseCurrentPopup();
         }

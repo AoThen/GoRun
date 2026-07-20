@@ -172,4 +172,15 @@ void Config::SetTheme(int theme) {
     }
 }
 
+bool Config::GetFollowMouse() const {
+    if (!m_storage) return false;
+    return m_storage->GetConfig("followMouse", L"0") == L"1";
+}
+
+void Config::SetFollowMouse(bool enabled) {
+    if (m_storage) {
+        m_storage->SetConfig("followMouse", enabled ? L"1" : L"0");
+    }
+}
+
 } // namespace mn

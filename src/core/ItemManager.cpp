@@ -107,6 +107,10 @@ void ItemManager::AddItem(Item item) {
         item.id = GenerateId(L"item");
     }
     
+    // 自动设置 sortOrder 为当前分类最大序号+1
+    auto& catItems = m_itemsByCategory[item.categoryId];
+    item.sortOrder = catItems.empty() ? 0 : catItems.back().sortOrder + 1;
+    
     if (m_iconCache) {
         m_iconCache->GetIconPath(item);
     }

@@ -16,6 +16,7 @@
 #include "utils/Logger.h"
 #include <imgui.h>
 #include <gdiplus.h>
+#include <algorithm>
 #pragma comment(lib, "gdiplus.lib")
 
 namespace mn {
@@ -153,7 +154,10 @@ bool App::Initialize(HINSTANCE hInstance) {
     });
     
     m_window->OnMove([this](int x, int y) {
-        m_config->SetWindowPosition(x, y);
+        m_windowMovedByUser = true;
+        if (!m_config->GetFollowMouse()) {
+            m_config->SetWindowPosition(x, y);
+        }
     });
     
     m_window->OnDpiChanged([this](int dpi) {
@@ -303,6 +307,29 @@ void App::ToggleWindow() {
         m_window->Hide();
         m_mainWindow->Hide();
     } else {
+        bool followMouse = m_config->GetFollowMouse();
+        if (followMouse) {
+            POINT pt;
+            GetCursorPos(&pt);
+            
+            int winW = m_config->GetWindowWidth();
+            int winH = m_config->GetWindowHeight();
+            
+            int x = pt.x - winW / 2;
+            int y = pt.y - winH / 2;
+            
+            HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = { sizeof(mi) };
+            GetMonitorInfo(hMonitor, &mi);
+            RECT work = mi.rcWork;
+            
+            x = (std::max)(static_cast<LONG>(work.left), (std::min)(static_cast<LONG>(x), work.right - winW));
+            y = (std::max)(static_cast<LONG>(work.top), (std::min)(static_cast<LONG>(y), work.bottom - winH));
+            
+            m_window->SetPosition(x, y);
+            m_windowMovedByUser = false;
+        }
+        
         m_window->Show();
         m_mainWindow->Show();
     }
@@ -310,6 +337,7 @@ void App::ToggleWindow() {
 
 void App::SaveWindowPosition() {
     if (!m_window || !m_config) return;
+    if (!m_windowMovedByUser) return;
     int x, y, w, h;
     m_window->GetPosition(x, y);
     m_window->GetSize(w, h);

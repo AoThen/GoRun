@@ -23,6 +23,11 @@ public:
     void OnItemDelete(std::function<void(const Item&)> callback);
     void OnItemRefreshIcon(std::function<void(const Item&)> callback);
     void OnItemAdd(std::function<void()> callback);
+    void OnItemCopyPath(std::function<void(const Item&)> callback);
+    void OnItemOpenLocation(std::function<void(const Item&)> callback);
+    void OnItemMoveToCategory(std::function<void(const Item&, const std::wstring&)> callback);
+    void OnItemProperties(std::function<void(const Item&)> callback);
+    void SetAllCategories(const std::vector<Category>* categories);
 
 private:
     void RenderIconView();
@@ -33,6 +38,7 @@ private:
     float GetHoverScale(const std::wstring& itemId, bool isHovered);
     
     std::vector<Item>* m_items = nullptr;
+    std::vector<Item> m_sortedItems;
     IconTextureManager* m_iconTextureManager = nullptr;
     int m_selectedIndex = -1;
     ViewType m_viewType = ViewType::Icon;
@@ -46,6 +52,11 @@ private:
     std::function<void(const Item&)> m_onDelete;
     std::function<void(const Item&)> m_onRefreshIcon;
     std::function<void()> m_onAddItem;
+    std::function<void(const Item&)> m_onCopyPath;
+    std::function<void(const Item&)> m_onOpenLocation;
+    std::function<void(const Item&, const std::wstring&)> m_onMoveToCategory;
+    std::function<void(const Item&)> m_onProperties;
+    const std::vector<Category>* m_allCategories = nullptr;
 };
 
 } // namespace mn

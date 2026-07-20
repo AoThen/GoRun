@@ -1,7 +1,9 @@
 #include "CategoryTab.h"
+#include "core/Localization.h"
 #include "utils/StringUtils.h"
 #include "ui/Theme.h"
 #include <imgui.h>
+#include <algorithm>
 
 namespace mn {
 
@@ -17,13 +19,18 @@ void CategoryTab::Render() {
     
     bool isDark = (GetCurrentTheme() == ThemeType::Dark);
     
+    // 按 sortOrder 排序后渲染
+    std::vector<Category> sortedCats = *m_categories;
+    std::sort(sortedCats.begin(), sortedCats.end(),
+        [](const Category& a, const Category& b) { return a.sortOrder < b.sortOrder; });
+    
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, isDark ? ImVec4(0.12f, 0.12f, 0.12f, 1.0f) : ImVec4(0.961f, 0.961f, 0.961f, 1.0f));
     
     ImGui::BeginChild("Categories", ImVec2(150, 0), false);
     
-    for (size_t i = 0; i < m_categories->size(); i++) {
-        auto& cat = (*m_categories)[i];
+    for (size_t i = 0; i < sortedCats.size(); i++) {
+        auto& cat = sortedCats[i];
         bool selected = (cat.id == m_currentId);
         std::string name = StringUtils::WStringToUtf8(cat.name);
         
@@ -71,7 +78,7 @@ void CategoryTab::Render() {
     ImGui::Spacing();
     
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
-    if (ImGui::Button("+ 新建分类", ImVec2(-FLT_MIN, 0))) {
+    if (ImGui::Button(("+ " + TrUtf8("Menu_NewC")).c_str(), ImVec2(-FLT_MIN, 0))) {
         if (m_onAdd) {
             m_onAdd();
         }
@@ -85,14 +92,14 @@ void CategoryTab::Render() {
 }
 
 void CategoryTab::RenderContextMenu(const Category& cat) {
-    if (ImGui::MenuItem("重命名")) {
+    if (ImGui::MenuItem(TrUtf8("Menu_ReName").c_str())) {
         if (m_onRename) {
             m_onRename(cat.id);
         }
         ImGui::CloseCurrentPopup();
     }
     
-    if (ImGui::MenuItem("删除", nullptr, false, m_categories && m_categories->size() > 1)) {
+    if (ImGui::MenuItem(TrUtf8("Menu_DelC").c_str(), nullptr, false, m_categories && m_categories->size() > 1)) {
         if (m_onDelete) {
             m_onDelete(cat.id);
         }

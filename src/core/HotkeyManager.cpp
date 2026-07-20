@@ -101,7 +101,7 @@ bool HotkeyManager::ParseHotkeyString(const std::wstring& hotkey, unsigned int& 
         }
     }
     
-    return modifiers != 0 && vk != 0;
+    return vk != 0;
 }
 
 void HotkeyManager::SetCallback(HotkeyCallback callback) {

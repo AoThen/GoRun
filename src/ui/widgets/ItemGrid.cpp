@@ -1,9 +1,11 @@
 #include "ItemGrid.h"
 #include "core/IconTextureManager.h"
+#include "core/Localization.h"
 #include "utils/StringUtils.h"
 #include "ui/Theme.h"
 #include <imgui.h>
 #include <cmath>
+#include <algorithm>
 
 namespace mn {
 
@@ -27,6 +29,13 @@ void ItemGrid::ClearHoverAnimation(const std::wstring& itemId) {
 }
 
 void ItemGrid::Render() {
+    // 按 sortOrder 排序后渲染
+    if (m_items) {
+        m_sortedItems = *m_items;
+        std::sort(m_sortedItems.begin(), m_sortedItems.end(),
+            [](const Item& a, const Item& b) { return a.sortOrder < b.sortOrder; });
+    }
+    
     if (m_viewType == ViewType::Icon) {
         RenderIconView();
     } else {
@@ -62,14 +71,13 @@ void ItemGrid::RenderIconView() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 16));
     ImGui::BeginChild("Items", ImVec2(0, 0), false);
     
-    if (!m_items || m_items->empty()) {
-        // 空结果提示 - 根据主题调整颜色
+    if (!m_items || m_sortedItems.empty()) {
         ImVec4 emptyColor = (GetCurrentTheme() == ThemeType::Dark) 
             ? ImVec4(0.5f, 0.5f, 0.5f, 1.0f) 
             : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-        ImGui::TextColored(emptyColor, "暂无项目");
+        ImGui::TextColored(emptyColor, "%s", TrUtf8("Tip_NoItems").c_str());
         if (ImGui::BeginPopupContextWindow("empty_area_context", ImGuiPopupFlags_MouseButtonRight)) {
-            if (ImGui::MenuItem("新建项目")) {
+            if (ImGui::MenuItem(TrUtf8("Menu_NewItem").c_str())) {
                 if (m_onAddItem) m_onAddItem();
                 ImGui::CloseCurrentPopup();
             }
@@ -81,7 +89,7 @@ void ItemGrid::RenderIconView() {
     }
     
     float windowWidth = ImGui::GetContentRegionAvail().x;
-    int columns = std::max(1, (int)(windowWidth / 95));
+    int columns = (std::max)(1, (int)(windowWidth / 95));
     
     // 根据主题设置颜色
     bool isDark = (GetCurrentTheme() == ThemeType::Dark);
@@ -91,7 +99,7 @@ void ItemGrid::RenderIconView() {
     ImVec4 placeholderColor = isDark ? ImVec4(0.3f, 0.3f, 0.3f, 1.0f) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
     
     int index = 0;
-    for (auto& item : *m_items) {
+    for (auto& item : m_sortedItems) {
         ImGui::PushID(index);
         
         std::string name = StringUtils::WStringToUtf8(item.name);
@@ -209,10 +217,13 @@ void ItemGrid::RenderListView() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
     ImGui::BeginChild("Items", ImVec2(0, 0), false);
     
-    if (!m_items || m_items->empty()) {
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "暂无项目");
+    if (!m_items || m_sortedItems.empty()) {
+        ImVec4 emptyColor = (GetCurrentTheme() == ThemeType::Dark) 
+            ? ImVec4(0.5f, 0.5f, 0.5f, 1.0f) 
+            : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+        ImGui::TextColored(emptyColor, "%s", TrUtf8("Tip_NoItems").c_str());
         if (ImGui::BeginPopupContextWindow("empty_area_context", ImGuiPopupFlags_MouseButtonRight)) {
-            if (ImGui::MenuItem("新建项目")) {
+            if (ImGui::MenuItem(TrUtf8("Menu_NewItem").c_str())) {
                 if (m_onAddItem) m_onAddItem();
                 ImGui::CloseCurrentPopup();
             }
@@ -232,7 +243,7 @@ void ItemGrid::RenderListView() {
     float contentWidth = ImGui::GetContentRegionAvail().x;
     
     int index = 0;
-    for (auto& item : *m_items) {
+    for (auto& item : m_sortedItems) {
         ImGui::PushID(index);
         
         std::string name = StringUtils::WStringToUtf8(item.name);
@@ -329,14 +340,39 @@ void ItemGrid::RenderListView() {
 }
 
 void ItemGrid::RenderContextMenu(Item& item) {
-    if (ImGui::MenuItem("运行")) {
+    if (ImGui::MenuItem(TrUtf8("Menu_CopyPath").c_str())) {
+        if (m_onCopyPath) m_onCopyPath(item);
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::MenuItem(TrUtf8("Menu_OpenLocation").c_str())) {
+        if (m_onOpenLocation) m_onOpenLocation(item);
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::BeginMenu(TrUtf8("Menu_MoveToCategory").c_str())) {
+        if (m_allCategories) {
+            for (auto& cat : *m_allCategories) {
+                if (ImGui::MenuItem(StringUtils::WStringToUtf8(cat.name).c_str())) {
+                    if (m_onMoveToCategory) m_onMoveToCategory(item, cat.id);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::MenuItem(TrUtf8("Menu_Properties").c_str())) {
+        if (m_onProperties) m_onProperties(item);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::Separator();
+    
+    if (ImGui::MenuItem(TrUtf8("Menu_Run").c_str())) {
         if (m_onClick) {
             m_onClick(item);
         }
         ImGui::CloseCurrentPopup();
     }
     
-    if (ImGui::MenuItem("以管理员运行")) {
+    if (ImGui::MenuItem(TrUtf8("Menu_RunAsAdmin").c_str())) {
         if (m_onRunAsAdmin) {
             m_onRunAsAdmin(item);
         }
@@ -345,7 +381,7 @@ void ItemGrid::RenderContextMenu(Item& item) {
     
     ImGui::Separator();
     
-    if (ImGui::MenuItem("刷新图标")) {
+    if (ImGui::MenuItem(TrUtf8("Menu_RefreshIcon").c_str())) {
         if (m_onRefreshIcon) {
             m_onRefreshIcon(item);
         }
@@ -354,14 +390,14 @@ void ItemGrid::RenderContextMenu(Item& item) {
     
     ImGui::Separator();
     
-    if (ImGui::MenuItem("编辑")) {
+    if (ImGui::MenuItem(TrUtf8("Menu_Edit").c_str())) {
         if (m_onEdit) {
             m_onEdit(item);
         }
         ImGui::CloseCurrentPopup();
     }
     
-    if (ImGui::MenuItem("删除")) {
+    if (ImGui::MenuItem(TrUtf8("Menu_DelItem").c_str())) {
         if (m_onDelete) {
             m_onDelete(item);
         }
@@ -370,11 +406,11 @@ void ItemGrid::RenderContextMenu(Item& item) {
     
     ImGui::Separator();
     
-    if (ImGui::MenuItem("图标视图", nullptr, m_viewType == ViewType::Icon)) {
+    if (ImGui::MenuItem(TrUtf8("Menu_ViewIcon0").c_str(), nullptr, m_viewType == ViewType::Icon)) {
         SetViewType(ViewType::Icon);
     }
     
-    if (ImGui::MenuItem("列表视图", nullptr, m_viewType == ViewType::List)) {
+    if (ImGui::MenuItem(TrUtf8("Menu_ViewIcon1").c_str(), nullptr, m_viewType == ViewType::List)) {
         SetViewType(ViewType::List);
     }
 }
@@ -402,5 +438,11 @@ void ItemGrid::OnItemRefreshIcon(std::function<void(const Item&)> callback) {
 void ItemGrid::OnItemAdd(std::function<void()> callback) {
     m_onAddItem = callback;
 }
+
+void ItemGrid::OnItemCopyPath(std::function<void(const Item&)> callback) { m_onCopyPath = callback; }
+void ItemGrid::OnItemOpenLocation(std::function<void(const Item&)> callback) { m_onOpenLocation = callback; }
+void ItemGrid::OnItemMoveToCategory(std::function<void(const Item&, const std::wstring&)> callback) { m_onMoveToCategory = callback; }
+void ItemGrid::OnItemProperties(std::function<void(const Item&)> callback) { m_onProperties = callback; }
+void ItemGrid::SetAllCategories(const std::vector<Category>* categories) { m_allCategories = categories; }
 
 } // namespace mn

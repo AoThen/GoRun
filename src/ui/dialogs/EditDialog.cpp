@@ -1,4 +1,5 @@
 #include "EditDialog.h"
+#include "core/Localization.h"
 #include "utils/StringUtils.h"
 #include <imgui.h>
 #include <algorithm>
@@ -38,7 +39,7 @@ void EditDialog::Render() {
     
     // 只在首次显示时打开弹窗
     if (m_openPopup) {
-        ImGui::OpenPopup("编辑项目");
+        ImGui::OpenPopup(TrUtf8("Title_EditItem").c_str());
         m_openPopup = false;
     }
     
@@ -46,17 +47,17 @@ void EditDialog::Render() {
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(480, 0));
     
-    if (ImGui::BeginPopupModal("编辑项目", nullptr, ImGuiWindowFlags_NoResize)) {
+    if (ImGui::BeginPopupModal(TrUtf8("Title_EditItem").c_str(), nullptr, ImGuiWindowFlags_NoResize)) {
         // 名称
         char nameBuf[256] = {};
         size_t copyLen = (std::min)(m_nameBuf.size(), sizeof(nameBuf) - 1);
         memcpy(nameBuf, m_nameBuf.c_str(), copyLen);
-        if (ImGui::InputText("名称", nameBuf, sizeof(nameBuf))) {
+        if (ImGui::InputText(TrUtf8("STR_Name").c_str(), nameBuf, sizeof(nameBuf))) {
             m_nameBuf = nameBuf;
         }
         
         // 目标路径（带浏览按钮）
-        ImGui::Text("目标");
+        ImGui::Text("%s", TrUtf8("STR_Target").c_str());
         ImGui::SameLine();
         char targetBuf[1024] = {};
         copyLen = (std::min)(m_targetBuf.size(), sizeof(targetBuf) - 1);
@@ -67,15 +68,31 @@ void EditDialog::Render() {
         }
         ImGui::PopItemWidth();
         ImGui::SameLine();
-        if (ImGui::Button("浏览...", ImVec2(60, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_Browse").c_str(), ImVec2(60, 0))) {
             BrowseTarget();
+        }
+        
+        // 分类选择
+        ImGui::Text("%s", TrUtf8("STR_Category").c_str());
+        ImGui::SameLine();
+        std::string currentCatName = m_selectedCategoryIndex >= 0 && m_selectedCategoryIndex < (int)m_categories.size()
+            ? StringUtils::WStringToUtf8(m_categories[m_selectedCategoryIndex].name) : "";
+        if (ImGui::BeginCombo("##category", currentCatName.c_str())) {
+            for (int i = 0; i < (int)m_categories.size(); i++) {
+                bool selected = (i == m_selectedCategoryIndex);
+                if (ImGui::Selectable(StringUtils::WStringToUtf8(m_categories[i].name).c_str(), selected)) {
+                    m_selectedCategoryIndex = i;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
         }
         
         // 参数
         char argsBuf[512] = {};
         copyLen = (std::min)(m_argsBuf.size(), sizeof(argsBuf) - 1);
         memcpy(argsBuf, m_argsBuf.c_str(), copyLen);
-        if (ImGui::InputText("参数", argsBuf, sizeof(argsBuf))) {
+        if (ImGui::InputText(TrUtf8("STR_Param").c_str(), argsBuf, sizeof(argsBuf))) {
             m_argsBuf = argsBuf;
         }
         
@@ -83,7 +100,7 @@ void EditDialog::Render() {
         char workDirBuf[1024] = {};
         copyLen = (std::min)(m_workingDirBuf.size(), sizeof(workDirBuf) - 1);
         memcpy(workDirBuf, m_workingDirBuf.c_str(), copyLen);
-        if (ImGui::InputText("工作目录", workDirBuf, sizeof(workDirBuf))) {
+        if (ImGui::InputText(TrUtf8("STR_StartDir").c_str(), workDirBuf, sizeof(workDirBuf))) {
             m_workingDirBuf = workDirBuf;
         }
         
@@ -91,23 +108,23 @@ void EditDialog::Render() {
         char keywordsBuf[512] = {};
         copyLen = (std::min)(m_keywordsBuf.size(), sizeof(keywordsBuf) - 1);
         memcpy(keywordsBuf, m_keywordsBuf.c_str(), copyLen);
-        if (ImGui::InputTextWithHint("关键词", "多个关键词用逗号分隔", keywordsBuf, sizeof(keywordsBuf))) {
+        if (ImGui::InputTextWithHint(TrUtf8("STR_KeyWd").c_str(), TrUtf8("Tip_KeywordHint").c_str(), keywordsBuf, sizeof(keywordsBuf))) {
             m_keywordsBuf = keywordsBuf;
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("关键词可用于搜索匹配，多个关键词用英文逗号分隔");
+            ImGui::SetTooltip("%s", TrUtf8("Tip_KeywordTooltip").c_str());
         }
         
         // 备注
         char remarkBuf[512] = {};
         copyLen = (std::min)(m_remarkBuf.size(), sizeof(remarkBuf) - 1);
         memcpy(remarkBuf, m_remarkBuf.c_str(), copyLen);
-        if (ImGui::InputText("备注", remarkBuf, sizeof(remarkBuf))) {
+        if (ImGui::InputText(TrUtf8("STR_Remark").c_str(), remarkBuf, sizeof(remarkBuf))) {
             m_remarkBuf = remarkBuf;
         }
         
         // 图标路径
-        ImGui::Text("图标路径");
+        ImGui::Text("%s", TrUtf8("STR_IconPath").c_str());
         ImGui::SameLine();
         char iconPathBuf[1024] = {};
         copyLen = (std::min)(m_iconPathBuf.size(), sizeof(iconPathBuf) - 1);
@@ -118,22 +135,22 @@ void EditDialog::Render() {
         }
         ImGui::PopItemWidth();
         ImGui::SameLine();
-        if (ImGui::Button("选择...", ImVec2(60, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_Select").c_str(), ImVec2(60, 0))) {
             BrowseIcon();
         }
         
         // 图标索引
         ImGui::PushItemWidth(80);
-        ImGui::InputInt("图标索引", &m_iconIndex);
+        ImGui::InputInt(TrUtf8("STR_IconIndex").c_str(), &m_iconIndex);
         if (m_iconIndex < 0) m_iconIndex = 0;
         ImGui::PopItemWidth();
         
         // 管理员运行
-        ImGui::Checkbox("以管理员运行", &m_runAsAdmin);
+        ImGui::Checkbox(TrUtf8("STR_RunAsAdmin").c_str(), &m_runAsAdmin);
         
         ImGui::Separator();
         
-        if (ImGui::Button("保存", ImVec2(120, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_Save").c_str(), ImVec2(120, 0))) {
             // 输入验证
             if (m_nameBuf.empty() || m_targetBuf.empty()) {
                 m_showInputError = true;
@@ -146,24 +163,24 @@ void EditDialog::Render() {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("取消", ImVec2(120, 0))) {
+        if (ImGui::Button(TrUtf8("Btn_Cancel").c_str(), ImVec2(120, 0))) {
             Hide();
         }
         
         // 输入错误提示
         if (m_showInputError) {
-            ImGui::OpenPopup("输入错误");
+            ImGui::OpenPopup(TrUtf8("Title_InputError").c_str());
             m_showInputError = false;
         }
-        if (ImGui::BeginPopup("输入错误", ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopup(TrUtf8("Title_InputError").c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
             if (m_nameBuf.empty() && m_targetBuf.empty()) {
-                ImGui::Text("名称和目标路径不能为空");
+                ImGui::Text("%s", TrUtf8("Tip_NameAndTargetEmpty").c_str());
             } else if (m_nameBuf.empty()) {
-                ImGui::Text("名称不能为空");
+                ImGui::Text("%s", TrUtf8("Tip_NameEmpty").c_str());
             } else {
-                ImGui::Text("目标路径不能为空");
+                ImGui::Text("%s", TrUtf8("Tip_TargetEmpty").c_str());
             }
-            if (ImGui::Button("确定", ImVec2(100, 0))) {
+            if (ImGui::Button(TrUtf8("Btn_OK").c_str(), ImVec2(100, 0))) {
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -180,9 +197,12 @@ void EditDialog::OnSave(std::function<void(const Item&)> callback) {
     m_onSave = callback;
 }
 
+void EditDialog::SetCategories(const std::vector<Category>& categories) {
+    m_categories = categories;
+}
+
 void EditDialog::LoadFromItem() {
     if (!m_item) return;
-    
     m_nameBuf = StringUtils::WStringToUtf8(m_item->name);
     m_targetBuf = StringUtils::WStringToUtf8(m_item->target);
     m_argsBuf = StringUtils::WStringToUtf8(m_item->arguments);
@@ -192,11 +212,18 @@ void EditDialog::LoadFromItem() {
     m_iconPathBuf = StringUtils::WStringToUtf8(m_item->iconPath);
     m_iconIndex = m_item->iconIndex;
     m_runAsAdmin = m_item->runAsAdmin;
+    // 查找当前 item 在分类列表中的索引
+    m_selectedCategoryIndex = 0;
+    for (size_t i = 0; i < m_categories.size(); i++) {
+        if (m_categories[i].id == m_item->categoryId) {
+            m_selectedCategoryIndex = static_cast<int>(i);
+            break;
+        }
+    }
 }
 
 void EditDialog::SaveToItem() {
     if (!m_item) return;
-    
     m_item->name = StringUtils::Utf8ToWString(m_nameBuf);
     m_item->target = StringUtils::Utf8ToWString(m_targetBuf);
     m_item->arguments = StringUtils::Utf8ToWString(m_argsBuf);
@@ -206,6 +233,10 @@ void EditDialog::SaveToItem() {
     m_item->iconPath = StringUtils::Utf8ToWString(m_iconPathBuf);
     m_item->iconIndex = (std::max)(0, (std::min)(m_iconIndex, 1000));
     m_item->runAsAdmin = m_runAsAdmin;
+    // 保存分类选择
+    if (m_selectedCategoryIndex >= 0 && m_selectedCategoryIndex < (int)m_categories.size()) {
+        m_item->categoryId = m_categories[m_selectedCategoryIndex].id;
+    }
 }
 
 void EditDialog::BrowseTarget() {

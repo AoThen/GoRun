@@ -3,6 +3,7 @@
 #include "core/Types.h"
 #include <functional>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -18,6 +19,7 @@ public:
     void Render();
 
     void OnSave(std::function<void(const Item&)> callback);
+    void SetCategories(const std::vector<Category>& categories);
 
 #ifdef _WIN32
     void SetOwner(HWND hwnd) { m_hwndOwner = hwnd; }
@@ -43,6 +45,8 @@ private:
     std::string m_iconPathBuf;
     int m_iconIndex = 0;
     bool m_runAsAdmin = false;
+    std::vector<Category> m_categories;
+    int m_selectedCategoryIndex = 0;
 
 #ifdef _WIN32
     HWND m_hwndOwner = nullptr;

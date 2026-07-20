@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include "utils/StringUtils.h"
 
 namespace mn {
 
@@ -27,6 +28,12 @@ private:
 inline std::wstring Tr(const std::string& key) {
     auto* loc = Localization::Get();
     return loc ? loc->GetString(key) : L"?" + std::wstring(key.begin(), key.end()) + L"?";
+}
+
+inline std::string TrUtf8(const std::string& key) {
+    auto* loc = Localization::Get();
+    if (!loc) return "?" + key + "?";
+    return StringUtils::WStringToUtf8(loc->GetString(key));
 }
 
 } // namespace mn

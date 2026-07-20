@@ -232,3 +232,33 @@ TEST_F(ConfigTest, WindowSize_Extreme) {
     EXPECT_EQ(m_config->GetWindowWidth(), 8192);
     EXPECT_EQ(m_config->GetWindowHeight(), 4320);
 }
+
+// ==================== 跟随鼠标弹出配置 ====================
+
+TEST_F(ConfigTest, FollowMouse_DefaultFalse) {
+    EXPECT_FALSE(m_config->GetFollowMouse());
+}
+
+TEST_F(ConfigTest, FollowMouse_SetTrue) {
+    m_config->SetFollowMouse(true);
+    EXPECT_TRUE(m_config->GetFollowMouse());
+}
+
+TEST_F(ConfigTest, FollowMouse_SetFalse) {
+    m_config->SetFollowMouse(true);
+    EXPECT_TRUE(m_config->GetFollowMouse());
+    m_config->SetFollowMouse(false);
+    EXPECT_FALSE(m_config->GetFollowMouse());
+}
+
+TEST_F(ConfigTest, FollowMouse_Persistence) {
+    m_config->SetFollowMouse(true);
+    m_storage->Save();  // 持久化
+    
+    // 新建 storage 和 config 验证持久化
+    Storage storage2;
+    storage2.Initialize(m_testFile);
+    Config config2;
+    config2.Initialize(&storage2);
+    EXPECT_TRUE(config2.GetFollowMouse());
+}
