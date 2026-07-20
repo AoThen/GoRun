@@ -1,3 +1,4 @@
+# GoRun Rust rewrite
 [package]
 name = "GoRun"
 version = "1.0.0"
