@@ -8,6 +8,7 @@
 #include <filesystem>
 
 #ifdef _WIN32
+#include <Windows.h>
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 #endif

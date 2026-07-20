@@ -58,7 +58,7 @@ bool HotkeyManager::ParseHotkeyString(const std::wstring& hotkey, unsigned int& 
             if (part.size() == 1) {
                 wchar_t c = part[0];
                 if (c >= L'a' && c <= L'z') {
-                    vk = static_cast<unsigned int>(c - L'a' + VK_A);
+                    vk = static_cast<unsigned int>(c - L'a' + 'A');
                 } else if (c >= L'A' && c <= L'Z') {
                     vk = static_cast<unsigned int>(c);
                 } else if (c >= L'0' && c <= L'9') {
