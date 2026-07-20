@@ -102,7 +102,7 @@ pub fn generate_id(prefix: &str) -> String {
     format!("{}_{}", prefix, ms)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub enum RunError {
     None,
     FileNotFound,

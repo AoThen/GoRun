@@ -3,8 +3,9 @@ use std::sync::mpsc;
 
 use windows::Win32::Foundation::POINTL;
 use windows::Win32::System::Com::{
-    CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_NONE, FORMATETC, IDataObject, IDispatch, CLSCTX_ALL,
+    CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_NONE, FORMATETC, IDataObject, CLSCTX_ALL,
 };
+use windows::Win32::System::Ole::IDropTarget;
 use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
 
 use crate::platform::DropMessage;
@@ -39,10 +40,10 @@ pub fn setup(hwnd: isize) -> mpsc::Receiver<DropMessage> {
             }
 
             let drop_target = DropTarget::new(tx);
-            let drop_target_ptr: *const DropTarget = &drop_target;
+            let drop_target_ptr: *mut IDropTarget = &drop_target as *const _ as *mut _;
             let hr = windows::Win32::System::Ole::RegisterDragDrop(
-                windows::Win32::Foundation::HWND(hwnd as *mut _),
-                drop_target_ptr as *mut _ as *mut _
+                windows::Win32::Foundation::HWND(hwnd),
+                drop_target_ptr
             );
             if hr.is_err() {
                 return;
@@ -176,11 +177,11 @@ impl DropTarget {
         };
         if let Ok(medium) = obj.GetData(&format) {
             let hglobal = medium.Anonymous.hGlobal;
-            let ptr = windows::Win32::System::Com::GlobalLock(hglobal);
+            let ptr = windows::Win32::System::Memory::GlobalLock(hglobal);
             if !ptr.is_null() {
                 let files = extract_files_from_hdrop(ptr as *const u8);
                 let _ = (*this).tx.send(DropMessage::Drop(files));
-                let _ = windows::Win32::System::Com::GlobalUnlock(hglobal);
+                let _ = windows::Win32::System::Memory::GlobalUnlock(hglobal);
             }
         }
         windows::Win32::Foundation::S_OK
