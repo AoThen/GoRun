@@ -269,7 +269,8 @@ void D3D11Renderer::Render()
     
     if (!m_rtv) return;
     
-    float clear_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    ImVec4 bgColor = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+    float clear_color[4] = { bgColor.x, bgColor.y, bgColor.z, bgColor.w };
     m_context->OMSetRenderTargets(1, &m_rtv, nullptr);
     m_context->ClearRenderTargetView(m_rtv, clear_color);
     

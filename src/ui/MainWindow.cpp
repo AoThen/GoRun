@@ -12,11 +12,12 @@
 
 namespace mn {
 
-void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* runner, IconTextureManager* iconTextureManager) {
+void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* runner, IconTextureManager* iconTextureManager, HWND hwnd) {
     m_itemManager = itemManager;
     m_config = config;
     m_runner = runner;
     m_iconTextureManager = iconTextureManager;
+    m_editDialog.SetOwner(hwnd);
     
     // 恢复保存的主题
     ApplyTheme(static_cast<ThemeType>(m_config->GetTheme()));

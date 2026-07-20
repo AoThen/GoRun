@@ -214,7 +214,7 @@ void EditDialog::BrowseTarget() {
     
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(OPENFILENAMEW);
-    ofn.hwndOwner = nullptr;
+    ofn.hwndOwner = m_hwndOwner;
     ofn.lpstrFilter = L"可执行文件 (*.exe)\0*.exe\0"
                       L"快捷方式 (*.lnk)\0*.lnk\0"
                       L"所有文件 (*.*)\0*.*\0";
@@ -253,7 +253,7 @@ void EditDialog::BrowseIcon() {
     
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(OPENFILENAMEW);
-    ofn.hwndOwner = nullptr;
+    ofn.hwndOwner = m_hwndOwner;
     ofn.lpstrFilter = L"图标文件 (*.ico;*.exe;*.dll)\0*.ico;*.exe;*.dll\0"
                       L"图片文件 (*.png;*.jpg;*.bmp)\0*.png;*.jpg;*.bmp\0"
                       L"所有文件 (*.*)\0*.*\0";

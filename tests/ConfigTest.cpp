@@ -42,7 +42,7 @@ protected:
 
 TEST_F(ConfigTest, GetGlobalHotkey_Default) {
     // 未设置时返回默认值
-    EXPECT_EQ(m_config->GetGlobalHotkey(), L"Ctrl+Alt+Z");
+    EXPECT_EQ(m_config->GetGlobalHotkey(), L"Ctrl+Alt+M");
 }
 
 TEST_F(ConfigTest, SetGlobalHotkey_Success) {
@@ -154,7 +154,7 @@ TEST(ConfigNullTest, NullStorage_ReturnsDefaults) {
     config.Initialize(nullptr);
     
     // Storage 为空时应返回默认值
-    EXPECT_EQ(config.GetGlobalHotkey(), L"Ctrl+Alt+Z");
+    EXPECT_EQ(config.GetGlobalHotkey(), L"Ctrl+Alt+M");
     EXPECT_EQ(config.GetWindowX(), 100);
     EXPECT_EQ(config.GetWindowY(), 100);
     EXPECT_EQ(config.GetWindowWidth(), 800);
@@ -165,15 +165,15 @@ TEST(ConfigNullTest, NullStorage_ReturnsDefaults) {
 TEST(ConfigNullTest, NullStorage_SetDoesNotCrash) {
     Config config;
     config.Initialize(nullptr);
-    
+
     // 设置操作不应崩溃（但不生效）
     config.SetGlobalHotkey(L"test");
     config.SetWindowPosition(1, 2);
     config.SetWindowSize(3, 4);
     config.SetAutoStart(true);
-    
+
     // 仍返回默认值
-    EXPECT_EQ(config.GetGlobalHotkey(), L"Ctrl+Alt+Z");
+    EXPECT_EQ(config.GetGlobalHotkey(), L"Ctrl+Alt+M");
 }
 
 // ==================== 持久化测试 ====================

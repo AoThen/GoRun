@@ -56,9 +56,34 @@ bool HotkeyManager::ParseHotkeyString(const std::wstring& hotkey, unsigned int& 
 #endif
         } else if (i == parts.size() - 1) {
             if (part.size() == 1) {
-                vk = towupper(part[0]);
+                wchar_t c = part[0];
+                if (c >= L'a' && c <= L'z') {
+                    vk = static_cast<unsigned int>(c - L'a' + VK_A);
+                } else if (c >= L'A' && c <= L'Z') {
+                    vk = static_cast<unsigned int>(c);
+                } else if (c >= L'0' && c <= L'9') {
+                    vk = static_cast<unsigned int>(c);
+                } else {
+                    return false;
+                }
             }
 #ifdef _WIN32
+            else if (part == L"Space") vk = VK_SPACE;
+            else if (part == L"Tab") vk = VK_TAB;
+            else if (part == L"Escape" || part == L"Esc") vk = VK_ESCAPE;
+            else if (part == L"Enter") vk = VK_RETURN;
+            else if (part == L"Backspace") vk = VK_BACK;
+            else if (part == L"Delete" || part == L"Del") vk = VK_DELETE;
+            else if (part == L"Insert" || part == L"Ins") vk = VK_INSERT;
+            else if (part == L"Home") vk = VK_HOME;
+            else if (part == L"End") vk = VK_END;
+            else if (part == L"PageUp") vk = VK_PRIOR;
+            else if (part == L"PageDown") vk = VK_NEXT;
+            else if (part == L"PrintScreen") vk = VK_SNAPSHOT;
+            else if (part == L"Pause") vk = VK_PAUSE;
+            else if (part == L"NumLock") vk = VK_NUMLOCK;
+            else if (part == L"CapsLock") vk = VK_CAPITAL;
+            else if (part == L"ScrollLock") vk = VK_SCROLL;
             else if (part == L"F1") vk = VK_F1;
             else if (part == L"F2") vk = VK_F2;
             else if (part == L"F3") vk = VK_F3;

@@ -6,6 +6,7 @@
 #include "utils/Logger.h"
 #include <algorithm>
 #include <cwctype>
+#include <utility>
 
 #ifdef _WIN32
 #include <ShObjIdl.h>
@@ -124,38 +125,54 @@ void ItemManager::UpdateItem(const Item& item) {
             break;
         }
     }
-    
-    // 更新 m_itemsByCategory
+
+    // 更新 m_itemsByCategory - 支持跨分类变更
     for (auto& [catId, items] : m_itemsByCategory) {
-        for (auto& i : items) {
-            if (i.id == item.id) {
-                i = item;
-                break;
+        auto it = std::find_if(items.begin(), items.end(),
+            [&](const Item& i) { return i.id == item.id; });
+        if (it != items.end()) {
+            if (catId != item.categoryId) {
+                // categoryId 变更，移动到新分类
+                items.erase(it);
+                m_itemsByCategory[item.categoryId].push_back(item);
+            } else {
+                *it = item;
             }
+            break;
         }
     }
-    
+
     m_storage->UpdateItem(item);
     LOG_INFOW(L"ItemManager::UpdateItem: " + item.name);
 }
 
 void ItemManager::MoveItem(const std::wstring& itemId, const std::wstring& targetCategoryId) {
-    Item* item = GetItem(itemId);
-    if (item) {
-        std::wstring oldCatId = item->categoryId;
-        item->categoryId = targetCategoryId;
-        
-        auto& oldItems = m_itemsByCategory[oldCatId];
-        oldItems.erase(
-            std::remove_if(oldItems.begin(), oldItems.end(),
-                [&](const Item& i) { return i.id == itemId; }),
-            oldItems.end()
-        );
-        m_itemsByCategory[targetCategoryId].push_back(*item);
-        
-        m_storage->UpdateItem(*item);
-        LOG_INFOW(L"ItemManager::MoveItem: " + item->name + L" -> " + targetCategoryId);
+    // 从 m_allItems 中查找（避免悬空指针问题）
+    Item* itemInAll = nullptr;
+    for (auto& i : m_allItems) {
+        if (i.id == itemId) {
+            itemInAll = &i;
+            break;
+        }
     }
+    if (!itemInAll) return;
+
+    std::wstring oldCatId = itemInAll->categoryId;
+    if (oldCatId == targetCategoryId) return;  // 同分类无需移动
+
+    itemInAll->categoryId = targetCategoryId;
+
+    // 在 m_itemsByCategory 中移动
+    auto& oldItems = m_itemsByCategory[oldCatId];
+    auto it = std::find_if(oldItems.begin(), oldItems.end(),
+        [&](const Item& i) { return i.id == itemId; });
+    if (it != oldItems.end()) {
+        m_itemsByCategory[targetCategoryId].push_back(std::move(*it));
+        oldItems.erase(it);
+    }
+
+    m_storage->UpdateItem(*itemInAll);
+    LOG_INFOW(L"ItemManager::MoveItem: " + itemInAll->name + L" -> " + targetCategoryId);
 }
 
 void ItemManager::DeleteItem(const std::wstring& id) {

@@ -26,15 +26,17 @@ set(TEST_UTIL_SOURCES
     "${CMAKE_SOURCE_DIR}/src/utils/Logger.cpp"
     "${CMAKE_SOURCE_DIR}/src/core/Storage.cpp"
     "${CMAKE_SOURCE_DIR}/src/core/Config.cpp"
+    "${CMAKE_SOURCE_DIR}/src/core/ItemManager.cpp"
+    "${CMAKE_SOURCE_DIR}/src/core/IconCache.cpp"
 )
 
 target_sources(GoRunTests PRIVATE ${TEST_UTIL_SOURCES})
 
 # Windows 特定配置
 if(WIN32)
-    target_link_libraries(GoRunTests PRIVATE shell32 shlwapi ole32 oleaut32)
+    target_link_libraries(GoRunTests PRIVATE shell32 shlwapi ole32 oleaut32 gdiplus)
     target_compile_definitions(GoRunTests PRIVATE _WIN32)
-    
+
     # 使用静态运行时库
     if(MSVC)
         set_property(TARGET GoRunTests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

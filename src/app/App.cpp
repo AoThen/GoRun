@@ -177,7 +177,7 @@ bool App::Initialize(HINSTANCE hInstance) {
         }
     }
     
-    m_mainWindow->Initialize(m_itemManager.get(), m_config.get(), m_runner.get(), m_iconTextureManager.get());
+    m_mainWindow->Initialize(m_itemManager.get(), m_config.get(), m_runner.get(), m_iconTextureManager.get(), m_window->GetHandle());
     
     m_trayIcon->Create(m_window->GetHandle(), WM_TRAYICON, L"GoRun");
     m_trayIcon->OnShow([this]() {

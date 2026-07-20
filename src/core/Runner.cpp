@@ -1,6 +1,7 @@
 #include "Runner.h"
 #include "utils/PathUtils.h"
 #include "utils/Logger.h"
+#include <cwctype>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -9,14 +10,29 @@
 
 namespace mn {
 
+static bool StartsWithIgnoreCase(const std::wstring& str, const std::wstring& prefix) {
+    if (str.size() < prefix.size()) return false;
+    for (size_t i = 0; i < prefix.size(); i++) {
+        if (std::towlower(str[i]) != std::towlower(prefix[i])) return false;
+    }
+    return true;
+}
+
+static bool IsUrl(const std::wstring& target) {
+    return StartsWithIgnoreCase(target, L"http://") ||
+           StartsWithIgnoreCase(target, L"https://") ||
+           StartsWithIgnoreCase(target, L"ftp://") ||
+           StartsWithIgnoreCase(target, L"ftps://") ||
+           StartsWithIgnoreCase(target, L"steam://") ||
+           StartsWithIgnoreCase(target, L"mailto:");
+}
+
 RunResult Runner::Run(const Item& item) {
     RunResult result;
-    
+
 #ifdef _WIN32
-    // 检查目标是否为 URL（以 http:// 或 https:// 开头）
-    bool isUrl = item.target.size() > 4 && 
-        (item.target.substr(0, 7) == L"http://" || item.target.substr(0, 8) == L"https://");
-    
+    bool isUrl = IsUrl(item.target);
+
     // URL 不需要检查文件存在性
     if (!isUrl && !PathUtils::Exists(item.target)) {
         result.success = false;
@@ -60,9 +76,8 @@ RunResult Runner::Run(const Item& item) {
 
 RunResult Runner::RunAsAdmin(const Item& item) {
     RunResult result;
-    
-    bool isUrl = item.target.size() > 4 && 
-        (item.target.substr(0, 7) == L"http://" || item.target.substr(0, 8) == L"https://");
+
+    bool isUrl = IsUrl(item.target);
     
     if (!isUrl && !PathUtils::Exists(item.target)) {
         result.success = false;

@@ -6,6 +6,10 @@
 #include "core/Types.h"
 #include <string>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 namespace mn {
 
 class ItemManager;
@@ -15,7 +19,11 @@ class IconTextureManager;
 
 class MainWindow {
 public:
+#ifdef _WIN32
+    void Initialize(ItemManager* itemManager, Config* config, Runner* runner, IconTextureManager* iconTextureManager, HWND hwnd);
+#else
     void Initialize(ItemManager* itemManager, Config* config, Runner* runner, IconTextureManager* iconTextureManager);
+#endif
     void Render();
     
     void Show();
