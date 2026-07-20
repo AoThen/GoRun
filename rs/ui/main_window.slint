@@ -1,0 +1,97 @@
+import { VerticalBox, HorizontalBox, LineEdit, Button, ListView, Slider, CheckBox } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "GoRun";
+    min-width: 800px;
+    min-height: 600px;
+    width: 800px;
+    height: 600px;
+
+    callback search-changed(text: string);
+    callback category-selected(index: int);
+    callback new-item-clicked();
+    callback refresh-icons();
+
+    property <[CategoryModel]> categories;
+    property <[ItemModel]> items;
+
+    HorizontalBox {
+        spacing: 8px;
+        padding: 8px;
+
+        // Left sidebar: categories
+        VerticalBox {
+            width: 160px;
+            spacing: 4px;
+
+            ListView {
+                for cat in categories: Rectangle {
+                    height: 32px;
+                    Text {
+                        text: cat.name;
+                    }
+                }
+            }
+
+            Button {
+                text: "+ Category";
+                clicked => { root.new-item-clicked(); }
+            }
+        }
+
+        VerticalBox {
+            // Search bar
+            HorizontalBox {
+                LineEdit {
+                    placeholder: "Search...";
+                    edited => { root.search-changed(self.text); }
+                }
+                Button {
+                    text: "New Item";
+                    clicked => { root.new-item-clicked(); }
+                }
+            }
+
+            // Item grid
+            ItemGrid {
+                items: root.items;
+            }
+        }
+    }
+}
+
+export component ItemGrid inherits Rectangle {
+    property <[ItemModel]> items;
+
+    ListView {
+        for item in items: ItemTile {
+            item: item;
+        }
+    }
+}
+
+component ItemTile inherits Rectangle {
+    property <ItemModel> item;
+
+    VerticalBox {
+        Image {
+            width: 64px;
+            height: 64px;
+        }
+        Text {
+            text: item.name;
+        }
+    }
+}
+
+struct CategoryModel {
+    id: string,
+    name: string,
+}
+
+struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: string,
+}

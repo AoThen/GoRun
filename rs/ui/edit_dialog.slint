@@ -1,0 +1,58 @@
+import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, Slider } from "std-widgets.slint";
+
+export component EditDialog inherits Window {
+    title: "Edit Item";
+    min-width: 400px;
+    min-height: 300px;
+    width: 450px;
+    height: 350px;
+    modal: true;
+
+    callback save();
+    callback cancel();
+
+    property <string> item-name;
+    property <string> item-target;
+    property <string> item-arguments;
+    property <string> item-working-dir;
+    property <bool> run-as-admin;
+
+    VerticalBox {
+        padding: 16px;
+        spacing: 12px;
+
+        HorizontalBox {
+            Text { text: "Name:"; width: 80px; }
+            LineEdit { text: <=> root.item-name; }
+        }
+
+        HorizontalBox {
+            Text { text: "Target:"; width: 80px; }
+            LineEdit { text: <=> root.item-target; }
+        }
+
+        HorizontalBox {
+            Text { text: "Arguments:"; width: 80px; }
+            LineEdit { text: <=> root.item-arguments; }
+        }
+
+        HorizontalBox {
+            Text { text: "Directory:"; width: 80px; }
+            LineEdit { text: <=> root.item-working-dir; }
+        }
+
+        HorizontalBox {
+            CheckBox {
+                text: "Run as administrator";
+                checked: <=> root.run-as-admin;
+            }
+        }
+
+        HorizontalBox {
+            alignment: end;
+            spacing: 8px;
+            Button { text: "Save"; clicked => { root.save(); } }
+            Button { text: "Cancel"; clicked => { root.cancel(); } }
+        }
+    }
+}

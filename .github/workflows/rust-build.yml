@@ -1,0 +1,45 @@
+name: Rust Build (GoRun-rs)
+
+on:
+  push:
+    branches: [main]
+    paths: ['rs/**', '.github/workflows/rust-build.yml']
+  pull_request:
+    paths: ['rs/**']
+  workflow_dispatch:
+
+jobs:
+  rust-build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      - name: Build (debug)
+        run: cargo build
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoRun-rs-release
+          path: rs/target/release/GoRun.exe
+          retention-days: 30
