@@ -44,7 +44,7 @@ fn setup_ui_with_data(categories: Vec<Category>, items: Vec<Item>) -> MainWindow
 #[test]
 fn test_main_window_initializes() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    assert_eq!(ui.window().title(), "GoRun");
+    assert_eq!(ui.window().title().as_str(), "GoRun");
 }
 
 #[test]
