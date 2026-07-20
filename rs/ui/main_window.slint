@@ -12,6 +12,49 @@ struct ItemModel {
     icon-path: string,
 }
 
+export component ItemTile inherits Rectangle {
+    callback double-clicked();
+
+    in property <ItemModel> item;
+
+    height: 90px;
+    width: 80px;
+
+    TouchArea {
+        clicked => { root.double-clicked(); }
+
+        VerticalBox {
+            padding: 4px;
+            spacing: 4px;
+
+            Rectangle {
+                width: 64px;
+                height: 64px;
+                background: #3a3a3a;
+                border-radius: 8px;
+            }
+            Text {
+                text: root.item.name;
+                font-size: 11px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}
+
+export component ItemGrid inherits Rectangle {
+    callback item-double-clicked(index: int);
+
+    in property <[ItemModel]> items;
+
+    ListView {
+        for item[index] in items: ItemTile {
+            item: item;
+            double-clicked => { root.item-double-clicked(index); }
+        }
+    }
+}
+
 export component MainWindow inherits Window {
     title: "GoRun";
     min-width: 800px;
@@ -25,7 +68,6 @@ export component MainWindow inherits Window {
     callback refresh-icons();
     callback file-dropped(name: string, target: string);
     callback item-double-clicked(index: int);
-    callback item-right-clicked(index: int);
     callback toggle-view();
     callback toggle-theme();
 
@@ -107,8 +149,7 @@ export component MainWindow inherits Window {
                 // Item grid
                 ItemGrid {
                     items: root.items;
-                    on-item-double-clicked => { root.item-double-clicked(index); }
-                    on-item-right-clicked => { root.item-right-clicked(index); }
+                    item-double-clicked(index) => { root.item-double-clicked(index); }
                 }
 
                 // Status bar
@@ -119,64 +160,6 @@ export component MainWindow inherits Window {
                         color: root.is-dark-theme ? #888888 : #666666;
                     }
                 }
-            }
-        }
-    }
-}
-
-export component ItemGrid inherits Rectangle {
-    callback item-double-clicked(index: int);
-    callback item-right-clicked(index: int);
-
-    property <[ItemModel]> items;
-
-    ListView {
-        for item[index] in items: ItemTile {
-            item: item;
-            on-double-clicked => { root.item-double-clicked(index); }
-            on-right-clicked => { root.item-right-clicked(index); }
-        }
-    }
-}
-
-component ItemTile inherits Rectangle {
-    callback double-clicked();
-    callback right-clicked();
-
-    property <ItemModel> item;
-
-    height: 90px;
-    width: 80px;
-
-    TouchArea {
-        clicked => { root.double-clicked(); }
-        pointer-event(event) => {
-            if (event.button == PointerButton.right) {
-                root.right-clicked();
-            }
-        }
-
-        VerticalBox {
-            padding: 4px;
-            spacing: 4px;
-
-            Rectangle {
-                width: 64px;
-                height: 64px;
-                background: #3a3a3a;
-                border-radius: 8px;
-                Image {
-                    width: 64px;
-                    height: 64px;
-                    source: root.item.icon-path;
-                }
-            }
-            Text {
-                text: root.item.name;
-                font-size: 11px;
-                horizontal-alignment: center;
-                overflow: ellipsis;
-                max-width: 76px;
             }
         }
     }
