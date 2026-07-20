@@ -1,5 +1,3 @@
-#![cfg(feature = "testing")]
-
 use slint::Model;
 
 use gorun::item_manager::ItemManager;

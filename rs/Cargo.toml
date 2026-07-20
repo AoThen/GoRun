@@ -10,7 +10,6 @@ slint-build = "1.7"
 [features]
 default = ["backend-winit"]
 backend-winit = ["slint/backend-winit"]
-testing = ["slint/testing"]
 
 [dependencies]
 slint = { version = "1.7", default-features = false, features = ["renderer-skia", "compat-1-2"] }

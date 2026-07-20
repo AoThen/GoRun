@@ -74,11 +74,11 @@ jobs:
             rs/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
 
-      - name: Build with testing feature
-        run: cargo build --features testing
+      - name: Build with testing
+        run: cargo build
 
       - name: Run GUI integration tests (xvfb)
-        run: xvfb-run cargo test --features testing --test gui_integration_test
+        run: xvfb-run cargo test --test gui_integration_test
 
       - name: Run all tests (xvfb)
-        run: xvfb-run cargo test --features testing
+        run: xvfb-run cargo test
