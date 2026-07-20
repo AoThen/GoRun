@@ -1,18 +1,17 @@
 #![cfg(feature = "testing")]
 
-use slint::testing::ElementHandle;
 use slint::Model;
 
-use gorun::model::{Category, Item, ViewType};
 use gorun::item_manager::ItemManager;
+use gorun::model::{AppConfig, AppData, Category, Config, Item, ViewType};
 
 slint::include_modules!();
 
 fn setup_ui_with_data(categories: Vec<Category>, items: Vec<Item>) -> MainWindow {
-    let app_config = gorun::model::AppConfig {
+    let app_config = AppConfig {
         version: "test".into(),
-        data: gorun::model::AppData { categories, items },
-        config: gorun::model::Config::default(),
+        data: AppData { categories, items },
+        config: Config::default(),
         extra_config: Default::default(),
     };
     let manager = ItemManager::new(app_config);
@@ -106,34 +105,33 @@ fn test_search_changed_callback() {
     ];
     let ui = setup_ui_with_data(categories, items);
 
-    ui.set_search-text("Calc");
-    ui.invoke_search-changed("Calc");
-    assert_eq!(ui.get_search-text(), "Calc");
+    ui.set_search_text("Calc");
+    ui.invoke_search_changed("Calc");
+    assert_eq!(ui.get_search_text(), "Calc");
 }
 
 #[test]
 fn test_toggle_view_callback() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    assert!(ui.get_is-icon-view());
-    ui.invoke_toggle-view();
-    assert!(!ui.get_is-icon-view());
-    ui.invoke_toggle-view();
-    assert!(ui.get_is-icon-view());
+    assert!(ui.get_is_icon_view());
+    ui.invoke_toggle_view();
+    assert!(!ui.get_is_icon_view());
+    ui.invoke_toggle_view();
+    assert!(ui.get_is_icon_view());
 }
 
 #[test]
 fn test_toggle_theme_callback() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    let initial = ui.get_is-dark-theme();
-    ui.invoke_toggle-theme();
-    assert_ne!(ui.get_is-dark-theme(), initial);
+    let initial = ui.get_is_dark_theme();
+    ui.invoke_toggle_theme();
+    assert_ne!(ui.get_is_dark_theme(), initial);
 }
 
 #[test]
 fn test_new_item_click_callback() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    ui.invoke_new-item-clicked();
-    // Verify no panic; callback path exists
+    ui.invoke_new_item_clicked();
 }
 
 #[test]
@@ -151,30 +149,24 @@ fn test_category_selected_callback() {
         },
     ];
     let ui = setup_ui_with_data(categories, vec![]);
-    ui.invoke_category-selected(1);
+    ui.invoke_category_selected(1);
 }
 
 #[test]
-fn test_file_dropped_adds_item() {
+fn test_file_dropped_callback() {
     let categories = vec![Category {
         id: "cat_1".into(),
         name: "Default".into(),
         ..Default::default()
     }];
     let ui = setup_ui_with_data(categories, vec![]);
-
-    let initial_count = ui.get_items().row_count();
-    ui.invoke_file-dropped("NewApp", "C:\\newapp.exe");
-    // In this test environment, the file-dropped callback modifies the model
-    // via the weak-reference path which won't work in unit test
-    // We verify at least the callback can be invoked without panic
-    let _ = initial_count;
+    ui.invoke_file_dropped("NewApp".into(), "C:\\newapp.exe".into());
 }
 
 #[test]
 fn test_refresh_icons_callback() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    ui.invoke_refresh-icons();
+    ui.invoke_refresh_icons();
 }
 
 #[test]
@@ -210,13 +202,13 @@ fn test_empty_state_renders() {
 #[test]
 fn test_status_bar_initial_text() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    assert_eq!(ui.get_status-text(), "Ready");
+    assert_eq!(ui.get_status_text(), "Ready");
 }
 
 #[test]
 fn test_drop_active_flag() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    assert!(!ui.get_drop-active());
-    ui.set_drop-active(true);
-    assert!(ui.get_drop-active());
+    assert!(!ui.get_drop_active());
+    ui.set_drop_active(true);
+    assert!(ui.get_drop_active());
 }

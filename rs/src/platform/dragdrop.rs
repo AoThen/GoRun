@@ -96,7 +96,7 @@ impl DropTarget {
         {
             let this = this as *const DropTarget;
             *ppv = this as *mut std::ffi::c_void;
-            ((*this).ref_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            (*this).ref_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             windows::Win32::Foundation::S_OK
         } else {
             *ppv = std::ptr::null_mut();

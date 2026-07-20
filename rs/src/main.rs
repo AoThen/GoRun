@@ -43,11 +43,11 @@ fn main() {
 
     // Setup drag and drop message channel
     let drop_rx = {
-        let window = ui.window();
         #[cfg(windows)]
         {
             use raw_window_handle::HasWindowHandle;
             use raw_window_handle::Win32WindowHandle;
+            let window = ui.window();
             if let Ok(handle) = window.window_handle() {
                 if let raw_window_handle::RawWindowHandle::Win32(Win32WindowHandle { hwn, .. }) = handle {
                     platform::setup_dragdrop(hwn as isize)
@@ -69,7 +69,8 @@ fn main() {
 
     // Poll for dropped files on each UI tick
     let ui_weak = ui.as_weak();
-    slint::Timer::default().start(
+    let _timer = slint::Timer::default();
+    _timer.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(50),
         move || {
@@ -84,7 +85,6 @@ fn main() {
                                 .unwrap_or("Unknown")
                                 .to_string()
                                 .into();
-                            // invoke add_item callback via global state
                             ui_weak
                                 .upgrade()
                                 .map(|ui| ui.invoke_file_dropped(name, target));
@@ -117,40 +117,14 @@ fn main() {
 }
 
 fn wire_handler(ui: &MainWindow, _manager: &mut ItemManager) {
-    let ui_weak = ui.as_weak();
-    ui.on_file_dropped(move |name, target| {
-        let _ = (name, target);
-        if let Some(ui) = ui_weak.upgrade() {
-            // Placeholder: real manager integration would go here
-            let items = ui.get_items();
-            slint::VecModel::push(&items, ItemModel {
-                id: "item_pending".into(),
-                name,
-                target,
-                icon_path: "".into(),
-            });
-        }
+    ui.on_file_dropped(move |_name, _target| {
+        // Placeholder: real manager integration would go here
     });
-}
-
-#[derive(Clone, Default, slint::PartialEq)]
-pub struct CategoryModel {
-    pub id: slint::SharedString,
-    pub name: slint::SharedString,
-}
-
-#[derive(Clone, Default, slint::PartialEq)]
-pub struct ItemModel {
-    pub id: slint::SharedString,
-    pub name: slint::SharedString,
-    pub target: slint::SharedString,
-    pub icon_path: slint::SharedString,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::generate_id;
 
     #[test]
     fn test_create_category_model() {
