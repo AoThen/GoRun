@@ -2,7 +2,6 @@
 
 #include "Types.h"
 #include <string>
-#include <unordered_map>
 #include <cstdint>
 
 namespace mn {
@@ -20,7 +19,6 @@ public:
 
 private:
     std::wstring m_cacheDir;
-    std::unordered_map<std::wstring, std::wstring> m_cache;
 };
 
 } // namespace mn

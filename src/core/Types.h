@@ -6,6 +6,7 @@
 #include <chrono>
 #include <random>
 #include <unordered_map>
+#include <atomic>
 
 namespace mn {
 
@@ -61,11 +62,11 @@ struct RunResult {
 
 // ID 生成器
 inline std::wstring GenerateId(const std::wstring& prefix) {
+    static std::atomic<long long> s_counter{0};
     auto now = std::chrono::system_clock::now().time_since_epoch();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-    std::random_device rd;
-    int random = rd() % 10000;
-    return prefix + L"_" + std::to_wstring(ms) + L"_" + std::to_wstring(random);
+    long long seq = s_counter.fetch_add(1);
+    return prefix + L"_" + std::to_wstring(ms) + L"_" + std::to_wstring(seq);
 }
 
 } // namespace mn

@@ -39,21 +39,7 @@ bool Storage::Flush() {
 
 bool Storage::RotateBackups() {
     std::wstring bak1 = m_path + L".bak1";
-    std::wstring bak2 = m_path + L".bak2";
-    std::wstring bak3 = m_path + L".bak3";
-    
-    // bak2 -> bak3
-    if (PathUtils::Exists(bak2)) {
-        if (!MoveFileExW(bak2.c_str(), bak3.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-            LOG_ERROR("Storage::RotateBackups: failed to rotate bak2 -> bak3");
-        }
-    }
-    // bak1 -> bak2
-    if (PathUtils::Exists(bak1)) {
-        if (!MoveFileExW(bak1.c_str(), bak2.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-            LOG_ERROR("Storage::RotateBackups: failed to rotate bak1 -> bak2");
-        }
-    }
+
     // current -> bak1
     if (PathUtils::Exists(m_path)) {
         if (!CopyFileW(m_path.c_str(), bak1.c_str(), FALSE)) {
@@ -126,8 +112,7 @@ bool Storage::SaveToFile() {
 }
 
 bool Storage::Load(const std::wstring& path) {
-    m_path = path;
-    
+    std::wstring originalPath = m_path;
     m_categories.clear();
     m_items.clear();
     m_config.clear();
@@ -183,11 +168,18 @@ bool Storage::Load(const std::wstring& path) {
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR(std::string("Storage::Load failed: ") + e.what());
+        m_path = originalPath;
         return false;
     } catch (...) {
         LOG_ERROR("Storage::Load failed: unknown error");
+        m_path = originalPath;
         return false;
     }
+}
+
+bool Storage::Save() {
+    m_dirty = true;
+    return SaveToFile();
 }
 
 bool Storage::Save(const std::wstring& path) {
@@ -314,6 +306,12 @@ bool Storage::SetConfig(const std::string& key, const std::wstring& value) {
     m_config[key] = value;
     m_dirty = true;
     if (m_batchLevel == 0) return SaveToFile();
+    return true;
+}
+
+bool Storage::SetConfigNoSave(const std::string& key, const std::wstring& value) {
+    m_config[key] = value;
+    m_dirty = true;
     return true;
 }
 

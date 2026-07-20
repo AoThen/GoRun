@@ -12,6 +12,8 @@ public:
     void Initialize(const std::wstring& path);
     bool Load(const std::wstring& path);
     bool Save(const std::wstring& path);
+    bool Save();
+    const std::wstring& GetPath() const { return m_path; }
     
     void BeginBatch();
     void EndBatch();
@@ -33,6 +35,7 @@ public:
     
     std::wstring GetConfig(const std::string& key, const std::wstring& defaultVal = L"") const;
     bool SetConfig(const std::string& key, const std::wstring& value);
+    bool SetConfigNoSave(const std::string& key, const std::wstring& value);
 
 private:
     bool SaveToFile();

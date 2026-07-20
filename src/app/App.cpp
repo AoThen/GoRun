@@ -105,17 +105,13 @@ bool App::Initialize(HINSTANCE hInstance) {
             // 尝试从备份恢复
             bool restored = false;
             std::wstring bak1 = configPath + L".bak1";
-            std::wstring bak2 = configPath + L".bak2";
-            std::wstring bak3 = configPath + L".bak3";
             if (PathUtils::Exists(bak1)) {
                 restored = m_storage->Load(bak1);
-            } else if (PathUtils::Exists(bak2)) {
-                restored = m_storage->Load(bak2);
-            } else if (PathUtils::Exists(bak3)) {
-                restored = m_storage->Load(bak3);
             }
             if (!restored) {
                 LOG_ERRORW(L"App: Failed to load config, starting with empty data");
+            } else {
+                m_storage->Save();
             }
         }
     }
@@ -211,6 +207,11 @@ int App::Run() {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         } else if (m_mainWindow->IsVisible()) {
+            DWORD now = GetTickCount();
+            if (m_storage && (now - m_lastSaveTick > 500)) {
+                m_storage->Flush();
+                m_lastSaveTick = now;
+            }
             m_renderer->NewFrame();
             
             ImGui::SetNextWindowPos(ImVec2(0, 0));

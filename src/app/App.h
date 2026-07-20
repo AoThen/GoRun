@@ -54,6 +54,7 @@ private:
 #endif
     
     uintptr_t m_gdiplusToken = 0;
+    DWORD m_lastSaveTick = 0;
 
     std::unique_ptr<Localization> m_localization;
     std::unique_ptr<Storage> m_storage;

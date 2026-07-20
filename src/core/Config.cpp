@@ -14,7 +14,7 @@ void Config::Initialize(Storage* storage) {
 }
 
 std::wstring Config::GetGlobalHotkey() const {
-    return m_storage ? m_storage->GetConfig("globalHotkey", L"Ctrl+Alt+Z") : L"Ctrl+Alt+Z";
+    return m_storage ? m_storage->GetConfig("globalHotkey", L"Ctrl+Alt+M") : L"Ctrl+Alt+M";
 }
 
 void Config::SetGlobalHotkey(const std::wstring& hotkey) {
@@ -71,15 +71,15 @@ int Config::GetWindowHeight() const {
 
 void Config::SetWindowPosition(int x, int y) {
     if (m_storage) {
-        m_storage->SetConfig("windowX", std::to_wstring(x));
-        m_storage->SetConfig("windowY", std::to_wstring(y));
+        m_storage->SetConfigNoSave("windowX", std::to_wstring(x));
+        m_storage->SetConfigNoSave("windowY", std::to_wstring(y));
     }
 }
 
 void Config::SetWindowSize(int width, int height) {
     if (m_storage) {
-        m_storage->SetConfig("windowWidth", std::to_wstring(width));
-        m_storage->SetConfig("windowHeight", std::to_wstring(height));
+        m_storage->SetConfigNoSave("windowWidth", std::to_wstring(width));
+        m_storage->SetConfigNoSave("windowHeight", std::to_wstring(height));
     }
 }
 

@@ -46,7 +46,8 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         m_currentCategoryId = cat.id;
         m_itemGrid.SetItems(&m_itemManager->GetItems(cat.id));
         // 自动打开重命名对话框
-        strncpy(m_renameCategoryBuf, "新分类", sizeof(m_renameCategoryBuf) - 1);
+        strncpy(m_renameCategoryBuf, u8"新分类", sizeof(m_renameCategoryBuf) - 1);
+        m_renameCategoryBuf[sizeof(m_renameCategoryBuf) - 1] = '\0';
         m_showRenameCategory = true;
         m_openRenamePopup = true;
     });
@@ -335,7 +336,8 @@ void MainWindow::RenderSearchBar() {
     
     if (searchChanged) {
         m_lastSearchTime = ImGui::GetTime();
-        strcpy(m_pendingSearchBuf, m_searchBuf);
+        strncpy(m_pendingSearchBuf, m_searchBuf, sizeof(m_pendingSearchBuf) - 1);
+        m_pendingSearchBuf[sizeof(m_pendingSearchBuf) - 1] = '\0';
         m_searchPending = true;
     }
     

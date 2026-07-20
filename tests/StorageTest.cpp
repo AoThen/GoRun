@@ -518,3 +518,35 @@ TEST_F(StorageTest, MultipleCategoriesAndItems) {
         EXPECT_EQ(items.size(), 4);  // 20 / 5 = 4
     }
 }
+
+// ==================== P0-1: Load 不应污染主路径 ====================
+
+TEST_F(StorageTest, Load_DoesNotChangeMainPath) {
+    Storage storage;
+    storage.Initialize(m_testFile);
+
+    Category cat;
+    cat.id = L"cat_001";
+    cat.name = L"测试分类";
+    storage.AddCategory(cat);
+    storage.Save();
+
+    // 构造一个有效的 bak 文件
+    std::wstring bakPath = m_testDir + L"\\backup.json";
+    {
+        Storage bakStorage;
+        bakStorage.Initialize(bakPath);
+        Category bakCat;
+        bakCat.id = L"cat_bak";
+        bakCat.name = L"备份分类";
+        bakStorage.AddCategory(bakCat);
+        bakStorage.Save();
+    }
+
+    EXPECT_TRUE(storage.Load(bakPath));
+    // 主路径必须保持为 m_testFile，而非被改成 bakPath
+    EXPECT_EQ(storage.GetPath(), m_testFile);
+    // 内存数据应来自 bak 文件
+    EXPECT_EQ(storage.GetCategories().size(), 1);
+    EXPECT_EQ(storage.GetCategory(L"cat_bak").name, L"备份分类");
+}
