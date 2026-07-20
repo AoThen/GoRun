@@ -49,7 +49,7 @@ fn main() {
             name: c.name.clone().into(),
         })
         .collect();
-    let category_model = slint::VecModel::from(categories);
+    let category_model = std::rc::Rc::new(slint::VecModel::from(categories));
     ui.set_categories(category_model.into());
 
     ui.run().unwrap();

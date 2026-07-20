@@ -74,7 +74,7 @@ impl Storage {
             return None;
         }
         let content = fs::read_to_string(&self.path).ok()?;
-        let raw: RawFile = serde_json::from_str(&content)?;
+        let raw: RawFile = serde_json::from_str(&content).ok()?;
 
         let mut extra_config = raw.config.clone();
         extra_config.remove("globalHotkey");

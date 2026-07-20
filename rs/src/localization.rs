@@ -36,7 +36,7 @@ impl Localization {
         }
     }
 
-    pub fn tr(&self, key: &str) -> &str {
+    pub fn tr<'a>(&'a self, key: &'a str) -> &'a str {
         self.strings.get(key).map(|s| s.as_str()).unwrap_or(key)
     }
 

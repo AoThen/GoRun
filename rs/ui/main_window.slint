@@ -71,7 +71,7 @@ export component MainWindow inherits Window {
     callback toggle-view();
     callback toggle-theme();
 
-    property <[CategoryModel]> categories;
+    in-out property <[CategoryModel]> categories;
     property <[ItemModel]> items;
     property <string> search-text: "";
     property <bool> is-dark-theme: true;
