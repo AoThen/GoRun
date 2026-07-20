@@ -17,6 +17,7 @@ impl Localization {
             lang_code: lang_code.to_string(),
         };
         loc.load();
+        log::info!("Localization created: lang={}", lang_code);
         loc
     }
 
@@ -27,11 +28,23 @@ impl Localization {
     fn load(&mut self) {
         let path = Self::lang_file_path(&self.lang_code);
         if !path.exists() {
+            log::warn!("Language file not found: {:?}", path);
             return;
         }
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(json) = serde_json::from_str::<HashMap<String, String>>(&content) {
-                self.strings = json;
+        match fs::read_to_string(&path) {
+            Ok(content) => {
+                match serde_json::from_str::<HashMap<String, String>>(&content) {
+                    Ok(json) => {
+                        log::info!("Language file loaded: {:?}, {} strings", path, json.len());
+                        self.strings = json;
+                    }
+                    Err(_) => {
+                        log::error!("Failed to parse language JSON: {:?}", path);
+                    }
+                }
+            }
+            Err(_) => {
+                log::error!("Failed to read language file: {:?}", path);
             }
         }
     }

@@ -71,10 +71,23 @@ impl Storage {
 
     pub fn load(&self) -> Option<AppConfig> {
         if !Path::new(&self.path).exists() {
+            log::warn!("Config file not found: {}", self.path);
             return None;
         }
-        let content = fs::read_to_string(&self.path).ok()?;
-        let raw: RawFile = serde_json::from_str(&content).ok()?;
+        let content = match fs::read_to_string(&self.path) {
+            Ok(c) => c,
+            Err(_) => {
+                log::error!("Failed to read config file: {}", self.path);
+                return None;
+            }
+        };
+        let raw: RawFile = match serde_json::from_str(&content) {
+            Ok(r) => r,
+            Err(_) => {
+                log::error!("Failed to parse config JSON: {}", self.path);
+                return None;
+            }
+        };
 
         let mut extra_config = raw.config.clone();
         extra_config.remove("globalHotkey");
@@ -114,6 +127,8 @@ impl Storage {
             category_id: i.category_id,
             sort_order: i.sort_order,
         }).collect();
+
+        log::info!("Config loaded: {} categories, {} items", categories.len(), items.len());
 
         Some(AppConfig {
             version: raw.version,
@@ -164,7 +179,10 @@ impl Storage {
 
         let json = match serde_json::to_string_pretty(&raw) {
             Ok(s) => s,
-            Err(_) => return false,
+            Err(_) => {
+                log::error!("Failed to serialize config to JSON");
+                return false;
+            }
         };
 
         let path = Path::new(&self.path);
@@ -174,12 +192,15 @@ impl Storage {
 
         let tmp_path = format!("{}.tmp", self.path);
         if fs::write(&tmp_path, &json).is_err() {
+            log::error!("Failed to write temp file: {}", tmp_path);
             return false;
         }
         if fs::rename(&tmp_path, &self.path).is_err() {
             let _ = fs::remove_file(&tmp_path);
+            log::error!("Failed to rename temp to config: {}", self.path);
             return false;
         }
+        log::info!("Config saved to: {}", self.path);
         true
     }
 }

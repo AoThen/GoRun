@@ -7,6 +7,7 @@ pub struct ItemManager {
 
 impl ItemManager {
     pub fn new(config: AppConfig) -> Self {
+        log::debug!("ItemManager created with {} categories", config.data.categories.len());
         ItemManager {
             config,
             modified: false,
@@ -36,9 +37,13 @@ impl ItemManager {
             .collect()
     }
 
+    pub fn all_items(&self) -> Vec<Item> {
+        self.config.data.items.clone()
+    }
+
     pub fn search_items(&self, query: &str) -> Vec<Item> {
         let q = query.to_lowercase();
-        self.config
+        let results: Vec<Item> = self.config
             .data
             .items
             .iter()
@@ -48,13 +53,16 @@ impl ItemManager {
                     || i.target.to_lowercase().contains(&q)
             })
             .cloned()
-            .collect()
+            .collect();
+        log::debug!("Search: query={}, results={}", query, results.len());
+        results
     }
 
     pub fn add_category(&mut self, mut category: Category) {
         if category.id.is_empty() {
             category.id = crate::model::generate_id("cat");
         }
+        log::info!("Category added: id={}, name={}", category.id, category.name);
         self.config.data.categories.push(category);
         self.modified = true;
     }
@@ -63,8 +71,10 @@ impl ItemManager {
         if let Some(c) = self.config.data.categories.iter_mut().find(|c| c.id == category.id) {
             *c = category.clone();
             self.modified = true;
+            log::info!("Category updated: id={}", category.id);
             true
         } else {
+            log::warn!("Category update failed: id={} not found", category.id);
             false
         }
     }
@@ -73,15 +83,18 @@ impl ItemManager {
         self.config.data.items.retain(|i| i.category_id != id);
         self.config.data.categories.retain(|c| c.id != id);
         self.modified = true;
+        log::info!("Category deleted: id={}", id);
     }
 
     pub fn add_item(&mut self, mut item: Item) -> bool {
         if item.category_id.is_empty() {
+            log::warn!("Item add failed: empty category_id");
             return false;
         }
         if item.id.is_empty() {
             item.id = crate::model::generate_id("item");
         }
+        log::info!("Item added: id={}, name={}", item.id, item.name);
         self.config.data.items.push(item);
         self.modified = true;
         true
@@ -91,8 +104,10 @@ impl ItemManager {
         if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item.id) {
             *i = item.clone();
             self.modified = true;
+            log::info!("Item updated: id={}", item.id);
             true
         } else {
+            log::warn!("Item update failed: id={} not found", item.id);
             false
         }
     }
@@ -103,6 +118,9 @@ impl ItemManager {
         let removed = self.config.data.items.len() < before;
         if removed {
             self.modified = true;
+            log::info!("Item deleted: id={}", id);
+        } else {
+            log::warn!("Item delete failed: id={} not found", id);
         }
         removed
     }
@@ -111,6 +129,7 @@ impl ItemManager {
         if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item_id) {
             i.category_id = category_id.to_string();
             self.modified = true;
+            log::info!("Item moved: {} -> {}", item_id, category_id);
             true
         } else {
             false

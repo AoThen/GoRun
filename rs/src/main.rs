@@ -3,6 +3,7 @@ mod hotkey;
 mod icon_cache;
 mod item_manager;
 mod localization;
+mod logger;
 mod model;
 mod runner;
 mod storage;
@@ -15,12 +16,16 @@ use storage::Storage;
 slint::include_modules!();
 
 fn main() {
+    logger::init().ok();
+    log::info!("GoRun starting...");
+
     let storage = Storage::new(
         config::config_path().to_str().unwrap_or("config.json").to_string(),
     );
 
     let mut app_config = storage.load().unwrap_or_default();
     if app_config.data.categories.is_empty() {
+        log::warn!("No categories found, created default category");
         let default_cat = Category {
             id: model::generate_id("cat"),
             name: "Default".to_string(),
@@ -31,6 +36,8 @@ fn main() {
         app_config.data.categories.push(default_cat);
     }
 
+    log::info!("Config loaded from: {:?}", config::config_path());
+
     let mut manager = ItemManager::new(app_config);
     let _icon_cache = icon_cache::IconCache::new();
     let _loc = localization::Localization::new("zh-CN");
@@ -38,6 +45,7 @@ fn main() {
     let (_tray, _tray_tx) = tray::TrayIcon::new();
 
     let ui = MainWindow::new().unwrap();
+    log::info!("MainWindow created successfully");
 
     wire_handler(&ui, &mut manager);
 
@@ -52,7 +60,9 @@ fn main() {
     let category_model = std::rc::Rc::new(slint::VecModel::from(categories));
     ui.set_categories(category_model.into());
 
+    log::info!("Entering main event loop");
     ui.run().unwrap();
+    log::info!("Main event loop ended, modified={}", manager.is_modified());
 
     if manager.is_modified() {
         let _ = storage.save(manager.config());
@@ -60,8 +70,36 @@ fn main() {
 }
 
 fn wire_handler(ui: &MainWindow, _manager: &mut ItemManager) {
-    ui.on_file_dropped(move |_name, _target| {
-        // Placeholder: real manager integration would go here
+    ui.on_file_dropped(move |name, target| {
+        log::info!("File dropped: name={}, target={}", name, target);
+    });
+
+    ui.on_search_changed(move |text| {
+        log::debug!("Search changed: {}", text);
+    });
+
+    ui.on_category_selected(move |index| {
+        log::debug!("Category selected: index={}", index);
+    });
+
+    ui.on_toggle_view(move || {
+        log::debug!("View toggled");
+    });
+
+    ui.on_toggle_theme(move || {
+        log::debug!("Theme toggled");
+    });
+
+    ui.on_new_item_clicked(move || {
+        log::debug!("New item clicked");
+    });
+
+    ui.on_refresh_icons(move || {
+        log::debug!("Refresh icons");
+    });
+
+    ui.on_item_double_clicked(move |index| {
+        log::debug!("Item double-clicked: index={}", index);
     });
 }
 

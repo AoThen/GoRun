@@ -11,6 +11,7 @@ impl IconCache {
     pub fn new() -> Self {
         let dir = config::icons_dir();
         let _ = fs::create_dir_all(&dir);
+        log::info!("IconCache initialized: dir={:?}", dir);
         IconCache { cache_dir: dir }
     }
 
@@ -30,6 +31,7 @@ impl IconCache {
     pub fn delete_cache(&self, item_id: &str) {
         let path = self.cache_path(item_id);
         if path.exists() {
+            log::debug!("Icon cache deleted: id={}", item_id);
             let _ = fs::remove_file(&path);
         }
     }

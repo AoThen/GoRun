@@ -6,8 +6,10 @@ version = 4
 name = "GoRun"
 version = "1.0.0"
 dependencies = [
+ "chrono",
  "dirs",
  "image",
+ "log",
  "serde",
  "serde_json",
  "slint",
