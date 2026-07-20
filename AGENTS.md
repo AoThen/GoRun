@@ -5,6 +5,8 @@
 **GoRun** 是一款 Windows 平台的快速启动工具，专注于"快速启动"的纯粹体验。本项目为原版 GoRun 的开源重写版本，使用 **C++** 和 **ImGui** 开发，采用原生架构，无 WebView/Electron 依赖，具有毫秒级启动和极低资源占用的特点。
 
 > **项目状态：** MVP 阶段 - 核心功能已实现，高级功能规划中
+>
+> **Rust 重写：** 正在进行中，位于 `rs/` 目录，与 C++ 代码并行存在
 
 ### 核心特性
 
@@ -14,6 +16,8 @@
 
 ### 技术栈
 
+#### C++ 原版（`src/`）
+
 | 项目 | 选择 |
 |-----|------|
 | 语言 | C++17 |
@@ -21,6 +25,16 @@
 | 渲染 | DirectX 11 + ImGui (docking 分支) |
 | 存储 | JSON (nlohmann/json v3.11.2) |
 | 依赖管理 | CMake FetchContent |
+| 平台 | Windows 10+ |
+
+#### Rust 重写（`rs/`）
+
+| 项目 | 选择 |
+|-----|------|
+| 语言 | Rust 2021 |
+| 构建 | Cargo |
+| UI | Slint 1.7+ (Skia 渲染) |
+| 存储 | JSON (serde + serde_json) |
 | 平台 | Windows 10+ |
 
 ---
@@ -61,7 +75,7 @@ GoRun/
 ├── AGENTS.md                   # AI 代理上下文文件（本文件）
 ├── cmake/
 │   └── FetchDependencies.cmake # 依赖获取脚本
-├── src/
+├── src/                        # C++ 原版代码
 │   ├── main.cpp                # 程序入口
 │   ├── app/
 │   │   ├── App.h/cpp           # 应用主类
@@ -90,6 +104,30 @@ GoRun/
 │   └── utils/
 │       ├── StringUtils.h/cpp   # 字符串工具
 │       └── PathUtils.h/cpp     # 路径工具
+├── rs/                         # Rust 重写版本
+│   ├── Cargo.toml              # Cargo 配置
+│   ├── build.rs                # Slint 编译脚本
+│   ├── src/
+│   │   ├── main.rs             # 程序入口
+│   │   ├── lib.rs              # 库导出
+│   │   ├── config.rs           # 配置管理
+│   │   ├── hotkey.rs           # 快捷键管理
+│   │   ├── icon_cache.rs       # 图标缓存
+│   │   ├── item_manager.rs     # 项目管理器
+│   │   ├── localization.rs     # 多语言支持
+│   │   ├── model.rs            # 数据模型
+│   │   ├── runner.rs           # 程序启动器
+│   │   ├── storage.rs          # JSON 存储
+│   │   ├── tray.rs             # 托盘图标
+│   │   └── platform/           # 平台相关（Windows）
+│   │       ├── mod.rs          # 平台模块入口
+│   │       └── dragdrop.rs     # OLE 拖放实现
+│   ├── ui/
+│   │   ├── main_window.slint   # 主窗口 UI
+│   │   └── edit_dialog.slint   # 编辑对话框 UI
+│   └── tests/
+│       ├── gui_integration_test.rs  # GUI 集成测试
+│       └── storage_test.rs     # 存储单元测试
 ├── res/
 │   ├── resource.rc             # Windows 资源
 │   └── icons/
@@ -116,7 +154,8 @@ GoRun/
 └── .github/
     ├── FUNDING.yml             # GitHub 赞助配置
     └── workflows/
-        └── build.yml           # CI/CD 构建配置
+        ├── build.yml           # C++ CI/CD 构建配置
+        └── rust-build.yml      # Rust CI/CD 构建配置
 ```
 
 ---
@@ -149,6 +188,47 @@ cmake --build build --config Debug
 |-----|------|-----|
 | ImGui | docking 分支 | UI 框架 |
 | nlohmann/json | v3.11.2 | JSON 解析 |
+
+---
+
+## Rust 重写版本构建
+
+### 环境要求
+
+- Rust 1.70+ (2021 edition)
+- Cargo
+- Windows SDK (for windows crate)
+
+### 构建步骤
+
+```bash
+cd rs
+
+# Debug 构建
+cargo build
+
+# Release 构建
+cargo build --release
+
+# 运行单元测试
+cargo test --lib
+
+# 运行 GUI 集成测试（需要 xvfb 或显示服务器）
+cargo test
+```
+
+### 依赖项
+
+| 依赖 | 版本 | 用途 |
+|-----|------|-----|
+| slint | 1.7+ | UI 框架 (Skia 渲染) |
+| serde | 1.x | 序列化 |
+| serde_json | 1.x | JSON 解析 |
+| dirs | 5.x | 系统目录 |
+| image | 0.25 | 图像处理 |
+| raw-window-handle | 0.6 | 窗口句柄 |
+| windows | 0.57 | Windows API 绑定 |
+| tray-icon | 0.14 | 系统托盘 |
 
 ---
 
@@ -399,6 +479,25 @@ namespace StringUtils {
 - **产物保留**：30 天
 - **构建路径**：`build/{Release|Debug}/GoRun.exe`
 
+#### C++ 构建（`.github/workflows/build.yml`）
+
+| 项目 | 说明 |
+|------|------|
+| 触发路径 | `src/**`、`cmake/**`、`CMakeLists.txt`、`res/**` |
+| Runner | `windows-latest` |
+| 矩阵 | Release / Debug 双配置 |
+| 产物 | `GoRun-{Release,Debug}` 各 30 天 |
+
+#### Rust 构建（`.github/workflows/rust-build.yml`）
+
+| 项目 | 说明 |
+|------|------|
+| 触发路径 | `rs/**` |
+| Runner | `windows-latest` + `ubuntu-latest` |
+| Windows 任务 | `cargo build` + `cargo test --lib` + 产物上传 |
+| Linux 任务 | xvfb + GUI 集成测试 (`gui_integration_test.rs`) |
+| 产物 | `GoRun-rs-release` 30 天 |
+
 ---
 
 ## 项目链接
@@ -418,6 +517,7 @@ namespace StringUtils {
 4. **数据安全**：每次操作后立即保存，确保数据不丢失
 5. **MVP 阶段**：部分高级功能正在规划中，详见"规划中"章节
 6. **插件开发**：需要使用 Visual Studio 或兼容的 C++ 编译器，导出函数使用 `__declspec(dllexport)`
+7. **Rust 重写**：正在进行中，位于 `rs/` 目录，与 C++ 代码并行存在
 
 ---
 
