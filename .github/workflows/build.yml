@@ -3,8 +3,19 @@ name: Build
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'res/**'
+      - '.github/workflows/build.yml'
   pull_request:
-    branches: [main]
+    paths:
+      - 'src/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'res/**'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 jobs:

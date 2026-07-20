@@ -3,9 +3,13 @@ name: Rust Build (GoRun-rs)
 on:
   push:
     branches: [main]
-    paths: ['rs/**', '.github/workflows/rust-build.yml']
+    paths:
+      - 'rs/**'
+      - '.github/workflows/rust-build.yml'
   pull_request:
-    paths: ['rs/**']
+    paths:
+      - 'rs/**'
+      - '.github/workflows/rust-build.yml'
   workflow_dispatch:
 
 jobs:
