@@ -1,4 +1,4 @@
-use crate::model::{AppConfig, Category, Item, ViewType};
+use crate::model::{AppConfig, Category, Item};
 
 pub struct ItemManager {
     config: AppConfig,

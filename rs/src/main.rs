@@ -4,8 +4,6 @@ mod icon_cache;
 mod item_manager;
 mod localization;
 mod model;
-#[cfg(windows)]
-mod platform;
 mod runner;
 mod storage;
 mod tray;
@@ -40,61 +38,6 @@ fn main() {
     let (_tray, _tray_tx) = tray::TrayIcon::new();
 
     let ui = MainWindow::new().unwrap();
-
-    // Setup drag and drop message channel
-    let drop_rx = {
-        #[cfg(windows)]
-        {
-            use raw_window_handle::HasWindowHandle;
-            use raw_window_handle::Win32WindowHandle;
-            let window = ui.window();
-            if let Ok(handle) = window.window_handle() {
-                if let raw_window_handle::RawWindowHandle::Win32(Win32WindowHandle { hwn, .. }) = handle {
-                    platform::setup_dragdrop(hwn as isize)
-                } else {
-                    let (_tx, rx) = std::sync::mpsc::channel::<platform::DropMessage>();
-                    rx
-                }
-            } else {
-                let (_tx, rx) = std::sync::mpsc::channel::<platform::DropMessage>();
-                rx
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            let (_tx, rx) = std::sync::mpsc::channel::<platform::DropMessage>();
-            rx
-        }
-    };
-
-    // Poll for dropped files on each UI tick
-    let ui_weak = ui.as_weak();
-    let _timer = slint::Timer::default();
-    _timer.start(
-        slint::TimerMode::Repeated,
-        std::time::Duration::from_millis(50),
-        move || {
-            if let Ok(msg) = drop_rx.try_recv() {
-                match msg {
-                    platform::DropMessage::Drop(paths) => {
-                        for path in paths {
-                            let target = path.display().to_string().into();
-                            let name = path
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("Unknown")
-                                .to_string()
-                                .into();
-                            ui_weak
-                                .upgrade()
-                                .map(|ui| ui.invoke_file_dropped(name, target));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        },
-    );
 
     wire_handler(&ui, &mut manager);
 

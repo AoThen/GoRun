@@ -104,6 +104,7 @@ pub fn generate_id(prefix: &str) -> String {
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub enum RunError {
+    #[default]
     None,
     FileNotFound,
     PathNotFound,
