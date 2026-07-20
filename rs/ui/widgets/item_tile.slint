@@ -1,0 +1,88 @@
+import { Theme } from "../theme.slint";
+
+export struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: string,
+    arguments: string,
+    working-dir: string,
+    keywords: string,
+    remark: string,
+    run-as-admin: bool,
+    category-id: string,
+    sort-order: int,
+}
+
+export component ItemTile {
+    in property <ItemModel> item;
+    callback double-clicked();
+    callback context-menu(int, length, length);
+
+    width: 80px;
+    height: 90px;
+
+    property <length> anim-scale: 1.0;
+
+    Rectangle {
+        background: ta.has-hover ? Theme.current.bg-hover : transparent;
+        border-radius: 10px;
+
+        animate background { duration: 150ms; }
+
+        TouchArea {
+            accepted-buttons: left;
+
+            double-click => {
+                root.double-clicked();
+            }
+
+            pointer-event(event) => {
+                if (event.button == 0x02 && event.kind == 0x01) {
+                    root.context-menu(0, event.x, event.y);
+                }
+            }
+
+            VerticalBox {
+                padding: 6px;
+                spacing: 4px;
+                alignment: center;
+
+                Rectangle {
+                    width: 56px;
+                    height: 56px;
+                    background: item.icon-path != ""
+                        ? transparent
+                        : Theme.current.bg-input;
+                    border-radius: 12px;
+
+                    if item.icon-path != "" : Image {
+                        source: item.icon-path;
+                        width: 48px;
+                        height: 48px;
+                        x: (parent.width - 48px) / 2;
+                        y: (parent.height - 48px) / 2;
+                    }
+
+                    if item.icon-path == "" : Text {
+                        text: item.name.length > 0 ? item.name.substring(0, 1) : "?";
+                        color: Theme.current.text-secondary;
+                        font-size: 22px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+
+                Text {
+                    text: item.name;
+                    color: Theme.current.text-primary;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                    width: 72px;
+                    height: 16px;
+                }
+            }
+        }
+    }
+}

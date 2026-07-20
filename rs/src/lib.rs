@@ -8,6 +8,4 @@ pub mod runner;
 pub mod storage;
 pub mod tray;
 
-pub use item_manager::ItemManager;
-pub use model::{AppConfig, Category, Item, ViewType};
-pub use storage::Storage;
+slint::include_modules!();

@@ -1,0 +1,74 @@
+import { Theme } from "../theme.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export struct MenuItem {
+    id: int,
+    text: string,
+    enabled: bool,
+    separator: bool,
+    danger: bool,
+}
+
+export component ContextMenu {
+    in-out property <[MenuItem]> items;
+    in-out property <bool> menu-open;
+    in property <length> menu-x: 0px;
+    in property <length> menu-y: 0px;
+    callback selected(int);
+
+    width: 180px;
+    visible: menu-open;
+
+    x: menu-x;
+    y: menu-y;
+
+    Rectangle {
+        background: Theme.current.bg-surface;
+        border-width: 1px;
+        border-color: Theme.current.border;
+        border-radius: 6px;
+
+        VerticalBox {
+            spacing: 2px;
+            padding: 4px;
+
+            for item[idx] in items: Rectangle {
+                height: item.separator ? 1px : 32px;
+                background: item.separator ? Theme.current.border : transparent;
+                border-radius: 4px;
+
+                if !item.separator: mi-ta := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        root.selected(item.id);
+                        root.menu-open = false;
+                    }
+
+                    Rectangle {
+                        background: mi-ta.has-hover && item.enabled
+                            ? (item.danger ? #ff333220 : Theme.current.bg-hover)
+                            : transparent;
+                        border-radius: 4px;
+
+                        HorizontalBox {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            spacing: 8px;
+                            Text {
+                                text: item.text;
+                                color: !item.enabled
+                                    ? Theme.current.text-disabled
+                                    : (item.danger ? Theme.current.danger : Theme.current.text-primary);
+                                font-size: 13px;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

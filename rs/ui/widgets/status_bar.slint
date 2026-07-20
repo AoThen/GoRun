@@ -1,0 +1,40 @@
+import { Theme } from "../theme.slint";
+import { HorizontalBox } from "std-widgets.slint";
+
+export component StatusBar {
+    in property <int> item-count: 0;
+    in property <int> category-count: 0;
+    in property <string> status-text: "准备就绪";
+
+    min-height: 28px;
+    max-height: 28px;
+
+    Rectangle {
+        background: Theme.current.bg-surface;
+
+        HorizontalBox {
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 4px;
+            padding-bottom: 4px;
+            spacing: 16px;
+
+            Text {
+                text: root.item-count + " 个项目" + root.category-count + " 个分类";
+                color: Theme.current.text-disabled;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+
+            HorizontalBox {
+                alignment: end;
+                Text {
+                    text: root.status-text;
+                    color: Theme.current.text-disabled;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

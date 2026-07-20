@@ -1,0 +1,120 @@
+import { Theme } from "../theme.slint";
+import { HorizontalBox, LineEdit } from "std-widgets.slint";
+
+export component SearchBar {
+    in-out property <string> search-text: "";
+    in-out property <bool> is-icon-view: true;
+    in-out property <bool> is-dark-theme: true;
+
+    callback search-changed(string);
+    callback new-item-clicked();
+    callback toggle-view();
+    callback toggle-theme();
+
+    min-height: 44px;
+    max-height: 44px;
+
+    HorizontalBox {
+        spacing: 8px;
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        alignment: start;
+
+        Rectangle {
+            border-radius: 8px;
+            background: Theme.current.bg-input;
+            border-width: 1px;
+            border-color: search-text != ""
+                ? Theme.current.border-focus
+                : Theme.current.border;
+
+            HorizontalBox {
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+                spacing: 8px;
+                Text {
+                    text: "🔍";
+                    font-size: 15px;
+                    vertical-alignment: center;
+                }
+                LineEdit {
+                    text: root.search-text;
+                    placeholder-text: "搜索项目...";
+                    width: 300px;
+                    edited => { root.search-changed(self.text); }
+                }
+                if search-text != "": btn-clear := TouchArea {
+                    width: 20px;
+                    height: 20px;
+                    clicked => {
+                        search-text = "";
+                        root.search-changed("");
+                    }
+                    Text {
+                        text: "✕";
+                        color: Theme.current.text-secondary;
+                        font-size: 14px;
+                    }
+                }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 4px;
+
+            btn-add := TouchArea {
+                width: 32px;
+                height: 32px;
+                clicked => { root.new-item-clicked(); }
+                Rectangle {
+                    background: btn-add.has-hover ? Theme.current.bg-hover : transparent;
+                    border-radius: 6px;
+                    padding: 6px;
+                    HorizontalBox { alignment: center;
+                        Text { text: "＋"; color: Theme.current.text-primary; font-size: 18px; }
+                    }
+                }
+            }
+
+            btn-view := TouchArea {
+                width: 32px;
+                height: 32px;
+                clicked => { root.toggle-view(); }
+                Rectangle {
+                    background: btn-view.has-hover ? Theme.current.bg-hover : transparent;
+                    border-radius: 6px;
+                    padding: 6px;
+                    HorizontalBox { alignment: center;
+                        Text {
+                            text: root.is-icon-view ? "☰" : "⊞";
+                            color: Theme.current.text-primary;
+                            font-size: 16px;
+                        }
+                    }
+                }
+            }
+
+            btn-theme := TouchArea {
+                width: 32px;
+                height: 32px;
+                clicked => { root.toggle-theme(); }
+                Rectangle {
+                    background: btn-theme.has-hover ? Theme.current.bg-hover : transparent;
+                    border-radius: 6px;
+                    padding: 6px;
+                    HorizontalBox { alignment: center;
+                        Text {
+                            text: root.is-dark-theme ? "☀" : "☾";
+                            color: Theme.current.text-primary;
+                            font-size: 16px;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

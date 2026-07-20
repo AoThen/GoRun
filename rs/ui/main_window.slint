@@ -72,12 +72,12 @@ export component MainWindow inherits Window {
     callback toggle-theme();
 
     in-out property <[CategoryModel]> categories;
-    property <[ItemModel]> items;
-    property <string> search-text: "";
-    property <bool> is-dark-theme: true;
-    property <bool> is-icon-view: true;
-    property <string> status-text: "Ready";
-    property <bool> drop-active: false;
+    in-out property <[ItemModel]> items;
+    in-out property <string> search-text: "";
+    in-out property <bool> is-dark-theme: true;
+    in-out property <bool> is-icon-view: true;
+    in-out property <string> status-text: "Ready";
+    in-out property <bool> drop-active: false;
 
     Rectangle {
         background: root.drop-active ? #204060 : transparent;
