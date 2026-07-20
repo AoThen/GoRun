@@ -12,7 +12,7 @@ struct ItemModel {
     icon-path: string,
 }
 
-export component ItemTile inherits Rectangle {
+component ItemTile inherits Rectangle {
     callback double-clicked();
 
     in property <ItemModel> item;
@@ -42,7 +42,7 @@ export component ItemTile inherits Rectangle {
     }
 }
 
-export component ItemGrid inherits Rectangle {
+component ItemGrid inherits Rectangle {
     callback item-double-clicked(index: int);
 
     in property <[ItemModel]> items;
@@ -59,8 +59,8 @@ export component MainWindow inherits Window {
     title: "GoRun";
     min-width: 800px;
     min-height: 600px;
-    width: 800px;
-    height: 600px;
+    preferred-width: 800px;
+    preferred-height: 600px;
 
     callback search-changed(text: string);
     callback category-selected(index: int);
