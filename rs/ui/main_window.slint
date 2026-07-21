@@ -1,4 +1,10 @@
-import { VerticalBox, HorizontalBox, LineEdit, Button, ListView } from "std-widgets.slint";
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Sidebar } from "components/sidebar.slint";
+import { SearchBar } from "components/search_bar.slint";
+import { ItemGrid } from "components/item_grid.slint";
+import { StatusBar } from "components/status_bar.slint";
+import { ContextMenu } from "components/context_menu.slint";
 
 struct CategoryModel {
     id: string,
@@ -10,49 +16,6 @@ struct ItemModel {
     name: string,
     target: string,
     icon-path: string,
-}
-
-component ItemTile inherits Rectangle {
-    callback double-clicked();
-
-    in property <ItemModel> item;
-
-    height: 90px;
-    width: 80px;
-
-    TouchArea {
-        clicked => { root.double-clicked(); }
-
-        VerticalBox {
-            padding: 4px;
-            spacing: 4px;
-
-            Rectangle {
-                width: 64px;
-                height: 64px;
-                background: #3a3a3a;
-                border-radius: 8px;
-            }
-            Text {
-                text: root.item.name;
-                font-size: 11px;
-                horizontal-alignment: center;
-            }
-        }
-    }
-}
-
-component ItemGrid inherits Rectangle {
-    callback item-double-clicked(index: int);
-
-    in property <[ItemModel]> items;
-
-    ListView {
-        for item[index] in items: ItemTile {
-            item: item;
-            double-clicked => { root.item-double-clicked(index); }
-        }
-    }
 }
 
 export component MainWindow inherits Window {
@@ -70,6 +33,9 @@ export component MainWindow inherits Window {
     callback item-double-clicked(index: int);
     callback toggle-view();
     callback toggle-theme();
+    callback menu-item-selected(index: int);
+    callback item-right-clicked(index: int, x: length, y: length);
+    callback background-clicked();
 
     in-out property <[CategoryModel]> categories;
     in-out property <[ItemModel]> items;
@@ -79,89 +45,97 @@ export component MainWindow inherits Window {
     in-out property <string> status-text: "Ready";
     in-out property <bool> drop-active: false;
 
+    in-out property <bool> context-menu-visible: false;
+    in-out property <length> context-menu-x: 0px;
+    in-out property <length> context-menu-y: 0px;
+    in-out property <[string]> context-menu-items: [];
+
     toggle-view => { is-icon-view = !is-icon-view; }
+toggle-theme => {
+    is-dark-theme = !is-dark-theme;
+    Theme.set-dark(is-dark-theme);
+}
 
     Rectangle {
-        background: root.drop-active ? #204060 : transparent;
+        background: root.drop-active ? Theme.drop-highlight : Theme.bg-primary;
 
+        // Background click catcher (bottom layer)
+        TouchArea {
+            clicked => {
+                if (root.context-menu-visible) {
+                    root.context-menu-visible = false;
+                }
+            }
+        }
+
+        // Main content (middle layer)
         HorizontalBox {
-            spacing: 8px;
-            padding: 8px;
+            spacing: Theme.spacing-md;
+            padding: Theme.spacing-md;
 
-            // Left sidebar: categories
-            VerticalBox {
-                width: 160px;
-                spacing: 4px;
-
-                Text {
-                    text: "Categories";
-                    font-size: 14px;
-                    font-weight: 700;
-                }
-
-                ListView {
-                    for cat[index] in categories: Rectangle {
-                        height: 32px;
-                        background: transparent;
-                        TouchArea {
-                            clicked => { root.category-selected(index); }
-                            Text {
-                                text: cat.name;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
-
-                Button {
-                    text: "+ Category";
-                    clicked => { root.new-item-clicked(); }
+            Sidebar {
+                categories: root.categories;
+                category-selected(index) => {
+                    root.context-menu-visible = false;
+                    root.category-selected(index);
                 }
             }
 
             VerticalBox {
-                // Search bar
-                HorizontalBox {
-                    spacing: 4px;
-                    padding: 4px;
+                spacing: Theme.spacing-sm;
 
-                    Rectangle {
-                        background: root.is-dark-theme ? #2a2a2a : #f0f0f0;
-                        border-radius: 6px;
-
-                        LineEdit {
-                            text: root.search-text;
-                            edited => { root.search-changed(self.text); }
-                        }
+                SearchBar {
+                    text: root.search-text;
+                    is-dark-theme: root.is-dark-theme;
+                    is-icon-view: root.is-icon-view;
+                    search-changed(text) => {
+                        root.context-menu-visible = false;
+                        root.search-changed(text);
                     }
-                    Button {
-                        text: "New Item";
-                        clicked => { root.new-item-clicked(); }
+                    toggle-view() => {
+                        root.context-menu-visible = false;
+                        root.toggle-view();
                     }
-                    Button {
-                        text: root.is-icon-view ? "List" : "Icon";
-                        clicked => { root.toggle-view(); }
+                    toggle-theme() => {
+                        root.context-menu-visible = false;
+                        root.toggle-theme();
                     }
-                    Button {
-                        text: root.is-dark-theme ? "Light" : "Dark";
-                        clicked => { root.toggle-theme(); }
+                    new-item-clicked() => {
+                        root.context-menu-visible = false;
+                        root.new-item-clicked();
                     }
                 }
 
-                // Item grid
                 ItemGrid {
                     items: root.items;
-                    item-double-clicked(index) => { root.item-double-clicked(index); }
-                }
-
-                // Status bar
-                HorizontalBox {
-                    Text {
-                        text: root.status-text;
-                        font-size: 11px;
-                        color: root.is-dark-theme ? #888888 : #666666;
+                    item-double-clicked(index) => {
+                        root.context-menu-visible = false;
+                        root.item-double-clicked(index);
+                    }
+                    item-right-clicked(index, x, y) => {
+                        root.context-menu-x = x;
+                        root.context-menu-y = y;
+                        root.context-menu-visible = true;
+                        root.item-right-clicked(index, x, y);
                     }
                 }
+
+                StatusBar {
+                    text: root.status-text;
+                    is-dark-theme: root.is-dark-theme;
+                }
+            }
+        }
+
+        // Context menu overlay (top layer)
+        ContextMenu {
+            visible: root.context-menu-visible;
+            x: root.context-menu-x;
+            y: root.context-menu-y;
+            menu-items: root.context-menu-items;
+            selected(index) => {
+                root.context-menu-visible = false;
+                root.menu-item-selected(index);
             }
         }
     }

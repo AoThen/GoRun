@@ -1,0 +1,25 @@
+import { ListView } from "std-widgets.slint";
+import { ItemTile } from "item_tile.slint";
+import { Theme } from "../theme.slint";
+
+struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: string,
+}
+
+export component ItemGrid {
+    callback item-double-clicked(index: int);
+    callback item-right-clicked(index: int, x: length, y: length);
+
+    in property <[ItemModel]> items;
+
+    ListView {
+        for item[index] in items: ItemTile {
+            item: item;
+            double-clicked => { root.item-double-clicked(index); }
+            right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+        }
+    }
+}

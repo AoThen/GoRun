@@ -1,0 +1,61 @@
+import { HorizontalBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component SearchBar {
+    in property <string> text;
+    in property <bool> is-dark-theme;
+    in-out property <bool> is-icon-view: true;
+    callback search-changed(text: string);
+    callback toggle-view();
+    callback toggle-theme();
+    callback new-item-clicked();
+
+    HorizontalBox {
+        spacing: Theme.spacing-sm;
+        padding: Theme.spacing-sm;
+
+        Rectangle {
+            background: is-dark-theme ? #2a2a2a : #f0f0f0;
+            border-radius: Theme.radius-md;
+
+            LineEdit {
+                text: root.text;
+                edited => { root.search-changed(self.text); }
+                font-size: Theme.font-size-sm;
+            }
+        }
+
+        Text {
+            text: "New Item";
+            color: Theme.accent;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+
+            TouchArea {
+                clicked => { root.new-item-clicked(); }
+            }
+        }
+
+        Text {
+            text: root.is-icon-view ? "List" : "Icon";
+            color: Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+
+            TouchArea {
+                clicked => { root.toggle-view(); }
+            }
+        }
+
+        Text {
+            text: root.is-dark-theme ? "Light" : "Dark";
+            color: Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+
+            TouchArea {
+                clicked => { root.toggle-theme(); }
+            }
+        }
+    }
+}

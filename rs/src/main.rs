@@ -70,6 +70,9 @@ fn main() {
 }
 
 fn wire_handler(ui: &MainWindow, _manager: &mut ItemManager) {
+    let right_clicked_index: std::rc::Rc<std::cell::Cell<Option<i32>>> =
+        std::rc::Rc::new(std::cell::Cell::new(None));
+
     ui.on_file_dropped(move |name, target| {
         log::info!("File dropped: name={}, target={}", name, target);
     });
@@ -100,6 +103,39 @@ fn wire_handler(ui: &MainWindow, _manager: &mut ItemManager) {
 
     ui.on_item_double_clicked(move |index| {
         log::debug!("Item double-clicked: index={}", index);
+    });
+
+    let rci = right_clicked_index.clone();
+    let weak_ui = ui.as_weak();
+    ui.on_item_right_clicked(move |index, _x, _y| {
+        log::debug!("Item right-clicked: index={}", index);
+        rci.set(Some(index));
+        let menu_items = std::rc::Rc::new(slint::VecModel::from(vec![
+            slint::SharedString::from("Edit"),
+            slint::SharedString::from("Run as Admin"),
+            slint::SharedString::from("Delete"),
+            slint::SharedString::from("Copy Path"),
+        ]));
+        if let Some(ui) = weak_ui.upgrade() {
+            ui.set_context_menu_items(menu_items.into());
+        }
+    });
+
+    ui.on_menu_item_selected(move |index| {
+        log::debug!("Menu item selected: {}", index);
+        if let Some(item_idx) = right_clicked_index.get() {
+            match index {
+                0 => log::info!("Edit item index={}", item_idx),
+                1 => log::info!("Run as admin item index={}", item_idx),
+                2 => log::info!("Delete item index={}", item_idx),
+                3 => log::info!("Copy path item index={}", item_idx),
+                _ => {}
+            }
+        }
+    });
+
+    ui.on_background_clicked(move || {
+        log::debug!("Background clicked");
     });
 }
 

@@ -1,0 +1,47 @@
+import { VerticalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component ContextMenu {
+    in property <[string]> menu-items;
+    callback selected(index: int);
+
+    width: 160px;
+
+    Rectangle {
+        background: Theme.menu-bg;
+        border-width: 1px;
+        border-color: Theme.menu-border;
+        border-radius: Theme.radius-sm;
+        width: 100%;
+        height: 100%;
+
+        VerticalBox {
+            spacing: 0px;
+            padding: 2px;
+            width: 100%;
+
+            for item[index] in root.menu-items: Rectangle {
+                height: 22px;
+                width: 100%;
+
+                menu-touch := TouchArea {
+                    clicked => { root.selected(index); }
+
+                    Rectangle {
+                        width: 100%;
+                        height: 100%;
+                        background: menu-touch.has-hover ? Theme.menu-hover : transparent;
+
+                        Text {
+                            text: item;
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-primary;
+                            padding-left: 8px;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,48 @@
+import { VerticalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: string,
+}
+
+export component ItemTile {
+    callback double-clicked();
+    callback right-clicked(x: length, y: length);
+
+    in property <ItemModel> item;
+
+    height: 90px;
+    width: 80px;
+
+    TouchArea {
+        clicked => { root.double-clicked(); }
+        pointer-event(PointerEvent) => {
+            if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                root.right-clicked(self.pressed-x, self.pressed-y);
+            }
+        }
+
+        VerticalBox {
+            padding: Theme.spacing-sm;
+            spacing: Theme.spacing-sm;
+
+            Rectangle {
+                width: Theme.icon-size;
+                height: Theme.icon-size;
+                background: Theme.bg-card;
+                border-radius: Theme.radius-md;
+            }
+
+            Text {
+                text: root.item.name;
+                font-size: Theme.font-size-sm;
+                color: Theme.text-primary;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}

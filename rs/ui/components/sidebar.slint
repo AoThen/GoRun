@@ -1,0 +1,68 @@
+import { VerticalBox, ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+struct CategoryModel {
+    id: string,
+    name: string,
+}
+
+export component Sidebar {
+    in property <[CategoryModel]> categories;
+    in-out property <int> selected-index: 0;
+    callback category-selected(index: int);
+
+    width: 160px;
+
+    VerticalBox {
+        spacing: Theme.spacing-sm;
+        padding: Theme.spacing-md;
+
+        Text {
+            text: "Categories";
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            color: Theme.text-primary;
+        }
+
+        ListView {
+            for cat[index] in categories: Rectangle {
+                height: 32px;
+                background: index == root.selected-index ? Theme.menu-hover : transparent;
+                border-radius: Theme.radius-sm;
+
+                TouchArea {
+                    clicked => {
+                        root.selected-index = index;
+                        root.category-selected(index);
+                    }
+
+                    Text {
+                        text: cat.name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        padding-left: Theme.spacing-md;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.menu-border;
+        }
+
+        Text {
+            text: "+ Category";
+            font-size: Theme.font-size-sm;
+            color: Theme.accent;
+            horizontal-alignment: center;
+
+            TouchArea {
+                clicked => {
+                    root.category-selected(-1);
+                }
+            }
+        }
+    }
+}
