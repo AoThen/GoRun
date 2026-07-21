@@ -11,6 +11,15 @@ pub fn app_data_dir() -> PathBuf {
 }
 
 pub fn config_path() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let portable = exe_dir.join("config.json");
+            if portable.exists() {
+                log::debug!("Using portable config: {:?}", portable);
+                return portable;
+            }
+        }
+    }
     let path = app_data_dir().join("config.json");
     log::debug!("Config path: {:?}", path);
     path

@@ -55,3 +55,21 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+pub fn set_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            *s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.as_str()
+        } else {
+            "unknown panic"
+        };
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "?".to_string());
+        log::error!("PANIC at {}: {}", location, msg);
+        log::logger().flush();
+    }));
+}

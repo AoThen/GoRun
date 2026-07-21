@@ -24,7 +24,18 @@ impl Localization {
     }
 
     fn lang_file_path(code: &str) -> PathBuf {
-        PathBuf::from(format!("{}/{}.json", LANG_DIR, code))
+        let relative = format!("{}/{}.json", LANG_DIR, code);
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                let exe_lang = exe_dir.join(&relative);
+                if exe_lang.exists() {
+                    return exe_lang;
+                }
+            }
+        }
+
+        PathBuf::from(relative)
     }
 
     fn load(&mut self) {

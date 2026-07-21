@@ -20,6 +20,7 @@ slint::include_modules!();
 
 fn main() {
     logger::init().ok();
+    logger::set_panic_hook();
     log::info!("GoRun starting...");
 
     let storage = Storage::new(
