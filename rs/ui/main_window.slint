@@ -79,6 +79,8 @@ export component MainWindow inherits Window {
     in-out property <string> status-text: "Ready";
     in-out property <bool> drop-active: false;
 
+    toggle-view => { is-icon-view = !is-icon-view; }
+
     Rectangle {
         background: root.drop-active ? #204060 : transparent;
 

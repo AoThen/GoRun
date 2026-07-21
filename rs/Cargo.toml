@@ -12,9 +12,11 @@ slint-build = "1.7"
 [features]
 default = ["backend-winit"]
 backend-winit = ["slint/backend-winit"]
+backend-testing = ["slint/system-testing", "dep:i-slint-backend-testing"]
 
 [dependencies]
 slint = { version = "1.7", default-features = false, features = ["renderer-software", "compat-1-2"] }
+i-slint-backend-testing = { version = "1.7", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"

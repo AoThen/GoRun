@@ -5,7 +5,23 @@ use GoRun::item_manager::ItemManager;
 use GoRun::model::{AppConfig, AppData, Category, Config, Item, ViewType};
 use GoRun::*;
 
+fn init_testing_backend() {
+    #[cfg(feature = "backend-testing")]
+    {
+        std::thread_local! {
+            static INIT: std::cell::OnceCell<()> = std::cell::OnceCell::new();
+        }
+        INIT.with(|cell| {
+            cell.get_or_init(|| {
+                i_slint_backend_testing::init_no_event_loop();
+            });
+        });
+    }
+}
+
 fn setup_ui_with_data(categories: Vec<Category>, items: Vec<Item>) -> MainWindow {
+    init_testing_backend();
+
     let app_config = AppConfig {
         version: "test".into(),
         data: AppData { categories, items },

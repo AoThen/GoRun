@@ -62,7 +62,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev \
-            libxkbcommon-dev libx11-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libgl1-mesa-dev libegl1-mesa-dev \
             libfontconfig1-dev libfreetype6-dev xvfb
 
       - name: Cache cargo registry
@@ -78,7 +78,7 @@ jobs:
         run: cargo build
 
       - name: Run GUI integration tests (xvfb)
-        run: xvfb-run cargo test --test gui_integration_test
+        run: xvfb-run cargo test --features backend-testing --test gui_integration_test -- --test-threads=1
 
       - name: Run all tests (xvfb)
-        run: xvfb-run cargo test
+        run: xvfb-run cargo test --features backend-testing -- --test-threads=1
