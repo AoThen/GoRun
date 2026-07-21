@@ -16,13 +16,12 @@ fn setup_ui_with_data(categories: Vec<Category>, items: Vec<Item>) -> MainWindow
 
     let ui = MainWindow::new().unwrap();
 
-    let cat_names: Vec<slint::SharedString> = manager
+    let cat_models: Vec<CategoryModel> = manager
         .categories()
         .iter()
-        .map(|c| c.name.as_str().into())
+        .map(|c| CategoryModel { id: c.id.clone().into(), name: c.name.clone().into() })
         .collect();
-    ui.set_categories(Rc::new(slint::VecModel::from(cat_names)).into());
-    ui.set_category_count(manager.categories().len() as i32);
+    ui.set_categories(Rc::new(slint::VecModel::from(cat_models)).into());
 
     ui
 }
@@ -43,7 +42,7 @@ fn test_categories_rendered() {
     let ui = setup_ui_with_data(categories, vec![]);
     let cats = ui.get_categories();
     assert_eq!(cats.row_count(), 1);
-    assert_eq!(cats.row_data(0).unwrap(), "Programs");
+    assert_eq!(cats.row_data(0).unwrap().name, "Programs");
 }
 
 #[test]
@@ -144,6 +143,6 @@ fn test_multiple_categories_and_items() {
 #[test]
 fn test_empty_state_renders() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    assert_eq!(ui.get_list_items().row_count(), 0);
+    assert_eq!(ui.get_items().row_count(), 0);
     assert_eq!(ui.get_categories().row_count(), 0);
 }
