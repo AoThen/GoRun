@@ -98,3 +98,10 @@ TEST(PathUtilsTest, GetAppDataPath_NotEmpty) {
     auto result = GetAppDataPath();
     EXPECT_FALSE(result.empty());
 }
+
+TEST(PathUtilsTest, GetAppDataPath_IsExeDir) {
+    // GetAppDataPath 应该返回程序所在目录
+    auto appDataPath = GetAppDataPath();
+    auto exeDir = GetExeDir();
+    EXPECT_EQ(appDataPath, exeDir);
+}

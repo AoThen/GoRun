@@ -300,7 +300,9 @@ cat.name = StringUtils::Utf8ToWString(TrUtf8("Default_NewCategory"));
                 if (ImGui::MenuItem("English", nullptr, currentLang == "en-US")) {
                     if (auto* loc = Localization::Get()) loc->SetLanguage("en-US");
                 }
-if (ImGui::MenuItem(TrUtf8("Menu_FollowMouse").c_str(), nullptr, m_config && m_config->GetFollowMouse())) {
+                ImGui::EndMenu();
+            }
+            if (ImGui::MenuItem(TrUtf8("Menu_FollowMouse").c_str(), nullptr, m_config && m_config->GetFollowMouse())) {
                 if (m_config) {
                     m_config->SetFollowMouse(!m_config->GetFollowMouse());
                 }
@@ -411,6 +413,7 @@ void MainWindow::RenderSearchBar() {
             m_searchSelectedIndex = -1;
         } else {
             m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+            m_itemGrid.SetSearchQuery(L"");
         }
     }
     
@@ -469,6 +472,8 @@ void MainWindow::UpdateSearchResults() {
     
     m_searchResults = m_itemManager->SearchItems(searchWStr);
     m_itemGrid.SetItems(&m_searchResults);
+    m_itemGrid.SetSearchQuery(searchWStr);
+    m_runner->SetSearchQuery(searchWStr);
 }
 
 void MainWindow::RefreshItems() {

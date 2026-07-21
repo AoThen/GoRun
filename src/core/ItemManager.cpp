@@ -15,14 +15,16 @@
 
 namespace mn {
 
+std::vector<Item> ItemManager::s_emptyItems;
+
 void ItemManager::Initialize(Storage* storage, IconCache* iconCache) {
     m_storage = storage;
     m_iconCache = iconCache;
     
     m_categories = storage->GetCategories();
-    m_allItems = storage->GetItems();
+    auto allItems = storage->GetItems();
     
-    for (const auto& item : m_allItems) {
+    for (const auto& item : allItems) {
         m_itemsByCategory[item.categoryId].push_back(item);
     }
     
@@ -70,11 +72,6 @@ void ItemManager::DeleteCategory(const std::wstring& id) {
     if (it != m_itemsByCategory.end()) {
         for (const auto& item : it->second) {
             m_iconCache->DeleteCache(item.id);
-            m_allItems.erase(
-                std::remove_if(m_allItems.begin(), m_allItems.end(),
-                    [&](const Item& i) { return i.id == item.id; }),
-                m_allItems.end()
-            );
         }
         m_itemsByCategory.erase(it);
     }
@@ -89,8 +86,12 @@ void ItemManager::DeleteCategory(const std::wstring& id) {
     LOG_INFOW(L"ItemManager::DeleteCategory: " + id);
 }
 
-std::vector<Item>& ItemManager::GetItems(const std::wstring& categoryId) {
-    return m_itemsByCategory[categoryId];
+const std::vector<Item>& ItemManager::GetItems(const std::wstring& categoryId) {
+    auto it = m_itemsByCategory.find(categoryId);
+    if (it != m_itemsByCategory.end()) {
+        return it->second;
+    }
+    return s_emptyItems;
 }
 
 Item* ItemManager::GetItem(const std::wstring& id) {
@@ -116,20 +117,11 @@ void ItemManager::AddItem(Item item) {
     }
     
     m_itemsByCategory[item.categoryId].push_back(item);
-    m_allItems.push_back(item);
     m_storage->AddItem(item);
     LOG_INFOW(L"ItemManager::AddItem: " + item.name);
 }
 
 void ItemManager::UpdateItem(const Item& item) {
-    // 更新 m_allItems
-    for (auto& i : m_allItems) {
-        if (i.id == item.id) {
-            i = item;
-            break;
-        }
-    }
-
     // 更新 m_itemsByCategory - 支持跨分类变更
     for (auto& [catId, items] : m_itemsByCategory) {
         auto it = std::find_if(items.begin(), items.end(),
@@ -151,13 +143,16 @@ void ItemManager::UpdateItem(const Item& item) {
 }
 
 void ItemManager::MoveItem(const std::wstring& itemId, const std::wstring& targetCategoryId) {
-    // 从 m_allItems 中查找（避免悬空指针问题）
+    // 从 m_itemsByCategory 中查找
     Item* itemInAll = nullptr;
-    for (auto& i : m_allItems) {
-        if (i.id == itemId) {
-            itemInAll = &i;
-            break;
+    for (auto& [catId, items] : m_itemsByCategory) {
+        for (auto& i : items) {
+            if (i.id == itemId) {
+                itemInAll = &i;
+                break;
+            }
         }
+        if (itemInAll) break;
     }
     if (!itemInAll) return;
 
@@ -194,12 +189,6 @@ void ItemManager::DeleteItem(const std::wstring& id) {
             std::remove_if(items.begin(), items.end(),
                 [&](const Item& i) { return i.id == id; }),
             items.end()
-        );
-        
-        m_allItems.erase(
-            std::remove_if(m_allItems.begin(), m_allItems.end(),
-                [&](const Item& i) { return i.id == id; }),
-            m_allItems.end()
         );
         
         m_storage->DeleteItem(id);
@@ -349,12 +338,14 @@ std::vector<Item> ItemManager::SearchItems(const std::wstring& query) {
         return {};
     }
     
-    for (const auto& item : m_allItems) {
-        auto matchResult = StringUtils::SearchMatch(item.name, item.keywords, query);
-        if (matchResult.matched) {
-            // 综合得分 = 匹配得分 + 运行次数权重
-            int totalScore = matchResult.score + item.runCount;
-            scoredResults.push_back({item, totalScore});
+    for (const auto& [catId, items] : m_itemsByCategory) {
+        for (const auto& item : items) {
+            auto matchResult = StringUtils::SearchMatch(item.name, item.keywords, query);
+            if (matchResult.matched) {
+                // 综合得分 = 匹配得分 + 运行次数权重
+                int totalScore = matchResult.score + item.runCount;
+                scoredResults.push_back({item, totalScore});
+            }
         }
     }
     

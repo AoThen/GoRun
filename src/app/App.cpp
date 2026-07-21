@@ -104,13 +104,8 @@ bool App::Initialize(HINSTANCE hInstance) {
     if (PathUtils::Exists(configPath)) {
         if (!m_storage->Load(configPath)) {
             // 尝试从备份恢复
-            bool restored = false;
-            std::wstring bak1 = configPath + L".bak1";
-            if (PathUtils::Exists(bak1)) {
-                restored = m_storage->Load(bak1);
-            }
-            if (!restored) {
-                LOG_ERRORW(L"App: Failed to load config, starting with empty data");
+            if (!m_storage->TryRecoverFromBackups()) {
+                LOG_ERRORW(L"App: Failed to load config and all backups, starting with empty data");
             } else {
                 m_storage->Save();
             }

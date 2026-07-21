@@ -94,7 +94,7 @@ TEST_F(ItemManagerTest, MoveItem_SameCategory_NoLoss) {
     auto cat1 = AddCategory(L"cat1");
     auto itemId = AddItem(L"test", cat1);
 
-    auto& items = m_manager->GetItems(cat1);
+    const auto& items = m_manager->GetItems(cat1);
     EXPECT_EQ(items.size(), 1);
 
     m_manager->MoveItem(itemId, cat1);
@@ -115,8 +115,8 @@ TEST_F(ItemManagerTest, MoveItem_ItemAppearsInTargetCategory) {
 
     m_manager->MoveItem(itemId, cat2);
 
-    auto& itemsInCat1 = m_manager->GetItems(cat1);
-    auto& itemsInCat2 = m_manager->GetItems(cat2);
+    const auto& itemsInCat1 = m_manager->GetItems(cat1);
+    const auto& itemsInCat2 = m_manager->GetItems(cat2);
 
     EXPECT_EQ(itemsInCat1.size(), 0);
     ASSERT_EQ(itemsInCat2.size(), 1);
@@ -136,8 +136,8 @@ TEST_F(ItemManagerTest, UpdateItem_CrossCategory_MovesItem) {
 
     m_manager->UpdateItem(updatedItem);
 
-    auto& itemsInCat1 = m_manager->GetItems(cat1);
-    auto& itemsInCat2 = m_manager->GetItems(cat2);
+    const auto& itemsInCat1 = m_manager->GetItems(cat1);
+    const auto& itemsInCat2 = m_manager->GetItems(cat2);
 
     EXPECT_EQ(itemsInCat1.size(), 0);
     ASSERT_EQ(itemsInCat2.size(), 1);
@@ -156,7 +156,7 @@ TEST_F(ItemManagerTest, UpdateItem_SameCategory_UpdatesInPlace) {
 
     m_manager->UpdateItem(updatedItem);
 
-    auto& items = m_manager->GetItems(cat1);
+    const auto& items = m_manager->GetItems(cat1);
     ASSERT_EQ(items.size(), 1);
     EXPECT_EQ(items[0].name, L"updated");
     EXPECT_EQ(items[0].target, L"C:\\new.exe");

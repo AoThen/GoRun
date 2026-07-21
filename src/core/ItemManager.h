@@ -19,7 +19,7 @@ public:
     void UpdateCategory(const Category& category);
     void DeleteCategory(const std::wstring& id);
     
-    std::vector<Item>& GetItems(const std::wstring& categoryId);
+    const std::vector<Item>& GetItems(const std::wstring& categoryId);
     Item* GetItem(const std::wstring& id);
     void AddItem(Item item);
     void UpdateItem(const Item& item);
@@ -49,7 +49,7 @@ private:
     IconCache* m_iconCache = nullptr;
     std::vector<Category> m_categories;
     std::unordered_map<std::wstring, std::vector<Item>> m_itemsByCategory;
-    std::vector<Item> m_allItems;
+    static std::vector<Item> s_emptyItems;
 };
 
 } // namespace mn

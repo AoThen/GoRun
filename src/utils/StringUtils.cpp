@@ -76,8 +76,8 @@ std::wstring ToLower(const std::wstring& str) {
     return result;
 }
 
-// 拼音首字母区间表（基于 Unicode 编码范围）
-// 格式: {起始Unicode, 结束Unicode, 拼音首字母}
+// 拼音首字母区间表（基于 GB2312 编码范围）
+// 格式: {起始GB2312编码, 结束GB2312编码, 拼音首字母}
 static const struct PinyinRange {
     unsigned short start;
     unsigned short end;
@@ -106,6 +106,8 @@ static const struct PinyinRange {
     {0xCEF4, 0xD188, L'x'},   // 昔
     {0xD1B9, 0xD4D0, L'y'},   // 压
     {0xD4D1, 0xD7F9, L'z'},   // 匝
+    // 扩展覆盖至 GBK 基本范围尽头（Unicode 扩展 A 区汉字）
+    {0xD8A1, 0xF7FE, L'z'},   // 扩展汉字（默认 z 作为兜底）
 };
 
 wchar_t GetPinyinInitial(wchar_t ch) {

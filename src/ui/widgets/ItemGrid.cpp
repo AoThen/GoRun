@@ -9,11 +9,16 @@
 
 namespace mn {
 
-void ItemGrid::SetItems(std::vector<Item>* items) {
+void ItemGrid::SetItems(const std::vector<Item>* items) {
     m_items = items;
     m_selectedIndex = -1;
+    m_sortDirty = true;
     // 清理旧的动画状态，避免内存缓慢增长
     m_hoverAnimState.clear();
+}
+
+void ItemGrid::SetSearchQuery(const std::wstring& query) {
+    m_searchQuery = query;
 }
 
 void ItemGrid::SetIconTextureManager(IconTextureManager* manager) {
@@ -29,11 +34,12 @@ void ItemGrid::ClearHoverAnimation(const std::wstring& itemId) {
 }
 
 void ItemGrid::Render() {
-    // 按 sortOrder 排序后渲染
-    if (m_items) {
+    // 按 sortOrder 排序后渲染（仅在数据变更时排序）
+    if (m_items && m_sortDirty) {
         m_sortedItems = *m_items;
         std::sort(m_sortedItems.begin(), m_sortedItems.end(),
             [](const Item& a, const Item& b) { return a.sortOrder < b.sortOrder; });
+        m_sortDirty = false;
     }
     
     if (m_viewType == ViewType::Icon) {
@@ -314,7 +320,47 @@ void ItemGrid::RenderListView() {
         // 文本 - 垂直居中
         ImGui::SetCursorPosY(rowPos.y - ImGui::GetWindowPos().y + (rowHeight - ImGui::GetTextLineHeight()) / 2 + ImGui::GetScrollY());
         ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-        ImGui::Text("%s", name.c_str());
+        if (m_searchQuery.empty()) {
+            ImGui::Text("%s", name.c_str());
+        } else {
+            // 分段绘制高亮匹配文本
+            std::wstring wideName = StringUtils::Utf8ToWString(name);
+            std::wstring lowerName = StringUtils::ToLower(wideName);
+            std::wstring lowerQuery = StringUtils::ToLower(m_searchQuery);
+            size_t matchPos = lowerName.find(lowerQuery);
+            
+            if (matchPos == std::wstring::npos) {
+                ImGui::TextUnformatted(name.c_str());
+            } else {
+                // 分段绘制
+                std::string before, match, after;
+                size_t bytePos = 0;
+                for (size_t i = 0; i < wideName.size(); i++) {
+                    wchar_t wc = wideName[i];
+                    int charLen = (wc < 0x80) ? 1 : ((wc < 0x800) ? 2 : 3);
+                    if (i < matchPos) {
+                        before += name.substr(bytePos, charLen);
+                    } else if (i < matchPos + lowerQuery.size()) {
+                        match += name.substr(bytePos, charLen);
+                    } else {
+                        after += name.substr(bytePos, charLen);
+                    }
+                    bytePos += charLen;
+                }
+                
+                ImVec4 highlightColor = isDark ? ImVec4(0.4f, 0.8f, 1.0f, 1.0f) : ImVec4(0.0f, 0.5f, 1.0f, 1.0f);
+                
+                if (!before.empty()) {
+                    ImGui::TextUnformatted(before.c_str());
+                    ImGui::SameLine(0, 0);
+                }
+                ImGui::TextColored(highlightColor, "%s", match.c_str());
+                ImGui::SameLine(0, 0);
+                if (!after.empty()) {
+                    ImGui::TextUnformatted(after.c_str());
+                }
+            }
+        }
         ImGui::PopStyleColor();
         
         // 处理点击事件

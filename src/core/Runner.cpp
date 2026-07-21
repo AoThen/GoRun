@@ -1,5 +1,6 @@
 #include "Runner.h"
 #include "utils/PathUtils.h"
+#include "utils/StringUtils.h"
 #include "utils/Logger.h"
 #include <cwctype>
 
@@ -27,14 +28,81 @@ static bool IsUrl(const std::wstring& target) {
            StartsWithIgnoreCase(target, L"mailto:");
 }
 
+std::wstring Runner::ExpandVariables(const std::wstring& input, const Item& item) {
+    if (input.empty()) return input;
+    
+    std::wstring result = input;
+    
+    // 展开 Windows 环境变量 (如 %PATH%, %USERPROFILE% 等)
+    DWORD bufLen = ExpandEnvironmentStringsW(result.c_str(), nullptr, 0);
+    if (bufLen > 0) {
+        std::wstring expanded(bufLen - 1, L'\0');
+        if (ExpandEnvironmentStringsW(result.c_str(), &expanded[0], bufLen)) {
+            result = expanded;
+        }
+    }
+    
+    // 展开 GoRun 内置变量
+    // %mp% - 当前目录（项目目标的父目录）
+    if (!item.target.empty()) {
+        std::wstring parentDir = PathUtils::GetParentDir(item.target);
+        std::wstring drive;
+        if (item.target.size() >= 2 && item.target[1] == L':') {
+            drive = item.target.substr(0, 2);
+        }
+        
+        size_t pos;
+        while ((pos = result.find(L"%mp%")) != std::wstring::npos) {
+            result.replace(pos, 4, parentDir);
+        }
+        while ((pos = result.find(L"%mr%")) != std::wstring::npos) {
+            result.replace(pos, 4, drive);
+        }
+    }
+    
+    // %so% - 搜索参数
+    if (!m_searchQuery.empty()) {
+        size_t pos;
+        while ((pos = result.find(L"%so%")) != std::wstring::npos) {
+            result.replace(pos, 4, m_searchQuery);
+        }
+        // %so-url% - URL 编码的搜索参数
+        std::wstring urlEncoded;
+        for (wchar_t ch : m_searchQuery) {
+            if (ch >= L'a' && ch <= L'z') urlEncoded += ch;
+            else if (ch >= L'A' && ch <= L'Z') urlEncoded += ch;
+            else if (ch >= L'0' && ch <= L'9') urlEncoded += ch;
+            else if (ch == L'-' || ch == L'_' || ch == L'.' || ch == L'~') urlEncoded += ch;
+            else if (ch == L' ') urlEncoded += L'+';
+            else {
+                wchar_t buf[8];
+                _snwprintf(buf, 8, L"%%%02X", (unsigned)ch);
+                urlEncoded += buf;
+            }
+        }
+        size_t pos2;
+        while ((pos2 = result.find(L"%so-url%")) != std::wstring::npos) {
+            result.replace(pos2, 8, urlEncoded);
+        }
+    }
+    
+    return result;
+}
+
 RunResult Runner::Run(const Item& item) {
     RunResult result;
 
 #ifdef _WIN32
     bool isUrl = IsUrl(item.target);
-
+    
+    // 展开变量
+    Item expandedItem = item;
+    expandedItem.target = ExpandVariables(item.target, item);
+    expandedItem.arguments = ExpandVariables(item.arguments, item);
+    expandedItem.workingDir = ExpandVariables(item.workingDir, item);
+    
     // URL 不需要检查文件存在性
-    if (!isUrl && !PathUtils::Exists(item.target)) {
+    if (!isUrl && !PathUtils::Exists(expandedItem.target)) {
         result.success = false;
         result.error = RunError::FileNotFound;
         result.errorMessage = L"文件未找到: " + item.target;
@@ -45,9 +113,9 @@ RunResult Runner::Run(const Item& item) {
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(SHELLEXECUTEINFOW);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-    sei.lpFile = item.target.c_str();
-    sei.lpParameters = item.arguments.empty() ? nullptr : item.arguments.c_str();
-    sei.lpDirectory = item.workingDir.empty() ? nullptr : item.workingDir.c_str();
+    sei.lpFile = expandedItem.target.c_str();
+    sei.lpParameters = expandedItem.arguments.empty() ? nullptr : expandedItem.arguments.c_str();
+    sei.lpDirectory = expandedItem.workingDir.empty() ? nullptr : expandedItem.workingDir.c_str();
     sei.nShow = SW_SHOWNORMAL;
     
     if (!ShellExecuteExW(&sei)) {
@@ -79,7 +147,13 @@ RunResult Runner::RunAsAdmin(const Item& item) {
 
     bool isUrl = IsUrl(item.target);
     
-    if (!isUrl && !PathUtils::Exists(item.target)) {
+    // 展开变量
+    Item expandedItem = item;
+    expandedItem.target = ExpandVariables(item.target, item);
+    expandedItem.arguments = ExpandVariables(item.arguments, item);
+    expandedItem.workingDir = ExpandVariables(item.workingDir, item);
+    
+    if (!isUrl && !PathUtils::Exists(expandedItem.target)) {
         result.success = false;
         result.error = RunError::FileNotFound;
         result.errorMessage = L"文件未找到";
@@ -92,9 +166,9 @@ RunResult Runner::RunAsAdmin(const Item& item) {
     sei.cbSize = sizeof(SHELLEXECUTEINFOW);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
     sei.lpVerb = L"runas";
-    sei.lpFile = item.target.c_str();
-    sei.lpParameters = item.arguments.empty() ? nullptr : item.arguments.c_str();
-    sei.lpDirectory = item.workingDir.empty() ? nullptr : item.workingDir.c_str();
+    sei.lpFile = expandedItem.target.c_str();
+    sei.lpParameters = expandedItem.arguments.empty() ? nullptr : expandedItem.arguments.c_str();
+    sei.lpDirectory = expandedItem.workingDir.empty() ? nullptr : expandedItem.workingDir.c_str();
     sei.nShow = SW_SHOWNORMAL;
     
     if (!ShellExecuteExW(&sei)) {

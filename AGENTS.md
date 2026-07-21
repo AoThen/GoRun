@@ -236,13 +236,13 @@ cargo test
 
 ### 配置文件
 
-**路径**：`%APPDATA%/GoRun/config.json`
+**路径**：`%EXEDIR%/config.json`（可执行文件所在目录）
 
 首次运行时自动创建目录和默认配置文件。
 
 ### 图标缓存
 
-**路径**：`%APPDATA%/GoRun/icons/`
+**路径**：`%EXEDIR%/icons/`
 
 **缓存策略**：
 - 添加项目时自动提取图标并缓存

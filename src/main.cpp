@@ -12,6 +12,8 @@
 #ifdef _WIN32
 #include <Windows.h>
 
+#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     mn::App app;
     

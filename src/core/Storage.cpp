@@ -38,8 +38,26 @@ bool Storage::Flush() {
 }
 
 bool Storage::RotateBackups() {
+    // 轮转备份: bak2 -> bak3, bak1 -> bak2, current -> bak1
+    std::wstring bak3 = m_path + L".bak3";
+    std::wstring bak2 = m_path + L".bak2";
     std::wstring bak1 = m_path + L".bak1";
-
+    
+    // 删除最旧的备份
+    if (PathUtils::Exists(bak3)) {
+        DeleteFileW(bak3.c_str());
+    }
+    
+    // 轮转 bak2 -> bak3
+    if (PathUtils::Exists(bak2)) {
+        MoveFileW(bak2.c_str(), bak3.c_str());
+    }
+    
+    // 轮转 bak1 -> bak2
+    if (PathUtils::Exists(bak1)) {
+        MoveFileW(bak1.c_str(), bak2.c_str());
+    }
+    
     // current -> bak1
     if (PathUtils::Exists(m_path)) {
         if (!CopyFileW(m_path.c_str(), bak1.c_str(), FALSE)) {
@@ -48,6 +66,27 @@ bool Storage::RotateBackups() {
         }
     }
     return true;
+}
+
+bool Storage::TryRecoverFromBackups() {
+    // 按新旧顺序尝试恢复: bak1 -> bak2 -> bak3
+    std::wstring bak1 = m_path + L".bak1";
+    std::wstring bak2 = m_path + L".bak2";
+    std::wstring bak3 = m_path + L".bak3";
+    
+    if (PathUtils::Exists(bak1) && Load(bak1)) {
+        LOG_INFOW(L"Storage: recovered from bak1");
+        return true;
+    }
+    if (PathUtils::Exists(bak2) && Load(bak2)) {
+        LOG_INFOW(L"Storage: recovered from bak2");
+        return true;
+    }
+    if (PathUtils::Exists(bak3) && Load(bak3)) {
+        LOG_INFOW(L"Storage: recovered from bak3");
+        return true;
+    }
+    return false;
 }
 
 bool Storage::SaveToFile() {
@@ -188,7 +227,7 @@ bool Storage::Save(const std::wstring& path) {
     return SaveToFile();
 }
 
-std::vector<Category> Storage::GetCategories() const {
+const std::vector<Category>& Storage::GetCategories() const {
     return m_categories;
 }
 

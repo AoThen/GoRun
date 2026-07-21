@@ -19,7 +19,7 @@ public:
     void EndBatch();
     bool Flush();
     
-    std::vector<Category> GetCategories() const;
+    const std::vector<Category>& GetCategories() const;
     Category GetCategory(const std::wstring& id) const;
     bool AddCategory(const Category& category);
     bool UpdateCategory(const Category& category);
@@ -40,6 +40,7 @@ public:
 private:
     bool SaveToFile();
     bool RotateBackups();
+    bool TryRecoverFromBackups();
     
     std::wstring m_path;
     std::vector<Category> m_categories;
