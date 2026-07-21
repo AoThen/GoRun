@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::model::{AppConfig, Category, Item};
 
 pub struct ItemManager {

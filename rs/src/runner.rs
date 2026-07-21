@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::model::{Item, RunError, RunResult};
 
 pub fn run(item: &Item) -> RunResult {

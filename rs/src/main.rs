@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 mod config;
 mod hotkey;
 mod icon_cache;
@@ -5,12 +7,13 @@ mod item_manager;
 mod localization;
 mod logger;
 mod model;
+mod platform;
 mod runner;
 mod storage;
 mod tray;
 
 use item_manager::ItemManager;
-use model::{AppConfig, Category, Item, ViewType};
+use model::{Category, ViewType};
 use storage::Storage;
 
 slint::include_modules!();
@@ -59,6 +62,8 @@ fn main() {
         .collect();
     let category_model = std::rc::Rc::new(slint::VecModel::from(categories));
     ui.set_categories(category_model.into());
+
+    setup_drop_handler(&ui);
 
     log::info!("Entering main event loop");
     ui.run().unwrap();
@@ -137,6 +142,75 @@ fn wire_handler(ui: &MainWindow, _manager: &mut ItemManager) {
     ui.on_background_clicked(move || {
         log::debug!("Background clicked");
     });
+}
+
+#[cfg(windows)]
+fn setup_drop_handler(ui: &MainWindow) {
+    use raw_window_handle::HasWindowHandle;
+
+    let window_handle = ui.window().window_handle();
+    let raw_handle = HasWindowHandle::window_handle(&window_handle).unwrap();
+    let hwnd = match raw_handle.as_raw() {
+        raw_window_handle::RawWindowHandle::Win32(win32) => win32.hwnd.get() as isize,
+        _ => {
+            log::warn!("Not running on Windows, drag-and-drop disabled");
+            return;
+        }
+    };
+
+    let rx = platform::setup_dragdrop(hwnd);
+    let weak_ui = ui.as_weak();
+
+    std::thread::spawn(move || {
+        while let Ok(msg) = rx.recv() {
+            match msg {
+                platform::DropMessage::Enter => {
+                    let weak = weak_ui.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.set_drop_active(true);
+                        }
+                    })
+                    .ok();
+                }
+                platform::DropMessage::Leave => {
+                    let weak = weak_ui.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.set_drop_active(false);
+                        }
+                    })
+                    .ok();
+                }
+                platform::DropMessage::Drop(paths) => {
+                    let weak = weak_ui.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.set_drop_active(false);
+                            if let Some(path) = paths.first() {
+                                let target = path.to_string_lossy().to_string();
+                                let name = path
+                                    .file_stem()
+                                    .map(|s| s.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| target.clone());
+                                ui.invoke_file_dropped(
+                                    slint::SharedString::from(name),
+                                    slint::SharedString::from(target),
+                                );
+                            }
+                        }
+                    })
+                    .ok();
+                }
+                _ => {}
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn setup_drop_handler(_ui: &MainWindow) {
+    log::warn!("Drag-and-drop is only supported on Windows");
 }
 
 #[cfg(test)]

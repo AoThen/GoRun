@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub struct Hotkey {
     pub modifiers: u32,
     pub vk: u32,

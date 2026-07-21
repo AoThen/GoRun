@@ -1,4 +1,8 @@
+#![allow(dead_code)]
+
 use std::path::PathBuf;
+
+mod dragdrop;
 
 pub enum DropMessage {
     Enter,
@@ -7,7 +11,9 @@ pub enum DropMessage {
     Drop(Vec<PathBuf>),
 }
 
-pub fn setup_dragdrop(_hwnd: isize) -> std::sync::mpsc::Receiver<DropMessage> {
-    let (_tx, rx) = std::sync::mpsc::channel();
+pub fn setup_dragdrop(hwnd: isize) -> std::sync::mpsc::Receiver<DropMessage> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let tx = Box::leak(Box::new(tx));
+    dragdrop::setup_dragdrop(hwnd, tx);
     rx
 }
