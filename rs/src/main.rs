@@ -418,7 +418,7 @@ fn copy_to_clipboard(text: &str) -> bool {
     {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::Foundation::{HANDLE, HWND};
         use windows::Win32::System::DataExchange::{
             CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
         };
@@ -434,7 +434,7 @@ fn copy_to_clipboard(text: &str) -> bool {
         let size = wide.len() * std::mem::size_of::<u16>();
 
         unsafe {
-            if OpenClipboard(HANDLE::default()).is_err() {
+            if OpenClipboard(HWND::default()).is_err() {
                 log::error!("Failed to open clipboard");
                 return false;
             }
