@@ -18,6 +18,8 @@ pub struct DropHandler {
     _sender_ptr: *const std::sync::mpsc::Sender<DropMessage>,
 }
 
+unsafe impl Send for DropHandler {}
+
 impl DropHandler {
     pub fn new(hwnd: isize) -> Self {
         let (tx, rx) = std::sync::mpsc::channel();

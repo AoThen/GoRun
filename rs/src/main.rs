@@ -478,7 +478,8 @@ fn open_file_location(path: &str) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::Shell::{ShellExecuteW, SW_SHOW};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
 
     let explorer = OsStr::new("explorer")
         .encode_wide()
@@ -492,10 +493,10 @@ fn open_file_location(path: &str) {
     unsafe {
         let _ = ShellExecuteW(
             HWND::default(),
-            windows::w!("open"),
-            windows::w!("explorer"),
-            windows::PCWSTR(params.as_ptr()),
-            windows::PCWSTR(std::ptr::null()),
+            windows::core::w!("open"),
+            windows::core::w!("explorer"),
+            windows::core::PCWSTR(params.as_ptr()),
+            windows::core::PCWSTR(std::ptr::null()),
             SW_SHOW,
         );
     }
