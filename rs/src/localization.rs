@@ -45,17 +45,15 @@ impl Localization {
             return;
         }
         match fs::read_to_string(&path) {
-            Ok(content) => {
-                match serde_json::from_str::<HashMap<String, String>>(&content) {
-                    Ok(json) => {
-                        log::info!("Language file loaded: {:?}, {} strings", path, json.len());
-                        self.strings = json;
-                    }
-                    Err(_) => {
-                        log::error!("Failed to parse language JSON: {:?}", path);
-                    }
+            Ok(content) => match serde_json::from_str::<HashMap<String, String>>(&content) {
+                Ok(json) => {
+                    log::info!("Language file loaded: {:?}, {} strings", path, json.len());
+                    self.strings = json;
                 }
-            }
+                Err(_) => {
+                    log::error!("Failed to parse language JSON: {:?}", path);
+                }
+            },
             Err(_) => {
                 log::error!("Failed to read language file: {:?}", path);
             }

@@ -16,7 +16,7 @@ impl Log for FileLogger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            let mut file = self.file.lock().unwrap();
+            let mut file = self.file.lock().unwrap_or_else(|e| e.into_inner());
             let level = match record.level() {
                 log::Level::Error => "ERROR",
                 log::Level::Warn => "WARN ",
@@ -27,13 +27,25 @@ impl Log for FileLogger {
             let now = chrono::Local::now();
             let timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
             let target = record.target();
-            let _ = writeln!(file, "[{}] [{}] [{}] {}", timestamp, level, target, record.args());
-            let _ = file.flush();
+            let _ = writeln!(
+                file,
+                "[{}] [{}] [{}] {}",
+                timestamp,
+                level,
+                target,
+                record.args()
+            );
         }
     }
 
     fn flush(&self) {
-        let _ = self.file.lock().unwrap().flush();
+        let _ = self.file.lock().unwrap_or_else(|e| e.into_inner()).flush();
+    }
+}
+
+impl Drop for FileLogger {
+    fn drop(&mut self) {
+        self.flush();
     }
 }
 
@@ -51,7 +63,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
     log::set_boxed_logger(Box::new(logger))?;
     log::set_max_level(LevelFilter::Debug);
 
-    eprintln!("Logger initialized at: {:?}", log_path);
+    log::debug!("Logger initialized at: {:?}", log_path);
 
     Ok(())
 }

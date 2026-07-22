@@ -9,7 +9,10 @@ pub struct ItemManager {
 
 impl ItemManager {
     pub fn new(config: AppConfig) -> Self {
-        log::debug!("ItemManager created with {} categories", config.data.categories.len());
+        log::debug!(
+            "ItemManager created with {} categories",
+            config.data.categories.len()
+        );
         ItemManager {
             config,
             modified: false,
@@ -30,6 +33,9 @@ impl ItemManager {
     }
 
     pub fn items(&self, category_id: &str) -> Vec<Item> {
+        if category_id.is_empty() {
+            return self.config.data.items.clone();
+        }
         self.config
             .data
             .items
@@ -45,7 +51,8 @@ impl ItemManager {
 
     pub fn search_items(&self, query: &str) -> Vec<Item> {
         let q = query.to_lowercase();
-        let results: Vec<Item> = self.config
+        let mut scored: Vec<(Item, i32)> = self
+            .config
             .data
             .items
             .iter()
@@ -54,8 +61,25 @@ impl ItemManager {
                     || i.keywords.to_lowercase().contains(&q)
                     || i.target.to_lowercase().contains(&q)
             })
-            .cloned()
+            .map(|item| {
+                let mut score = 0;
+                if item.name.to_lowercase() == q {
+                    score += 1000;
+                } else if item.name.to_lowercase().starts_with(&q) {
+                    score += 100;
+                } else {
+                    score += 10;
+                }
+                if item.keywords.to_lowercase().contains(&q) {
+                    score += 50;
+                }
+                score += item.run_count;
+                (item.clone(), score)
+            })
             .collect();
+
+        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        let results: Vec<Item> = scored.into_iter().map(|(item, _)| item).collect();
         log::debug!("Search: query={}, results={}", query, results.len());
         results
     }
@@ -70,7 +94,13 @@ impl ItemManager {
     }
 
     pub fn update_category(&mut self, category: &Category) -> bool {
-        if let Some(c) = self.config.data.categories.iter_mut().find(|c| c.id == category.id) {
+        if let Some(c) = self
+            .config
+            .data
+            .categories
+            .iter_mut()
+            .find(|c| c.id == category.id)
+        {
             *c = category.clone();
             self.modified = true;
             log::info!("Category updated: id={}", category.id);
@@ -147,6 +177,40 @@ impl ItemManager {
 
     pub fn is_modified(&self) -> bool {
         self.modified
+    }
+
+    pub fn handle_drop(&mut self, files: &[std::path::PathBuf], category_id: &str) -> usize {
+        let mut count = 0;
+        for path in files {
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Unknown".to_string());
+
+            let target = path.to_string_lossy().to_string();
+            let working_dir = path
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            let item = Item {
+                id: crate::model::generate_id("item"),
+                name,
+                target,
+                working_dir,
+                category_id: category_id.to_string(),
+                ..Default::default()
+            };
+
+            if self.add_item(item) {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    pub fn get_item(&self, id: &str) -> Option<&Item> {
+        self.config.data.items.iter().find(|i| i.id == id)
     }
 }
 

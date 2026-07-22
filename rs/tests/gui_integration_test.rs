@@ -35,7 +35,10 @@ fn setup_ui_with_data(categories: Vec<Category>, items: Vec<Item>) -> MainWindow
     let cat_models: Vec<CategoryModel> = manager
         .categories()
         .iter()
-        .map(|c| CategoryModel { id: c.id.clone().into(), name: c.name.clone().into() })
+        .map(|c| CategoryModel {
+            id: c.id.clone().into(),
+            name: c.name.clone().into(),
+        })
         .collect();
     ui.set_categories(Rc::new(slint::VecModel::from(cat_models)).into());
 

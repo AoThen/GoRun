@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+const HOTKEY_ID: u32 = 0xC001;
+
 pub struct Hotkey {
     pub modifiers: u32,
     pub vk: u32,
@@ -13,7 +15,7 @@ pub fn parse_hotkey_string(s: &str) -> Option<Hotkey> {
     for part in &parts {
         let trimmed = part.trim();
         match trimmed.to_lowercase().as_str() {
-            "ctrl" => modifiers |= 0x0002, // MOD_CONTROL
+            "ctrl" => modifiers |= 0x0002,  // MOD_CONTROL
             "alt" => modifiers |= 0x0001,   // MOD_ALT
             "shift" => modifiers |= 0x0004, // MOD_SHIFT
             "win" => modifiers |= 0x0008,   // MOD_WIN
@@ -68,6 +70,120 @@ pub fn parse_hotkey_string(s: &str) -> Option<Hotkey> {
     }
 }
 
+pub struct HotkeyManager {
+    id: u32,
+    registered: bool,
+}
+
+impl HotkeyManager {
+    pub fn new() -> Self {
+        HotkeyManager {
+            id: HOTKEY_ID,
+            registered: false,
+        }
+    }
+
+    pub fn register(&mut self, hotkey_str: &str) -> bool {
+        let hk = match parse_hotkey_string(hotkey_str) {
+            Some(h) => h,
+            None => {
+                log::error!(
+                    "HotkeyManager: failed to parse hotkey string: {}",
+                    hotkey_str
+                );
+                return false;
+            }
+        };
+
+        #[cfg(windows)]
+        unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::{RegisterHotKey, UnregisterHotKey};
+
+            if self.registered {
+                UnregisterHotKey(None, self.id as i32);
+            }
+
+            let result = RegisterHotKey(
+                None,
+                self.id as i32,
+                windows::Win32::UI::WindowsAndMessaging::MOD(hk.modifiers),
+                hk.vk,
+            );
+
+            if result.is_ok() {
+                log::info!(
+                    "HotkeyManager: registered hotkey '{}' (id=0x{:X})",
+                    hotkey_str,
+                    self.id
+                );
+                self.registered = true;
+                true
+            } else {
+                log::error!("HotkeyManager: RegisterHotKey failed for '{}'", hotkey_str);
+                self.registered = false;
+                false
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            log::warn!("HotkeyManager: hotkey registration not supported on this platform");
+            false
+        }
+    }
+
+    pub fn unregister(&mut self) -> bool {
+        if !self.registered {
+            return true;
+        }
+
+        #[cfg(windows)]
+        unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::UnregisterHotKey;
+
+            let result = UnregisterHotKey(None, self.id as i32);
+            if result.is_ok() {
+                log::info!("HotkeyManager: unregistered hotkey (id=0x{:X})", self.id);
+                self.registered = false;
+                true
+            } else {
+                log::error!(
+                    "HotkeyManager: UnregisterHotKey failed (id=0x{:X})",
+                    self.id
+                );
+                false
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            self.registered = false;
+            true
+        }
+    }
+
+    pub fn update(&mut self, hotkey_str: &str) -> bool {
+        self.unregister();
+        self.register(hotkey_str)
+    }
+
+    pub fn is_registered(&self) -> bool {
+        self.registered
+    }
+}
+
+impl Default for HotkeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for HotkeyManager {
+    fn drop(&mut self) {
+        self.unregister();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,5 +206,31 @@ mod tests {
     fn test_parse_invalid() {
         assert!(parse_hotkey_string("").is_none());
         assert!(parse_hotkey_string("Ctrl+").is_none());
+    }
+
+    #[test]
+    fn test_hotkey_manager_new() {
+        let mgr = HotkeyManager::new();
+        assert!(!mgr.is_registered());
+    }
+
+    #[test]
+    fn test_hotkey_manager_register_invalid() {
+        let mut mgr = HotkeyManager::new();
+        assert!(!mgr.register(""));
+        assert!(!mgr.is_registered());
+    }
+
+    #[test]
+    fn test_hotkey_manager_default() {
+        let mgr: HotkeyManager = Default::default();
+        assert!(!mgr.is_registered());
+    }
+
+    #[test]
+    fn test_hotkey_manager_update_invalid() {
+        let mut mgr = HotkeyManager::new();
+        assert!(!mgr.update("InvalidKey"));
+        assert!(!mgr.is_registered());
     }
 }

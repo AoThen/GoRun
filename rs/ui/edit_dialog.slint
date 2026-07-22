@@ -1,44 +1,115 @@
-import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, Slider } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox, Text } from "std-widgets.slint";
 
 export component EditDialog inherits Window {
     title: "Edit Item";
-    min-width: 400px;
-    min-height: 300px;
-    width: 450px;
-    height: 350px;
+    min-width: 450px;
+    min-height: 400px;
+    width: 500px;
+    height: 450px;
     modal: true;
 
     callback save();
     callback cancel();
+    callback browse-target();
+    callback browse-icon();
+    callback validate();
 
     property <string> item-name;
     property <string> item-target;
     property <string> item-arguments;
     property <string> item-working-dir;
+    property <string> item-icon-path;
+    property <int> item-icon-index: 0;
+    property <string> item-keywords;
+    property <string> item-remark;
     property <bool> run-as-admin;
+    property <[string]> category-names;
+    property <int> selected-category-index: 0;
+    property <string> error-message: "";
 
     VerticalBox {
         padding: 16px;
-        spacing: 12px;
+        spacing: 10px;
 
         HorizontalBox {
+            alignment: center;
             Text { text: "Name:"; width: 80px; }
-            LineEdit { text: <=> root.item-name; }
+            LineEdit { 
+                text: <=> root.item-name;
+                changed => root.validate();
+            }
         }
 
         HorizontalBox {
+            alignment: center;
             Text { text: "Target:"; width: 80px; }
-            LineEdit { text: <=> root.item-target; }
+            LineEdit { 
+                text: <=> root.item-target;
+                changed => root.validate();
+            }
+            Button { 
+                text: "Browse...";
+                clicked => root.browse-target();
+                width: 80px;
+            }
         }
 
         HorizontalBox {
+            alignment: center;
             Text { text: "Arguments:"; width: 80px; }
             LineEdit { text: <=> root.item-arguments; }
         }
 
         HorizontalBox {
+            alignment: center;
             Text { text: "Directory:"; width: 80px; }
             LineEdit { text: <=> root.item-working-dir; }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: "Icon Path:"; width: 80px; }
+            LineEdit { text: <=> root.item-icon-path; }
+            Button { 
+                text: "Browse...";
+                clicked => root.browse-icon();
+                width: 80px;
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: "Icon Index:"; width: 80px; }
+            LineEdit { 
+                text: root.item-icon-index.to-string();
+                accepted => {
+                    root.item-icon-index = self.text.parse-int().unwrap-or(0);
+                }
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: "Keywords:"; width: 80px; }
+            LineEdit { text: <=> root.item-keywords; }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: "Remark:"; width: 80px; }
+            LineEdit { text: <=> root.item-remark; }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: "Category:"; width: 80px; }
+            ComboBox {
+                model: root.category-names;
+                current-index: root.selected-category-index;
+                selected => {
+                    root.selected-category-index = self.current-index;
+                }
+            }
         }
 
         HorizontalBox {
@@ -48,10 +119,26 @@ export component EditDialog inherits Window {
             }
         }
 
+        if root.error-message != "": HorizontalBox {
+            Text {
+                text: root.error-message;
+                color: #FF0000;
+            }
+        }
+
         HorizontalBox {
             alignment: end;
             spacing: 8px;
-            Button { text: "Save"; clicked => { root.save(); } }
+            height: 36px;
+            Button { 
+                text: "Save"; 
+                clicked => {
+                    root.validate();
+                    if root.error-message == "" {
+                        root.save();
+                    }
+                } 
+            }
             Button { text: "Cancel"; clicked => { root.cancel(); } }
         }
     }

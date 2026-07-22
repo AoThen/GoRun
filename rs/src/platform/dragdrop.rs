@@ -5,9 +5,11 @@ use std::sync::mpsc::Sender;
 use super::DropMessage;
 
 #[cfg(windows)]
-pub fn setup_dragdrop(hwnd: isize, sender: &Sender<DropMessage>) {
-    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM, LRESULT};
-    use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP, SetWindowSubclass};
+pub fn setup_dragdrop(hwnd: isize, sender_ptr: usize) {
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    use windows::Win32::UI::Shell::{
+        DragAcceptFiles, DragFinish, DragQueryFileW, SetWindowSubclass, HDROP,
+    };
     use windows::Win32::UI::WindowsAndMessaging::WM_DROPFILES;
 
     unsafe extern "system" fn subclass_proc(
@@ -48,12 +50,9 @@ pub fn setup_dragdrop(hwnd: isize, sender: &Sender<DropMessage>) {
     unsafe {
         let hwnd = HWND(hwnd);
         DragAcceptFiles(hwnd, true);
-        let sender_ptr = sender as *const Sender<DropMessage> as usize;
         SetWindowSubclass(hwnd, Some(subclass_proc), 0, sender_ptr);
     }
 }
 
 #[cfg(not(windows))]
-pub fn setup_dragdrop(_hwnd: isize, _sender: &Sender<DropMessage>) {
-    // Drag-and-drop is only supported on Windows
-}
+pub fn setup_dragdrop(_hwnd: isize, _sender_ptr: usize) {}

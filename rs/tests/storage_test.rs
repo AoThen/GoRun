@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
     use GoRun::hotkey::parse_hotkey_string;
+    use GoRun::model::AppConfig;
     use GoRun::model::{generate_id, Item, ViewType};
     use GoRun::runner::is_url;
     use GoRun::storage::Storage;
-    use GoRun::model::AppConfig;
 
     #[test]
     fn test_is_url_http() {
