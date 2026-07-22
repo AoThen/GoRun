@@ -97,16 +97,16 @@ impl HotkeyManager {
 
         #[cfg(windows)]
         unsafe {
-            use windows_sys::Win32::Foundation::{HWND, TRUE};
+            use windows_sys::Win32::Foundation::TRUE;
             use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
                 RegisterHotKey, UnregisterHotKey,
             };
 
             if self.registered {
-                let _ = UnregisterHotKey(None, self.id as i32);
+                let _ = UnregisterHotKey(std::ptr::null_mut(), self.id as i32);
             }
 
-            let result = RegisterHotKey(None, self.id as i32, hk.modifiers, hk.vk);
+            let result = RegisterHotKey(std::ptr::null_mut(), self.id as i32, hk.modifiers, hk.vk);
 
             if result == TRUE {
                 log::info!(
@@ -140,7 +140,7 @@ impl HotkeyManager {
             use windows_sys::Win32::Foundation::TRUE;
             use windows_sys::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
 
-            let result = UnregisterHotKey(None, self.id as i32);
+            let result = UnregisterHotKey(std::ptr::null_mut(), self.id as i32);
             if result == TRUE {
                 log::info!("HotkeyManager: unregistered hotkey (id=0x{:X})", self.id);
                 self.registered = false;

@@ -67,7 +67,7 @@ impl TrayIcon {
             uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
             uCallbackMessage: WM_TRAYICON,
             hIcon: h_icon,
-            szTip,
+            szTip: sz_tip,
             ..Default::default()
         };
 

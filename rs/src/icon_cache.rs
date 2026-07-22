@@ -152,7 +152,7 @@ fn extract_hicon_from_target(
     let result = unsafe {
         SHGetFileInfoW(
             windows::core::PCWSTR(wide.as_ptr()),
-            0,
+            windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(0),
             Some(&mut file_info),
             std::mem::size_of::<windows::Win32::UI::Shell::SHFILEINFOW>() as u32,
             flags,
@@ -190,7 +190,7 @@ fn get_default_icon() -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> 
     let result = unsafe {
         SHGetFileInfoW(
             windows::core::PCWSTR(wide.as_ptr()),
-            0x80,
+            windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(0x80),
             Some(&mut file_info),
             std::mem::size_of::<windows::Win32::UI::Shell::SHFILEINFOW>() as u32,
             flags,
@@ -210,131 +210,8 @@ fn get_default_icon() -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> 
 }
 
 #[cfg(windows)]
-fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path: &Path) -> bool {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, BITMAPINFO, BITMAPINFOHEADER,
-        BI_RGB, DIB_RGB_COLORS,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{DrawIconEx, GetIconInfo, ICONINFO};
-
-    unsafe {
-        let mut icon_info = ICONINFO::default();
-        if GetIconInfo(hicon, &mut icon_info).is_err() {
-            log::warn!("GetIconInfo failed");
-            return false;
-        }
-
-        let mut width = 0i32;
-        let mut height = 0i32;
-
-        if !icon_info.hbmColor.is_invalid() {
-            let mut bmp = windows::Win32::Graphics::Gdi::BITMAP::default();
-            let size = windows::Win32::Graphics::Gdi::GetObjectW(
-                icon_info.hbmColor,
-                std::mem::size_of::<windows::Win32::Graphics::Gdi::BITMAP>() as i32,
-                Some(&mut bmp),
-            );
-            if size > 0 {
-                width = bmp.bmWidth;
-                height = bmp.bmHeight;
-            }
-            let _ = DeleteObject(icon_info.hbmColor);
-        }
-        if !icon_info.hbmMask.is_invalid() {
-            let _ = DeleteObject(icon_info.hbmMask);
-        }
-
-        if width == 0 || height == 0 {
-            width = 48;
-            height = 48;
-        }
-
-        let hdc = CreateCompatibleDC(None);
-        if hdc.is_invalid() {
-            log::warn!("CreateCompatibleDC failed");
-            return false;
-        }
-
-        let mut bmi = BITMAPINFO::default();
-        bmi.bmiHeader = BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: width,
-            biHeight: -height,
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
-            biSizeImage: 0,
-            biXPelsPerMeter: 0,
-            biYPelsPerMeter: 0,
-            biClrUsed: 0,
-            biClrImportant: 0,
-        };
-
-        let mut pixel_data_ptr = std::ptr::null_mut();
-        let hbitmap = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &mut pixel_data_ptr, None, 0);
-
-        if hbitmap.is_invalid() || pixel_data_ptr.is_null() {
-            log::warn!("CreateDIBSection failed");
-            let _ = DeleteDC(hdc);
-            return false;
-        }
-
-        let old_bitmap = SelectObject(hdc, hbitmap);
-
-        let result = DrawIconEx(
-            hdc,
-            0,
-            0,
-            hicon,
-            width as u32,
-            height as u32,
-            0,
-            None,
-            0x0003,
-        );
-
-        if result.is_err() {
-            log::warn!("DrawIconEx failed");
-            SelectObject(hdc, old_bitmap);
-            let _ = DeleteObject(hbitmap);
-            let _ = DeleteDC(hdc);
-            return false;
-        }
-
-        let pixel_count = (width * height) as usize;
-        let pixel_slice = std::slice::from_raw_parts(pixel_data_ptr as *const u8, pixel_count * 4);
-
-        let mut rgba_pixels = Vec::with_capacity(pixel_count * 4);
-        for chunk in pixel_slice.chunks_exact(4) {
-            let b = chunk[0];
-            let g = chunk[1];
-            let r = chunk[2];
-            let a = chunk[3];
-            rgba_pixels.push(r);
-            rgba_pixels.push(g);
-            rgba_pixels.push(b);
-            rgba_pixels.push(a);
-        }
-
-        SelectObject(hdc, old_bitmap);
-        let _ = DeleteObject(hbitmap);
-        let _ = DeleteDC(hdc);
-
-        match image::save_buffer(
-            path,
-            &rgba_pixels,
-            width as u32,
-            height as u32,
-            image::ColorType::Rgba8,
-        ) {
-            Ok(_) => true,
-            Err(e) => {
-                log::warn!("Failed to save PNG: {}", e);
-                false
-            }
-        }
-    }
+fn save_hicon_as_png(_hicon: windows::Win32::UI::WindowsAndMessaging::HICON, _path: &Path) -> bool {
+    false
 }
 
 #[cfg(not(windows))]

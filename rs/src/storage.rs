@@ -311,7 +311,7 @@ impl Storage {
             let backup_path = format!("{}{}", self.path, suffix);
             if Path::new(&backup_path).exists() {
                 log::info!("Trying to load from backup: {}", backup_path);
-                let backup_storage = Storage::new(backup_path);
+                let backup_storage = Storage::new(backup_path.clone());
                 if let Some(config) = backup_storage.load() {
                     log::info!("Successfully loaded from backup: {}", backup_path);
                     if self.save(&config) {
