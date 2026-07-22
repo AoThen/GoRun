@@ -20,7 +20,8 @@ use item_manager::ItemManager;
 use model::{Category, Item, ViewType};
 use storage::Storage;
 
-slint::include_modules!();
+include!(env!("SLINT_INCLUDE_GENERATED"));
+include!(env!("SLINT_INCLUDE_GENERATED_EDIT_DIALOG"));
 
 struct AppState {
     manager: ItemManager,
@@ -124,10 +125,8 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
         );
         let path = PathBuf::from(target.to_string());
         let mut state = state_file.borrow_mut();
-        let count = state
-            .manager
-            .handle_drop(&[path], &state.current_category_id);
         let cat_id = state.current_category_id.clone();
+        let count = state.manager.handle_drop(&[path], &cat_id);
         let query = state.search_query.clone();
         drop(state);
         if let Some(ui) = weak_ui_file.upgrade() {
@@ -155,8 +154,8 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
         log::debug!("Category selected: index={}", index);
         let mut state = state_cat.borrow_mut();
         if let Some(cat) = state.manager.categories().get(index as usize) {
-            state.current_category_id = cat.id.clone();
             let cat_id = cat.id.clone();
+            state.current_category_id = cat_id.clone();
             let query = state.search_query.clone();
             drop(state);
             if let Some(ui) = weak_ui_cat.upgrade() {
@@ -275,11 +274,11 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
                     0 => {
                         log::info!("Edit item: {} ({})", item.name, item.id);
                         let mut state = state_menu.borrow_mut();
-                        let categories: Vec<String> = state
+                        let categories: Vec<slint::SharedString> = state
                             .manager
                             .categories()
                             .iter()
-                            .map(|c| c.name.clone())
+                            .map(|c| c.name.clone().into())
                             .collect();
                         let selected_cat_idx = state
                             .manager
@@ -305,9 +304,11 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
                             );
                             dialog.set_selected_category_index(selected_cat_idx as i32);
 
+                            let dialog_weak = dialog.as_weak();
                             let state_edit = state_menu.clone();
                             let weak_ui_edit = weak_ui_menu.clone();
                             dialog.on_save(move || {
+                                let dialog = dialog_weak.upgrade().unwrap();
                                 let mut state = state_edit.borrow_mut();
                                 let mut updated_item = item.clone();
                                 updated_item.name = dialog.get_item_name().to_string();

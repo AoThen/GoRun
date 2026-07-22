@@ -10,18 +10,18 @@ export component EditDialog inherits Window {
     callback browse-target();
     callback browse-icon();
 
-    property <string> item-name;
-    property <string> item-target;
-    property <string> item-arguments;
-    property <string> item-working-dir;
-    property <string> item-icon-path;
-    property <int> item-icon-index: 0;
-    property <string> item-keywords;
-    property <string> item-remark;
-    property <bool> run-as-admin;
-    property <[string]> category-names;
-    property <int> selected-category-index: 0;
-    property <string> error-message: "";
+    in-out property <string> item-name;
+    in-out property <string> item-target;
+    in-out property <string> item-arguments;
+    in-out property <string> item-working-dir;
+    in-out property <string> item-icon-path;
+    in-out property <int> item-icon-index: 0;
+    in-out property <string> item-keywords;
+    in-out property <string> item-remark;
+    in-out property <bool> run-as-admin;
+    in-out property <[string]> category-names;
+    in-out property <int> selected-category-index: 0;
+    in-out property <string> error-message: "";
 
     VerticalBox {
         padding: 16px;

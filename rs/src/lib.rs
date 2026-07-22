@@ -10,4 +10,5 @@ pub mod runner;
 pub mod storage;
 pub mod tray;
 
-slint::include_modules!();
+include!(env!("SLINT_INCLUDE_GENERATED"));
+include!(env!("SLINT_INCLUDE_GENERATED_EDIT_DIALOG"));
