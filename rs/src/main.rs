@@ -455,7 +455,7 @@ fn copy_to_clipboard(text: &str) -> bool {
             std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr, wide.len());
             let _ = GlobalUnlock(h_mem);
 
-            if SetClipboardData(CF_UNICODETEXT.0 as u32, HANDLE(h_mem.0)).is_err() {
+            if SetClipboardData(CF_UNICODETEXT.0 as u32, HANDLE(h_mem.0 as isize)).is_err() {
                 log::error!("Failed to set clipboard data");
                 let _ = CloseClipboard();
                 return false;
