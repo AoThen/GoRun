@@ -419,12 +419,13 @@ fn copy_to_clipboard(text: &str) -> bool {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
         use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::System::DataExchange::{
+            CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+        };
         use windows::Win32::System::Memory::{
             GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
         };
-        use windows::Win32::System::Ole::{
-            CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData, CF_UNICODETEXT,
-        };
+        use windows::Win32::System::Ole::CF_UNICODETEXT;
 
         let wide: Vec<u16> = OsStr::new(text)
             .encode_wide()
@@ -443,7 +444,7 @@ fn copy_to_clipboard(text: &str) -> bool {
                 return false;
             }
 
-            let h_mem = GlobalAlloc(GMEM_MOVEABLE, size).unwrap_or(HANDLE::default());
+            let h_mem = GlobalAlloc(GMEM_MOVEABLE, size).unwrap_or_default();
             if h_mem.is_invalid() {
                 log::error!("Failed to allocate global memory for clipboard");
                 let _ = CloseClipboard();
@@ -454,7 +455,7 @@ fn copy_to_clipboard(text: &str) -> bool {
             std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr, wide.len());
             let _ = GlobalUnlock(h_mem);
 
-            if SetClipboardData(CF_UNICODETEXT, h_mem).is_err() {
+            if SetClipboardData(CF_UNICODETEXT.0 as u32, HANDLE(h_mem.0)).is_err() {
                 log::error!("Failed to set clipboard data");
                 let _ = CloseClipboard();
                 return false;
