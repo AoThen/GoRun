@@ -73,7 +73,7 @@ impl IconCache {
 
         #[cfg(windows)]
         unsafe {
-            use windows::Win32::Graphics::Gdi::DestroyIcon;
+            use windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
             let _ = DestroyIcon(hicon);
         }
 
@@ -88,10 +88,13 @@ impl IconCache {
 }
 
 #[cfg(windows)]
-fn extract_hicon(icon_path: &str, icon_index: i32) -> Option<windows::Win32::Graphics::Gdi::HICON> {
+fn extract_hicon(
+    icon_path: &str,
+    icon_index: i32,
+) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::Graphics::Gdi::HICON;
     use windows::Win32::UI::Shell::ExtractIconExW;
+    use windows::Win32::UI::WindowsAndMessaging::HICON;
 
     let wide: Vec<u16> = std::ffi::OsStr::new(icon_path)
         .encode_wide()
@@ -119,7 +122,7 @@ fn extract_hicon(icon_path: &str, icon_index: i32) -> Option<windows::Win32::Gra
     if !large_icon.is_invalid() {
         if !small_icon.is_invalid() {
             unsafe {
-                let _ = windows::Win32::Graphics::Gdi::DestroyIcon(small_icon);
+                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyIcon(small_icon);
             }
         }
         Some(large_icon)
@@ -131,10 +134,12 @@ fn extract_hicon(icon_path: &str, icon_index: i32) -> Option<windows::Win32::Gra
 }
 
 #[cfg(windows)]
-fn extract_hicon_from_target(target: &str) -> Option<windows::Win32::Graphics::Gdi::HICON> {
+fn extract_hicon_from_target(
+    target: &str,
+) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::Graphics::Gdi::HICON;
     use windows::Win32::UI::Shell::{SHGetFileInfoW, SHGFI_ICON, SHGFI_LARGEICON};
+    use windows::Win32::UI::WindowsAndMessaging::HICON;
 
     let wide: Vec<u16> = std::ffi::OsStr::new(target)
         .encode_wide()
@@ -167,12 +172,12 @@ fn extract_hicon_from_target(target: &str) -> Option<windows::Win32::Graphics::G
 }
 
 #[cfg(windows)]
-fn get_default_icon() -> Option<windows::Win32::Graphics::Gdi::HICON> {
+fn get_default_icon() -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::Graphics::Gdi::HICON;
     use windows::Win32::UI::Shell::{
         SHGetFileInfoW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_USEFILEATTRIBUTES,
     };
+    use windows::Win32::UI::WindowsAndMessaging::HICON;
 
     let wide: Vec<u16> = std::ffi::OsStr::new(".txt")
         .encode_wide()
@@ -205,13 +210,13 @@ fn get_default_icon() -> Option<windows::Win32::Graphics::Gdi::HICON> {
 }
 
 #[cfg(windows)]
-fn save_hicon_as_png(hicon: windows::Win32::Graphics::Gdi::HICON, path: &Path) -> bool {
+fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path: &Path) -> bool {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetIconInfo, BITMAPINFO,
-        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, ICONINFO,
+        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, BITMAPINFO, BITMAPINFOHEADER,
+        BI_RGB, DIB_RGB_COLORS,
     };
-    use windows::Win32::UI::WindowsAndMessaging::DrawIconEx;
+    use windows::Win32::UI::WindowsAndMessaging::{DrawIconEx, GetIconInfo, ICONINFO};
 
     unsafe {
         let mut icon_info = ICONINFO::default();

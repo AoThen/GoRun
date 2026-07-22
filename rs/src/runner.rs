@@ -1,10 +1,6 @@
 #![allow(dead_code)]
 
-use std::{os::windows::ffi::OsStrExt, path::Path};
-
-use windows::Win32::Foundation::{CloseHandle, GetLastError, PCWSTR};
-use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
-use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+use std::path::Path;
 
 use crate::model::{Item, RunError, RunResult};
 
@@ -77,13 +73,13 @@ fn execute(item: &Item, admin: bool) -> RunResult {
     let arguments = if item.arguments.is_empty() {
         None
     } else {
-        Some(&item.arguments)
+        Some(item.arguments.as_str())
     };
 
     let working_dir = if item.working_dir.is_empty() {
         None
     } else {
-        Some(&item.working_dir)
+        Some(item.working_dir.as_str())
     };
 
     shell_execute(&target, arguments, working_dir, admin)
@@ -98,6 +94,12 @@ fn shell_execute(
     #[cfg(windows)]
     {
         use std::mem;
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::{CloseHandle, GetLastError};
+        use windows::Win32::UI::Shell::{
+            ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
         let verb = if admin { "runas\0" } else { "open\0" };
         let verb_wide: Vec<u16> = verb.encode_utf16().collect();
@@ -178,6 +180,7 @@ fn map_error(error_code: u32) -> RunError {
 fn expand_win_env_vars(input: &str) -> String {
     #[cfg(windows)]
     {
+        use windows::core::PCWSTR;
         use windows::Win32::System::Environment::ExpandEnvironmentStringsW;
 
         let wide: Vec<u16> = to_wide_chars(input);
@@ -203,11 +206,18 @@ fn expand_win_env_vars(input: &str) -> String {
     }
 }
 
+#[cfg(windows)]
 fn to_wide_chars(s: &str) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
     std::ffi::OsStr::new(s)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+#[cfg(not(windows))]
+fn to_wide_chars(_s: &str) -> Vec<u16> {
+    Vec::new()
 }
 
 fn url_encode(input: &str) -> String {

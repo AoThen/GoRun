@@ -16,10 +16,15 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, LoadIconW, PostMessageW,
     SetForegroundWindow, TrackPopupMenu, IDC_ICON, IDI_APPLICATION, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, WM_APP, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP,
+    TPM_RIGHTBUTTON, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP,
 };
 
-const WM_TRAYICON: u32 = WM_APP + 1;
+#[cfg(windows)]
+const WM_TRAYICON: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 1;
+
+#[cfg(not(windows))]
+const WM_TRAYICON: u32 = 0x8001;
+
 const TRAY_ID_SHOW: u32 = 1;
 const TRAY_ID_EXIT: u32 = 2;
 const TRAY_ICON_ID: u32 = 1;

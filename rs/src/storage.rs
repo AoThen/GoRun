@@ -321,7 +321,7 @@ impl Storage {
                 }
             }
         }
-        log::warn("No valid backup found");
+        log::warn!("No valid backup found");
         None
     }
 
