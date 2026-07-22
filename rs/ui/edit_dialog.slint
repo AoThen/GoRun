@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox, Text } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox } from "std-widgets.slint";
 
 export component EditDialog inherits Window {
     title: "Edit Item";
@@ -6,7 +6,6 @@ export component EditDialog inherits Window {
     min-height: 400px;
     width: 500px;
     height: 450px;
-    modal: true;
 
     callback save();
     callback cancel();
@@ -35,7 +34,7 @@ export component EditDialog inherits Window {
             Text { text: "Name:"; width: 80px; }
             LineEdit {
                 text: root.item-name;
-                text-changed => { root.item-name = self.text; }
+                edited => { root.item-name = self.text; }
             }
         }
 
@@ -44,7 +43,7 @@ export component EditDialog inherits Window {
             Text { text: "Target:"; width: 80px; }
             LineEdit {
                 text: root.item-target;
-                text-changed => { root.item-target = self.text; }
+                edited => { root.item-target = self.text; }
             }
             Button {
                 text: "Browse...";
@@ -58,7 +57,7 @@ export component EditDialog inherits Window {
             Text { text: "Arguments:"; width: 80px; }
             LineEdit {
                 text: root.item-arguments;
-                text-changed => { root.item-arguments = self.text; }
+                edited => { root.item-arguments = self.text; }
             }
         }
 
@@ -67,7 +66,7 @@ export component EditDialog inherits Window {
             Text { text: "Directory:"; width: 80px; }
             LineEdit {
                 text: root.item-working-dir;
-                text-changed => { root.item-working-dir = self.text; }
+                edited => { root.item-working-dir = self.text; }
             }
         }
 
@@ -76,7 +75,7 @@ export component EditDialog inherits Window {
             Text { text: "Icon Path:"; width: 80px; }
             LineEdit {
                 text: root.item-icon-path;
-                text-changed => { root.item-icon-path = self.text; }
+                edited => { root.item-icon-path = self.text; }
             }
             Button {
                 text: "Browse...";
@@ -90,7 +89,7 @@ export component EditDialog inherits Window {
             Text { text: "Keywords:"; width: 80px; }
             LineEdit {
                 text: root.item-keywords;
-                text-changed => { root.item-keywords = self.text; }
+                edited => { root.item-keywords = self.text; }
             }
         }
 
@@ -99,7 +98,7 @@ export component EditDialog inherits Window {
             Text { text: "Remark:"; width: 80px; }
             LineEdit {
                 text: root.item-remark;
-                text-changed => { root.item-remark = self.text; }
+                edited => { root.item-remark = self.text; }
             }
         }
 
@@ -119,7 +118,6 @@ export component EditDialog inherits Window {
             CheckBox {
                 text: "Run as administrator";
                 checked: root.run-as-admin;
-                toggled => { root.run-as-admin = self.checked; }
             }
         }
 
