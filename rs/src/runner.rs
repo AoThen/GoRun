@@ -126,7 +126,7 @@ fn shell_execute(
 
         let success = unsafe { ShellExecuteExW(&mut sei) };
 
-        if success.as_bool() {
+        if success.is_ok() {
             if !sei.hProcess.is_invalid() {
                 unsafe { CloseHandle(sei.hProcess) };
             }

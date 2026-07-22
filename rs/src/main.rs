@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use item_manager::ItemManager;
-use model::{Category, ViewType};
+use model::{Category, Item, ViewType};
 use storage::Storage;
 
 slint::include_modules!();
@@ -97,7 +97,7 @@ fn main() {
 
     refresh_items_ui(&ui, &state.borrow(), &current_category_id, "");
 
-    wire_handler(&ui, state, icon_cache);
+    wire_handler(&ui, state.clone(), icon_cache);
 
     setup_drop_handler(&ui);
 
