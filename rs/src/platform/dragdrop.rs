@@ -11,19 +11,19 @@ pub fn setup_dragdrop(hwnd: isize, sender_ptr: usize) {
     use windows::Win32::UI::Shell::{
         DragAcceptFiles, DragFinish, DragQueryFileW, SetWindowSubclass, HDROP,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{DefSubclassProc, WM_DROPFILES};
+    use windows::Win32::UI::WindowsAndMessaging::{DefWindowProcW, WM_DROPFILES};
 
     unsafe extern "system" fn subclass_proc(
         hwnd: HWND,
         umsg: u32,
         wparam: WPARAM,
         lparam: LPARAM,
-        uidsubclass: usize,
-        dwrefdata: usize,
+        _uidsubclass: usize,
+        _dwrefdata: usize,
     ) -> LRESULT {
         if umsg == WM_DROPFILES {
             let hdrop = HDROP(wparam.0 as isize);
-            let sender = &*(dwrefdata as *const Sender<DropMessage>);
+            let sender = &*(_dwrefdata as *const Sender<DropMessage>);
 
             let file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, None);
             let mut paths = Vec::new();
@@ -44,7 +44,7 @@ pub fn setup_dragdrop(hwnd: isize, sender_ptr: usize) {
             DragFinish(hdrop);
             LRESULT(0)
         } else {
-            DefSubclassProc(hwnd, umsg, wparam, lparam, uidsubclass)
+            DefWindowProcW(hwnd, umsg, wparam, lparam)
         }
     }
 

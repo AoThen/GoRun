@@ -8,6 +8,9 @@ use std::mem::size_of;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 #[cfg(windows)]
+use log::{info, warn};
+
+#[cfg(windows)]
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
@@ -15,10 +18,11 @@ use windows::Win32::UI::Shell::{
 };
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyMenu, LoadIconW, PostMessageW, RegisterClassExW,
-    AppendMenuW, CreatePopupMenu, GetCursorPos, SetForegroundWindow, TrackPopupMenu, CS_HREDRAW,
-    CS_VREDRAW, CW_USEDEFAULT, HMENU, IDC_ICON, IDI_APPLICATION, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, WM_CREATE, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW,
+    CreateWindowExW, DefWindowProcW, DestroyMenu, LoadCursorW, LoadIconW, PostMessageW,
+    RegisterClassExW, AppendMenuW, CreatePopupMenu, GetCursorPos, SetForegroundWindow,
+    TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HMENU, HINSTANCE, HCURSOR, IDC_ARROW,
+    IDI_APPLICATION, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CREATE, WM_DESTROY,
+    WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW,
 };
 
 #[cfg(windows)]
@@ -69,8 +73,8 @@ impl TrayIcon {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
                 style: CS_HREDRAW | CS_VREDRAW,
                 lpfnWndProc: Some(tray_wnd_proc),
-                hInstance: h_instance,
-                hCursor: LoadIconW(None, IDC_ICON).unwrap_or_default(),
+                hInstance: HINSTANCE(h_instance.0),
+                hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
                 lpszClassName: class_name,
                 ..Default::default()
             };
@@ -92,7 +96,7 @@ impl TrayIcon {
                 None,
             );
 
-            if hwnd.is_invalid() {
+            if hwnd.is_null() {
                 warn!("TrayIcon: failed to create message window");
                 return (
                     TrayIcon {
@@ -152,9 +156,15 @@ impl TrayIcon {
 
     pub fn show_menu(&self) {
         unsafe {
-            let h_menu = CreatePopupMenu();
+            let h_menu = match CreatePopupMenu() {
+                Ok(menu) => menu,
+                Err(_) => {
+                    warn!("TrayIcon: CreatePopupMenu failed");
+                    return;
+                }
+            };
             if h_menu.is_invalid() {
-                warn!("TrayIcon: CreatePopupMenu failed");
+                warn!("TrayIcon: CreatePopupMenu returned invalid handle");
                 return;
             }
 

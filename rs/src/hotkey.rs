@@ -163,14 +163,14 @@ impl HotkeyManager {
                     use windows_sys::Win32::Foundation::TRUE;
                     use windows_sys::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
 
-                    let mut msg = MSG::default();
+                     let mut msg: MSG = std::mem::zeroed();
                     loop {
                         if kill_rx.try_recv().is_ok() {
                             log::info!("HotkeyManager: message pump thread received kill signal");
                             break;
                         }
 
-                        let result = PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE);
+                        let result = PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE);
                         if result == TRUE {
                             if msg.message == WM_HOTKEY && msg.wParam as u32 == hotkey_id {
                                 let _ = sender.send(());
