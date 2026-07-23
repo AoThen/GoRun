@@ -11,7 +11,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use log::{info, warn};
 
 #[cfg(windows)]
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE, POINT};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
@@ -22,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     RegisterClassExW, AppendMenuW, CreatePopupMenu, GetCursorPos, SetForegroundWindow,
     TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HMENU, HCURSOR, IDC_ARROW,
     IDI_APPLICATION, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CREATE, WM_DESTROY,
-    WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW, PCWSTR,
+    WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW,
 };
 
 #[cfg(windows)]
@@ -96,7 +96,7 @@ impl TrayIcon {
                 None,
             );
 
-            if hwnd.0.is_null() {
+            if hwnd.0 == 0 {
                 warn!("TrayIcon: failed to create message window");
                 return (
                     TrayIcon {
@@ -171,8 +171,8 @@ impl TrayIcon {
             let show_text: Vec<u16> = "Show GoRun\0".encode_utf16().collect();
             let exit_text: Vec<u16> = "Exit\0".encode_utf16().collect();
 
-            AppendMenuW(h_menu, Default::default(), MENU_ID_SHOW as usize, PCWSTR(show_text.as_ptr()));
-            AppendMenuW(h_menu, Default::default(), MENU_ID_EXIT as usize, PCWSTR(exit_text.as_ptr()));
+            AppendMenuW(h_menu, Default::default(), MENU_ID_SHOW as usize, windows::core::PCWSTR(show_text.as_ptr()));
+            AppendMenuW(h_menu, Default::default(), MENU_ID_EXIT as usize, windows::core::PCWSTR(exit_text.as_ptr()));
 
             let mut pos = POINT::default();
             let _ = GetCursorPos(&mut pos);
@@ -188,12 +188,12 @@ impl TrayIcon {
                 None,
             );
 
-            match cmd {
+            match cmd.0 {
                 0 => {}
-                id if id as u32 == MENU_ID_SHOW => {
+                id if id == MENU_ID_SHOW as i32 => {
                     let _ = self.sender.send(TrayMessage::Show);
                 }
-                id if id as u32 == MENU_ID_EXIT => {
+                id if id == MENU_ID_EXIT as i32 => {
                     let _ = self.sender.send(TrayMessage::Quit);
                 }
                 _ => {}
