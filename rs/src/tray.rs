@@ -11,7 +11,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use log::{info, warn};
 
 #[cfg(windows)]
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
@@ -20,9 +20,9 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyMenu, LoadCursorW, LoadIconW, PostMessageW,
     RegisterClassExW, AppendMenuW, CreatePopupMenu, GetCursorPos, SetForegroundWindow,
-    TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HMENU, HINSTANCE, HCURSOR, IDC_ARROW,
+    TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HMENU, HCURSOR, IDC_ARROW,
     IDI_APPLICATION, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_CREATE, WM_DESTROY,
-    WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW,
+    WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW, PCWSTR,
 };
 
 #[cfg(windows)]
@@ -96,7 +96,7 @@ impl TrayIcon {
                 None,
             );
 
-            if hwnd.is_null() {
+            if hwnd.0.is_null() {
                 warn!("TrayIcon: failed to create message window");
                 return (
                     TrayIcon {
@@ -171,8 +171,8 @@ impl TrayIcon {
             let show_text: Vec<u16> = "Show GoRun\0".encode_utf16().collect();
             let exit_text: Vec<u16> = "Exit\0".encode_utf16().collect();
 
-            AppendMenuW(h_menu, Default::default(), MENU_ID_SHOW as usize, show_text.as_ptr());
-            AppendMenuW(h_menu, Default::default(), MENU_ID_EXIT as usize, exit_text.as_ptr());
+            AppendMenuW(h_menu, Default::default(), MENU_ID_SHOW as usize, PCWSTR(show_text.as_ptr()));
+            AppendMenuW(h_menu, Default::default(), MENU_ID_EXIT as usize, PCWSTR(exit_text.as_ptr()));
 
             let mut pos = POINT::default();
             let _ = GetCursorPos(&mut pos);

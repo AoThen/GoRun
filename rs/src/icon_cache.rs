@@ -227,7 +227,7 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
 
         let mut bmp = BITMAP::default();
         let bmp_size = std::mem::size_of::<BITMAP>() as i32;
-        if GetObjectW(icon_info.hbmColor, bmp_size, &mut bmp as *mut BITMAP) == 0 {
+        if GetObjectW(icon_info.hbmColor, bmp_size, Some(&mut bmp as *mut BITMAP as *mut std::ffi::c_void)) == 0 {
             log::warn!("GetObjectW failed for icon bitmap");
             let _ = DeleteObject(icon_info.hbmColor);
             let _ = DeleteObject(icon_info.hbmMask);
