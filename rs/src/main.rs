@@ -515,8 +515,15 @@ fn open_file_location(path: &str) {
 fn setup_drop_handler(ui: &MainWindow) {
     use raw_window_handle::HasWindowHandle;
 
-    let window_handle = ui.window().window_handle();
-    let raw_handle = HasWindowHandle::window_handle(&window_handle).unwrap();
+    // 直接对 Window 调用 HasWindowHandle，避免对 WindowHandle 调用导致 NotSupported
+    let raw_handle = match HasWindowHandle::window_handle(&ui.window()) {
+        Ok(handle) => handle,
+        Err(e) => {
+            log::warn!("Failed to get window handle: {e:?}, drag-and-drop disabled");
+            return;
+        }
+    };
+
     let hwnd = match raw_handle.as_raw() {
         raw_window_handle::RawWindowHandle::Win32(win32) => win32.hwnd.get() as isize,
         _ => {
