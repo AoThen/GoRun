@@ -1,7 +1,8 @@
 #[cfg(windows)]
 use std::path::PathBuf;
+#[cfg(windows)]
 use std::sync::mpsc::Sender;
-
+#[cfg(windows)]
 use super::DropMessage;
 
 #[cfg(windows)]
@@ -10,14 +11,14 @@ pub fn setup_dragdrop(hwnd: isize, sender_ptr: usize) {
     use windows::Win32::UI::Shell::{
         DragAcceptFiles, DragFinish, DragQueryFileW, SetWindowSubclass, HDROP,
     };
-    use windows::Win32::UI::WindowsAndMessaging::WM_DROPFILES;
+    use windows::Win32::UI::WindowsAndMessaging::{DefSubclassProc, WM_DROPFILES};
 
     unsafe extern "system" fn subclass_proc(
-        _hwnd: HWND,
+        hwnd: HWND,
         umsg: u32,
         wparam: WPARAM,
-        _lparam: LPARAM,
-        _uidsubclass: usize,
+        lparam: LPARAM,
+        uidsubclass: usize,
         dwrefdata: usize,
     ) -> LRESULT {
         if umsg == WM_DROPFILES {
@@ -43,7 +44,7 @@ pub fn setup_dragdrop(hwnd: isize, sender_ptr: usize) {
             DragFinish(hdrop);
             LRESULT(0)
         } else {
-            LRESULT(0)
+            DefSubclassProc(hwnd, umsg, wparam, lparam, uidsubclass)
         }
     }
 

@@ -1,7 +1,11 @@
 #![allow(dead_code)]
 
+use std::sync::mpsc::{channel, Sender};
+use std::thread;
+
 const HOTKEY_ID: u32 = 0xC001;
 
+#[derive(Debug, Clone)]
 pub struct Hotkey {
     pub modifiers: u32,
     pub vk: u32,
@@ -73,6 +77,8 @@ pub fn parse_hotkey_string(s: &str) -> Option<Hotkey> {
 pub struct HotkeyManager {
     id: u32,
     registered: bool,
+    thread_handle: Option<thread::JoinHandle<()>>,
+    kill_sender: Option<Sender<()>>,
 }
 
 impl HotkeyManager {
@@ -80,6 +86,8 @@ impl HotkeyManager {
         HotkeyManager {
             id: HOTKEY_ID,
             registered: false,
+            thread_handle: None,
+            kill_sender: None,
         }
     }
 
@@ -125,12 +133,83 @@ impl HotkeyManager {
 
         #[cfg(not(windows))]
         {
+            let _ = hk;
             log::warn!("HotkeyManager: hotkey registration not supported on this platform");
             false
         }
     }
 
+    pub fn register_with_notifier(
+        &mut self,
+        hotkey_str: &str,
+        sender: Sender<()>,
+    ) -> bool {
+        if !self.register(hotkey_str) {
+            return false;
+        }
+
+        let (kill_tx, kill_rx) = channel::<()>();
+        self.kill_sender = Some(kill_tx);
+
+        let hotkey_id = self.id;
+                     let handle = thread::Builder::new()
+            .name("hotkey-pump".to_string())
+            .spawn(move || {
+                #[cfg(windows)]
+                unsafe {
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{
+                        DispatchMessageW, PeekMessageW, MSG, PM_REMOVE, WM_HOTKEY,
+                    };
+                    use windows_sys::Win32::Foundation::TRUE;
+                    use windows_sys::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
+
+                    let mut msg = MSG::default();
+                    loop {
+                        if kill_rx.try_recv().is_ok() {
+                            log::info!("HotkeyManager: message pump thread received kill signal");
+                            break;
+                        }
+
+                        let result = PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE);
+                        if result == TRUE {
+                            if msg.message == WM_HOTKEY && msg.wParam as u32 == hotkey_id {
+                                let _ = sender.send(());
+                            }
+                            let _ = DispatchMessageW(&msg);
+                        } else {
+                            // No message available, sleep briefly to avoid busy-wait
+                            thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                    }
+
+                    let _ = UnregisterHotKey(std::ptr::null_mut(), hotkey_id as i32);
+                }
+
+                #[cfg(not(windows))]
+                {
+                    let _ = &sender;
+                    let _ = &kill_rx;
+                    let _ = hotkey_id;
+                    log::warn!("HotkeyManager: hotkey notifier thread not supported on this platform");
+                }
+            });
+
+        match handle {
+            Ok(h) => {
+                self.thread_handle = Some(h);
+                log::info!("HotkeyManager: message pump thread started");
+                true
+            }
+            Err(e) => {
+                log::error!("HotkeyManager: failed to start message pump thread: {}", e);
+                false
+            }
+        }
+    }
+
     pub fn unregister(&mut self) -> bool {
+        self.kill_pump_thread();
+
         if !self.registered {
             return true;
         }
@@ -161,6 +240,19 @@ impl HotkeyManager {
         }
     }
 
+    pub fn process_message(&self, msg: u32, wparam: usize) -> bool {
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::UI::WindowsAndMessaging::WM_HOTKEY;
+            if msg == WM_HOTKEY && wparam as u32 == self.id {
+                return true;
+            }
+        }
+        let _ = msg;
+        let _ = wparam;
+        false
+    }
+
     pub fn update(&mut self, hotkey_str: &str) -> bool {
         self.unregister();
         self.register(hotkey_str)
@@ -168,6 +260,16 @@ impl HotkeyManager {
 
     pub fn is_registered(&self) -> bool {
         self.registered
+    }
+
+    fn kill_pump_thread(&mut self) {
+        if let Some(kill_tx) = self.kill_sender.take() {
+            let _ = kill_tx.send(());
+        }
+        if let Some(handle) = self.thread_handle.take() {
+            let _ = handle.join();
+            log::info!("HotkeyManager: message pump thread joined");
+        }
     }
 }
 
@@ -231,5 +333,11 @@ mod tests {
         let mut mgr = HotkeyManager::new();
         assert!(!mgr.update("InvalidKey"));
         assert!(!mgr.is_registered());
+    }
+
+    #[test]
+    fn test_process_message_non_hotkey() {
+        let mgr = HotkeyManager::new();
+        assert!(!mgr.process_message(0x00, 0));
     }
 }

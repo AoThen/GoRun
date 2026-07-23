@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs;
 use std::io::BufReader;
 use std::path::Path;
@@ -15,7 +14,31 @@ struct RawFile {
     #[serde(default)]
     items: Vec<RawItem>,
     #[serde(default)]
-    config: HashMap<String, String>,
+    config: RawConfig,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct RawConfig {
+    #[serde(rename = "globalHotkey", default = "default_hotkey")]
+    global_hotkey: String,
+    #[serde(rename = "windowX", default)]
+    window_x: i32,
+    #[serde(rename = "windowY", default)]
+    window_y: i32,
+    #[serde(rename = "windowWidth", default = "default_window_width")]
+    window_width: i32,
+    #[serde(rename = "windowHeight", default = "default_window_height")]
+    window_height: i32,
+}
+
+fn default_hotkey() -> String {
+    "Ctrl+Alt+M".to_string()
+}
+fn default_window_width() -> i32 {
+    800
+}
+fn default_window_height() -> i32 {
+    600
 }
 
 #[derive(Serialize, Deserialize)]
@@ -91,39 +114,12 @@ impl Storage {
             }
         };
 
-        let mut extra_config = raw.config.clone();
-        extra_config.remove("globalHotkey");
-        extra_config.remove("windowX");
-        extra_config.remove("windowY");
-        extra_config.remove("windowWidth");
-        extra_config.remove("windowHeight");
-
         let config = Config {
-            global_hotkey: raw
-                .config
-                .get("globalHotkey")
-                .cloned()
-                .unwrap_or_else(|| "Ctrl+Alt+M".to_string()),
-            window_x: raw
-                .config
-                .get("windowX")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(100),
-            window_y: raw
-                .config
-                .get("windowY")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(100),
-            window_width: raw
-                .config
-                .get("windowWidth")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(800),
-            window_height: raw
-                .config
-                .get("windowHeight")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(600),
+            global_hotkey: raw.config.global_hotkey.clone(),
+            window_x: raw.config.window_x,
+            window_y: raw.config.window_y,
+            window_width: raw.config.window_width,
+            window_height: raw.config.window_height,
         };
 
         let categories: Vec<Category> = raw
@@ -172,7 +168,7 @@ impl Storage {
             version: raw.version,
             data: AppData { categories, items },
             config,
-            extra_config,
+            extra_config: std::collections::HashMap::new(),
         })
     }
 
@@ -211,33 +207,19 @@ impl Storage {
             })
             .collect();
 
-        let mut config_map = app_config.extra_config.clone();
-        config_map.insert(
-            "globalHotkey".to_string(),
-            app_config.config.global_hotkey.clone(),
-        );
-        config_map.insert(
-            "windowX".to_string(),
-            app_config.config.window_x.to_string(),
-        );
-        config_map.insert(
-            "windowY".to_string(),
-            app_config.config.window_y.to_string(),
-        );
-        config_map.insert(
-            "windowWidth".to_string(),
-            app_config.config.window_width.to_string(),
-        );
-        config_map.insert(
-            "windowHeight".to_string(),
-            app_config.config.window_height.to_string(),
-        );
+        let raw_config = RawConfig {
+            global_hotkey: app_config.config.global_hotkey.clone(),
+            window_x: app_config.config.window_x,
+            window_y: app_config.config.window_y,
+            window_width: app_config.config.window_width,
+            window_height: app_config.config.window_height,
+        };
 
         let raw = RawFile {
             version: app_config.version.clone(),
             categories: raw_categories,
             items: raw_items,
-            config: config_map,
+            config: raw_config,
         };
 
         let json = match serde_json::to_string(&raw) {

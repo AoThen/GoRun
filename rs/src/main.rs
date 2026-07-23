@@ -15,10 +15,10 @@ mod tray;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
-
 use item_manager::ItemManager;
 use model::{Category, Item, ViewType};
 use storage::Storage;
+use tray::TrayMessage;
 
 include!(env!("SLINT_INCLUDE_GENERATED"));
 include!(env!("SLINT_INCLUDE_GENERATED_EDIT_DIALOG"));
@@ -26,7 +26,6 @@ include!(env!("SLINT_INCLUDE_GENERATED_EDIT_DIALOG"));
 struct AppState {
     manager: ItemManager,
     current_category_id: String,
-    current_item_index: Option<i32>,
     search_query: String,
 }
 
@@ -34,8 +33,34 @@ fn sanitize_for_log(s: &str) -> String {
     s.replace('\n', "\\n").replace('\r', "\\r")
 }
 
+fn setup_tray() -> tray::TrayIcon {
+    let (tray_icon, rx) = tray::TrayIcon::create(0, "GoRun");
+
+    std::thread::spawn(move || {
+        while let Ok(msg) = rx.recv() {
+            match msg {
+                TrayMessage::Show => {
+                    log::info!("Tray: Show window requested");
+                }
+                TrayMessage::Hide => {
+                    log::info!("Tray: Hide window requested");
+                }
+                TrayMessage::Quit => {
+                    log::info!("Tray: Quit requested");
+                    break;
+                }
+            }
+        }
+    });
+
+    tray_icon
+}
+
 fn main() {
-    logger::init().ok();
+    let debug_to_console = std::env::args().any(|arg| arg == "--debug");
+    if let Err(e) = logger::init(debug_to_console) {
+        eprintln!("Warning: Failed to initialize logger: {}", e);
+    }
     logger::set_panic_hook();
     log::info!("GoRun starting...");
 
@@ -65,7 +90,7 @@ fn main() {
     let icon_cache = icon_cache::IconCache::new();
     let _loc = localization::Localization::new("zh-CN");
 
-    let _tray = tray::TrayIcon::create(0, "GoRun");
+    let _tray = setup_tray();
 
     let current_category_id = manager
         .categories()
@@ -76,11 +101,16 @@ fn main() {
     let state = Rc::new(RefCell::new(AppState {
         manager,
         current_category_id: current_category_id.clone(),
-        current_item_index: None,
         search_query: String::new(),
     }));
 
-    let ui = MainWindow::new().unwrap();
+    let ui = match MainWindow::new() {
+        Ok(ui) => ui,
+        Err(e) => {
+            log::error!("Failed to create main window: {}", e);
+            return;
+        }
+    };
     log::info!("MainWindow created successfully");
 
     let categories: Vec<CategoryModel> = state
@@ -103,7 +133,9 @@ fn main() {
     setup_drop_handler(&ui);
 
     log::info!("Entering main event loop");
-    ui.run().unwrap();
+    if let Err(e) = ui.run() {
+        log::error!("Main event loop error: {}", e);
+    }
     log::info!("Main event loop ended");
 
     let state = state.borrow();
@@ -165,18 +197,29 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
     });
 
     let state_view = state.clone();
+    let weak_ui_view = ui.as_weak();
     ui.on_toggle_view(move || {
         log::debug!("View toggled");
-        let is_icon = state_view
-            .borrow()
+        let mut state = state_view.borrow_mut();
+        let cat_id = state.current_category_id.clone();
+        if let Some(cat) = state
             .manager
-            .config()
+            .config_mut()
             .data
             .categories
-            .first()
-            .map(|c| matches!(c.view_type, ViewType::Icon))
-            .unwrap_or(true);
-        let _ = is_icon;
+            .iter_mut()
+            .find(|c| c.id == cat_id)
+        {
+            cat.view_type = match cat.view_type {
+                ViewType::Icon => ViewType::List,
+                ViewType::List => ViewType::Icon,
+            };
+        }
+        let query = state.search_query.clone();
+        drop(state);
+        if let Some(ui) = weak_ui_view.upgrade() {
+            refresh_items_ui(&ui, &state_view.borrow(), &cat_id, &query);
+        }
     });
 
     ui.on_toggle_theme(move || {
@@ -289,7 +332,13 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
                         drop(state);
 
                         if let Some(ui) = weak_ui_menu.upgrade() {
-                            let dialog = EditDialog::new().unwrap();
+                            let dialog = match EditDialog::new() {
+                                Ok(d) => d,
+                                Err(e) => {
+                                    log::error!("Failed to create edit dialog: {}", e);
+                                    return;
+                                }
+                            };
                             dialog.set_item_name(item.name.clone().into());
                             dialog.set_item_target(item.target.clone().into());
                             dialog.set_item_arguments(item.arguments.clone().into());
@@ -308,7 +357,13 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
                             let state_edit = state_menu.clone();
                             let weak_ui_edit = weak_ui_menu.clone();
                             dialog.on_save(move || {
-                                let dialog = dialog_weak.upgrade().unwrap();
+                                let dialog = match dialog_weak.upgrade() {
+                                    Some(d) => d,
+                                    None => {
+                                        log::error!("Dialog no longer exists");
+                                        return;
+                                    }
+                                };
                                 let mut state = state_edit.borrow_mut();
                                 let mut updated_item = item.clone();
                                 updated_item.name = dialog.get_item_name().to_string();
@@ -341,7 +396,9 @@ fn wire_handler(ui: &MainWindow, state: Rc<RefCell<AppState>>, icon_cache: icon_
                                 }
                             });
 
-                            dialog.show().unwrap();
+                            if let Err(e) = dialog.show() {
+                                log::error!("Failed to show dialog: {}", e);
+                            }
                         }
                     }
                     1 => {
@@ -469,7 +526,10 @@ fn copy_to_clipboard(text: &str) -> bool {
     }
 
     #[cfg(not(windows))]
-    log::warn!("Clipboard operation not supported on non-Windows platform");
+    {
+        let _ = text;
+        log::warn!("Clipboard operation not supported on non-Windows platform");
+    }
     return false;
 }
 
@@ -538,24 +598,6 @@ fn setup_drop_handler(ui: &MainWindow) {
     std::thread::spawn(move || {
         while let Ok(msg) = handler.rx.recv() {
             match msg {
-                platform::DropMessage::Enter => {
-                    let weak = weak_ui.clone();
-                    slint::invoke_from_event_loop(move || {
-                        if let Some(ui) = weak.upgrade() {
-                            ui.set_drop_active(true);
-                        }
-                    })
-                    .ok();
-                }
-                platform::DropMessage::Leave => {
-                    let weak = weak_ui.clone();
-                    slint::invoke_from_event_loop(move || {
-                        if let Some(ui) = weak.upgrade() {
-                            ui.set_drop_active(false);
-                        }
-                    })
-                    .ok();
-                }
                 platform::DropMessage::Drop(paths) => {
                     let weak = weak_ui.clone();
                     slint::invoke_from_event_loop(move || {
@@ -576,7 +618,6 @@ fn setup_drop_handler(ui: &MainWindow) {
                     })
                     .ok();
                 }
-                _ => {}
             }
         }
     });

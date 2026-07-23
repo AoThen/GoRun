@@ -1,12 +1,13 @@
 use std::fs::File;
-use std::io::Write;
+use std::io::{LineWriter, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use log::{LevelFilter, Log, Metadata, Record};
 
 struct FileLogger {
-    file: Mutex<File>,
+    file: Mutex<LineWriter<File>>,
+    debug_to_console: bool,
 }
 
 impl Log for FileLogger {
@@ -27,14 +28,19 @@ impl Log for FileLogger {
             let now = chrono::Local::now();
             let timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
             let target = record.target();
-            let _ = writeln!(
-                file,
+            let message = format!(
                 "[{}] [{}] [{}] {}",
                 timestamp,
                 level,
                 target,
                 record.args()
             );
+            let _ = writeln!(file, "{}", message);
+            let _ = file.flush();
+
+            if self.debug_to_console {
+                println!("{}", message);
+            }
         }
     }
 
@@ -49,7 +55,15 @@ impl Drop for FileLogger {
     }
 }
 
-pub fn init() -> Result<(), Box<dyn std::error::Error>> {
+pub fn init(debug_to_console: bool) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    if debug_to_console {
+        unsafe {
+            use windows::Win32::System::Console::AllocConsole;
+            AllocConsole();
+        }
+    }
+
     let log_path = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("gorun_debug.log")))
@@ -57,7 +71,8 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     let file = File::create(&log_path)?;
     let logger = FileLogger {
-        file: Mutex::new(file),
+        file: Mutex::new(LineWriter::new(file)),
+        debug_to_console,
     };
 
     log::set_boxed_logger(Box::new(logger))?;

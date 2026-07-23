@@ -210,8 +210,97 @@ fn get_default_icon() -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> 
 }
 
 #[cfg(windows)]
-fn save_hicon_as_png(_hicon: windows::Win32::UI::WindowsAndMessaging::HICON, _path: &Path) -> bool {
-    false
+fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path: &Path) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{
+        CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetObjectW, ReleaseDC, SelectObject,
+        BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetDIBits,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
+
+    unsafe {
+        let mut icon_info = ICONINFO::default();
+        if GetIconInfo(hicon, &mut icon_info as *mut _).is_err() {
+            log::warn!("GetIconInfo failed");
+            return false;
+        }
+
+        let mut bmp = BITMAP::default();
+        let bmp_size = std::mem::size_of::<BITMAP>() as i32;
+        if GetObjectW(icon_info.hbmColor, bmp_size, &mut bmp as *mut _ as *mut _) == 0 {
+            log::warn!("GetObjectW failed for icon bitmap");
+            let _ = DeleteObject(icon_info.hbmColor);
+            let _ = DeleteObject(icon_info.hbmMask);
+            return false;
+        }
+
+        let width = bmp.bmWidth;
+        let height = bmp.bmHeight;
+
+        if width <= 0 || height <= 0 || width > 256 || height > 256 {
+            log::warn!("Invalid icon dimensions: {}x{}", width, height);
+            let _ = DeleteObject(icon_info.hbmColor);
+            let _ = DeleteObject(icon_info.hbmMask);
+            return false;
+        }
+
+        let hdc_screen = GetDC(HWND(0));
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        let hbm_old = SelectObject(hdc_mem, icon_info.hbmColor);
+
+        let mut bmi = BITMAPINFO::default();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = width;
+        bmi.bmiHeader.biHeight = -height;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB.0;
+
+        let buf_size = (width * height * 4) as usize;
+        let mut pixels = vec![0u8; buf_size];
+
+        let lines = GetDIBits(
+            hdc_mem,
+            icon_info.hbmColor,
+            0,
+            height as u32,
+            Some(pixels.as_mut_ptr() as *mut _),
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+
+        SelectObject(hdc_mem, hbm_old);
+        DeleteDC(hdc_mem);
+        ReleaseDC(HWND(0), hdc_screen);
+        let _ = DeleteObject(icon_info.hbmColor);
+        let _ = DeleteObject(icon_info.hbmMask);
+
+        if lines == 0 {
+            log::warn!("GetDIBits failed");
+            return false;
+        }
+
+        for chunk in pixels.chunks_exact_mut(4) {
+            chunk.swap(0, 2);
+        }
+
+        match image::save_buffer(
+            path,
+            &pixels,
+            width as u32,
+            height as u32,
+            image::ColorType::Rgba8,
+        ) {
+            Ok(_) => {
+                log::debug!("Icon saved to {:?} ({}x{})", path, width, height);
+                true
+            }
+            Err(e) => {
+                log::warn!("Failed to save icon PNG: {}", e);
+                false
+            }
+        }
+    }
 }
 
 #[cfg(not(windows))]
