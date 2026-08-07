@@ -3,6 +3,8 @@
 #include "Types.h"
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
+#include <algorithm>
 
 namespace mn {
 
@@ -25,6 +27,8 @@ public:
     void UpdateItem(const Item& item);
     void MoveItem(const std::wstring& itemId, const std::wstring& targetCategoryId);
     void DeleteItem(const std::wstring& id);
+    void ReorderItems(const std::wstring& categoryId, const std::vector<std::wstring>& orderedIds);
+    void ReorderCategories(const std::vector<std::wstring>& orderedIds);
     
     void RefreshItemIcon(const std::wstring& itemId);
     void HandleDrop(const std::vector<std::wstring>& files, const std::wstring& categoryId);

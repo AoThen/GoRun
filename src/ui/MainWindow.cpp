@@ -163,7 +163,13 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
     m_itemGrid.OnItemOpenLocation([this](const Item& item) {
         std::wstring dir = item.target.substr(0, item.target.find_last_of(L"\\/"));
         if (!dir.empty()) {
-            ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"/select,\"" + item.target + L"\"").c_str(), nullptr, SW_SHOW);
+            std::wstring escaped = item.target;
+            size_t pos = 0;
+            while ((pos = escaped.find(L'\"', pos)) != std::wstring::npos) {
+                escaped.replace(pos, 1, L"\"\"");
+                pos += 2;
+            }
+            ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"/select,\"" + escaped + L"\"").c_str(), nullptr, SW_SHOW);
         }
     });
     m_itemGrid.OnItemMoveToCategory([this](const Item& item, const std::wstring& categoryId) {
@@ -177,6 +183,23 @@ void MainWindow::Initialize(ItemManager* itemManager, Config* config, Runner* ru
         ShellExecuteExW(&sei);
     });
     m_itemGrid.SetAllCategories(&itemManager->GetCategories());
+
+    // 项目拖拽排序
+    m_itemGrid.OnReorderItems([this](const std::vector<std::wstring>& orderedIds) {
+        m_itemManager->ReorderItems(m_currentCategoryId, orderedIds);
+        m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+    });
+
+    // 分类拖拽排序
+    m_categoryTab.OnCategoryOrderChanged([this](const std::vector<std::wstring>& orderedIds) {
+        m_itemManager->ReorderCategories(orderedIds);
+        m_categoryTab.SetCategories(&m_itemManager->GetCategories());
+        if (!m_itemManager->GetCategories().empty()) {
+            m_currentCategoryId = m_itemManager->GetCategories()[0].id;
+            m_categoryTab.SetCurrentCategory(m_currentCategoryId);
+            m_itemGrid.SetItems(&m_itemManager->GetItems(m_currentCategoryId));
+        }
+    });
     
     auto& categories = itemManager->GetCategories();
     if (!categories.empty()) {
@@ -293,12 +316,15 @@ cat.name = StringUtils::Utf8ToWString(TrUtf8("Default_NewCategory"));
                 }
                 if (ImGui::MenuItem("简体中文", nullptr, currentLang == "zh-CN")) {
                     if (auto* loc = Localization::Get()) loc->SetLanguage("zh-CN");
+                    if (m_config) m_config->SetLanguage("zh-CN");
                 }
                 if (ImGui::MenuItem("繁體中文", nullptr, currentLang == "zh-TW")) {
                     if (auto* loc = Localization::Get()) loc->SetLanguage("zh-TW");
+                    if (m_config) m_config->SetLanguage("zh-TW");
                 }
                 if (ImGui::MenuItem("English", nullptr, currentLang == "en-US")) {
                     if (auto* loc = Localization::Get()) loc->SetLanguage("en-US");
+                    if (m_config) m_config->SetLanguage("en-US");
                 }
                 ImGui::EndMenu();
             }
@@ -306,8 +332,6 @@ cat.name = StringUtils::Utf8ToWString(TrUtf8("Default_NewCategory"));
                 if (m_config) {
                     m_config->SetFollowMouse(!m_config->GetFollowMouse());
                 }
-            }
-            ImGui::EndMenu();
             }
             ImGui::EndMenu();
         }

@@ -130,20 +130,10 @@ void ItemGrid::RenderIconView() {
         // 先创建按钮获取悬停状态
         if (iconTexture) {
             // 显示图标纹理
-            if (ImGui::ImageButton("##icon", iconTexture, baseIconSize)) {
-                m_selectedIndex = index;
-                if (m_onClick) {
-                    m_onClick(item);
-                }
-            }
+            ImGui::ImageButton("##icon", iconTexture, baseIconSize);
         } else {
             // 显示占位符
-            if (ImGui::Button("##icon", baseIconSize)) {
-                m_selectedIndex = index;
-                if (m_onClick) {
-                    m_onClick(item);
-                }
-            }
+            ImGui::Button("##icon", baseIconSize);
             
             // 显示首字符
             ImVec2 min = ImGui::GetItemRectMin();
@@ -174,6 +164,29 @@ void ItemGrid::RenderIconView() {
         bool isHovered = ImGui::IsItemHovered();
         float scale = GetHoverScale(item.id, isHovered);
         
+        // 双击运行项目
+        if (isHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            m_selectedIndex = index;
+            if (m_onClick) {
+                m_onClick(item);
+            }
+        }
+
+        if (m_searchQuery.empty() && m_onReorderItems) {
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                ImGui::SetDragDropPayload("GORUN_ITEM", item.id.c_str(),
+                    static_cast<size_t>((item.id.size() + 1) * sizeof(wchar_t)));
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GORUN_ITEM")) {
+                    const std::wstring* sourceId = static_cast<const std::wstring*>(payload->Data);
+                    HandleItemDragDrop(index, *sourceId);
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+
         // 悬停时绘制发光效果
         if (scale > 1.01f) {
             ImVec2 min = ImGui::GetItemRectMin();
@@ -265,9 +278,32 @@ void ItemGrid::RenderListView() {
         
         // 先创建不可见按钮占据整行（用于点击和悬停检测）
         ImVec2 rowPos = ImGui::GetCursorScreenPos();
-        bool clicked = ImGui::InvisibleButton("##row", ImVec2(contentWidth, rowHeight));
+        ImGui::InvisibleButton("##row", ImVec2(contentWidth, rowHeight));
         bool hovered = ImGui::IsItemHovered();
         
+        // 双击运行项目
+        if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            m_selectedIndex = index;
+            if (m_onClick) {
+                m_onClick(item);
+            }
+        }
+
+        if (m_searchQuery.empty() && m_onReorderItems) {
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                ImGui::SetDragDropPayload("GORUN_ITEM", item.id.c_str(),
+                    static_cast<size_t>((item.id.size() + 1) * sizeof(wchar_t)));
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GORUN_ITEM")) {
+                    const std::wstring* sourceId = static_cast<const std::wstring*>(payload->Data);
+                    HandleItemDragDrop(index, *sourceId);
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+
         // 在悬停时绘制背景高亮
         if (hovered) {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -362,14 +398,6 @@ void ItemGrid::RenderListView() {
             }
         }
         ImGui::PopStyleColor();
-        
-        // 处理点击事件
-        if (clicked) {
-            m_selectedIndex = index;
-            if (m_onClick) {
-                m_onClick(item);
-            }
-        }
         
         // 右键菜单 - 绑定到 InvisibleButton
         if (ImGui::BeginPopupContextItem("item_context", ImGuiPopupFlags_MouseButtonRight)) {
@@ -490,5 +518,43 @@ void ItemGrid::OnItemOpenLocation(std::function<void(const Item&)> callback) { m
 void ItemGrid::OnItemMoveToCategory(std::function<void(const Item&, const std::wstring&)> callback) { m_onMoveToCategory = callback; }
 void ItemGrid::OnItemProperties(std::function<void(const Item&)> callback) { m_onProperties = callback; }
 void ItemGrid::SetAllCategories(const std::vector<Category>* categories) { m_allCategories = categories; }
+
+void ItemGrid::OnReorderItems(std::function<void(const std::vector<std::wstring>&)> callback) {
+    m_onReorderItems = callback;
+}
+
+void ItemGrid::HandleItemDragDrop(size_t targetIdx, const std::wstring& sourceId) {
+    if (targetIdx >= m_sortedItems.size() || sourceId.empty()) return;
+
+    size_t sourceIdx = m_sortedItems.size();
+    for (size_t i = 0; i < m_sortedItems.size(); ++i) {
+        if (m_sortedItems[i].id == sourceId) {
+            sourceIdx = i;
+            break;
+        }
+    }
+    if (sourceIdx == m_sortedItems.size() || sourceIdx == targetIdx) return;
+
+    std::vector<Item> newItems(m_sortedItems.begin(), m_sortedItems.end());
+    Item movedItem = std::move(newItems[sourceIdx]);
+    newItems.erase(newItems.begin() + sourceIdx);
+
+    if (sourceIdx < targetIdx) {
+        targetIdx -= 1;
+    }
+    newItems.insert(newItems.begin() + targetIdx, std::move(movedItem));
+
+    m_sortedItems = std::move(newItems);
+
+    std::vector<std::wstring> orderedIds;
+    orderedIds.reserve(m_sortedItems.size());
+    for (const auto& item : m_sortedItems) {
+        orderedIds.push_back(item.id);
+    }
+
+    if (m_onReorderItems) {
+        m_onReorderItems(orderedIds);
+    }
+}
 
 } // namespace mn

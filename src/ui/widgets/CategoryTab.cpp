@@ -61,7 +61,41 @@ void CategoryTab::Render() {
         
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
-        
+
+        if (m_onOrderChanged) {
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                ImGui::SetDragDropPayload("GORUN_CATEGORY", cat.id.c_str(), (cat.id.size() + 1) * sizeof(wchar_t));
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GORUN_CATEGORY")) {
+                    const std::wstring* sourceId = static_cast<const std::wstring*>(payload->Data);
+                    size_t sourceIdx = i;
+                    for (size_t k = 0; k < sortedCats.size(); ++k) {
+                        if (sortedCats[k].id == *sourceId) {
+                            sourceIdx = k;
+                            break;
+                        }
+                    }
+                    if (sourceIdx != i) {
+                        std::vector<std::wstring> orderedIds;
+                        orderedIds.reserve(sortedCats.size());
+                        size_t insertIdx = (sourceIdx > i) ? i : (i > 0 ? i - 1 : 0);
+                        for (size_t k = 0; k < sortedCats.size(); ++k) {
+                            if (k == insertIdx) orderedIds.push_back(*sourceId);
+                            if (sortedCats[k].id == *sourceId) continue;
+                            orderedIds.push_back(sortedCats[k].id);
+                        }
+                        if (orderedIds.size() < sortedCats.size()) {
+                            orderedIds.push_back(*sourceId);
+                        }
+                        m_onOrderChanged(orderedIds);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+
         // 右键菜单（使用分类 ID 作为弹窗 ID 的一部分）
         std::string popupId = "category_context_" + StringUtils::WStringToUtf8(cat.id);
         if (ImGui::BeginPopupContextItem(popupId.c_str(), ImGuiPopupFlags_MouseButtonRight)) {
@@ -121,6 +155,10 @@ void CategoryTab::OnCategoryDelete(std::function<void(const std::wstring&)> call
 
 void CategoryTab::OnCategoryRename(std::function<void(const std::wstring&)> callback) {
     m_onRename = callback;
+}
+
+void CategoryTab::OnCategoryOrderChanged(std::function<void(const std::vector<std::wstring>&)> callback) {
+    m_onOrderChanged = callback;
 }
 
 void CategoryTab::SetCurrentCategory(const std::wstring& id) {

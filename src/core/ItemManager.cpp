@@ -371,4 +371,82 @@ void ItemManager::IncrementRunCount(const std::wstring& itemId) {
     }
 }
 
+void ItemManager::ReorderItems(const std::wstring& categoryId, const std::vector<std::wstring>& orderedIds) {
+    auto it = m_itemsByCategory.find(categoryId);
+    if (it == m_itemsByCategory.end()) return;
+
+    auto& catItems = it->second;
+    if (catItems.empty() || orderedIds.empty()) return;
+
+    std::unordered_map<std::wstring, Item> idToItem;
+    for (const auto& item : catItems) {
+        idToItem[item.id] = item;
+    }
+
+    std::unordered_set<std::wstring> orderedSet(orderedIds.begin(), orderedIds.end());
+    std::vector<Item> newOrder;
+    newOrder.reserve(catItems.size());
+
+    for (size_t i = 0; i < orderedIds.size(); ++i) {
+        auto cit = idToItem.find(orderedIds[i]);
+        if (cit != idToItem.end()) {
+            cit->second.sortOrder = static_cast<int>(newOrder.size());
+            newOrder.push_back(std::move(cit->second));
+        }
+    }
+    for (const auto& item : catItems) {
+        if (orderedSet.find(item.id) == orderedSet.end()) {
+            Item copy = item;
+            copy.sortOrder = static_cast<int>(newOrder.size());
+            newOrder.push_back(std::move(copy));
+        }
+    }
+
+    catItems = std::move(newOrder);
+
+    m_storage->BeginBatch();
+    for (const auto& item : catItems) {
+        m_storage->UpdateItem(item);
+    }
+    m_storage->EndBatch();
+    LOG_INFOW(L"ItemManager::ReorderItems: reordered items in category " + categoryId);
+}
+
+void ItemManager::ReorderCategories(const std::vector<std::wstring>& orderedIds) {
+    if (m_categories.empty() || orderedIds.empty()) return;
+
+    std::unordered_map<std::wstring, Category> idToCat;
+    for (const auto& cat : m_categories) {
+        idToCat[cat.id] = cat;
+    }
+
+    std::unordered_set<std::wstring> orderedSet(orderedIds.begin(), orderedIds.end());
+    std::vector<Category> newOrder;
+    newOrder.reserve(m_categories.size());
+
+    for (size_t i = 0; i < orderedIds.size(); ++i) {
+        auto cit = idToCat.find(orderedIds[i]);
+        if (cit != idToCat.end()) {
+            cit->second.sortOrder = static_cast<int>(newOrder.size());
+            newOrder.push_back(std::move(cit->second));
+        }
+    }
+    for (const auto& cat : m_categories) {
+        if (orderedSet.find(cat.id) == orderedSet.end()) {
+            Category copy = cat;
+            copy.sortOrder = static_cast<int>(newOrder.size());
+            newOrder.push_back(std::move(copy));
+        }
+    }
+
+    m_categories = std::move(newOrder);
+
+    m_storage->BeginBatch();
+    for (const auto& cat : m_categories) {
+        m_storage->UpdateCategory(cat);
+    }
+    m_storage->EndBatch();
+    LOG_INFOW(L"ItemManager::ReorderCategories: reordered categories");
+}
+
 } // namespace mn

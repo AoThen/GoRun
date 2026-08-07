@@ -15,18 +15,20 @@ public:
     void OnCategoryAdd(std::function<void()> callback);
     void OnCategoryDelete(std::function<void(const std::wstring& id)> callback);
     void OnCategoryRename(std::function<void(const std::wstring& id)> callback);
-    
+    void OnCategoryOrderChanged(std::function<void(const std::vector<std::wstring>&)> callback);
+
     void SetCurrentCategory(const std::wstring& id);
 
 private:
     void RenderContextMenu(const Category& cat);
-    
+
     std::vector<Category>* m_categories = nullptr;
     std::wstring m_currentId;
     std::function<void(const std::wstring&)> m_onChanged;
     std::function<void()> m_onAdd;
     std::function<void(const std::wstring&)> m_onDelete;
     std::function<void(const std::wstring&)> m_onRename;
+    std::function<void(const std::vector<std::wstring>&)> m_onOrderChanged;
 };
 
 } // namespace mn
