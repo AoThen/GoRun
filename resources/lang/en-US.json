@@ -627,5 +627,8 @@
     "STR_Category": "Category",
     "Tip_DelItemFormat": "Are you sure you want to delete %s?",
 
+    "Tray_ShowHide": "Show/Hide",
+    "Tray_Exit": "Exit",
+
     "__END": ""
 }

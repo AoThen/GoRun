@@ -115,6 +115,12 @@ bool App::Initialize(HINSTANCE hInstance) {
     m_config->Initialize(m_storage.get());
     m_itemManager->Initialize(m_storage.get(), m_iconCache.get());
     
+    // 应用保存的语言设置
+    std::string savedLang = m_config->GetLanguage();
+    if (savedLang != "zh-CN") {
+        m_localization->SetLanguage(savedLang);
+    }
+    
     int x = m_config->GetWindowX();
     int y = m_config->GetWindowY();
     int width = m_config->GetWindowWidth();

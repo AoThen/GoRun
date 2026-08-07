@@ -1,6 +1,8 @@
 #include "TrayIcon.h"
 #include "app/Resource.h"
 #include "utils/Logger.h"
+#include "utils/StringUtils.h"
+#include "core/Localization.h"
 
 #ifdef _WIN32
 #include <ShellApi.h>
@@ -69,9 +71,9 @@ void TrayIcon::ShowContextMenu() {
     GetCursorPos(&pt);
     
     HMENU hMenu = CreatePopupMenu();
-    AppendMenuW(hMenu, MF_STRING, ID_TRAY_SHOW, L"显示/隐藏");
+    AppendMenuW(hMenu, MF_STRING, ID_TRAY_SHOW, StringUtils::Utf8ToWString(TrUtf8("Tray_ShowHide")).c_str());
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"退出");
+    AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, StringUtils::Utf8ToWString(TrUtf8("Tray_Exit")).c_str());
     
     // 必须设置前台窗口，否则菜单可能不会正确关闭
     SetForegroundWindow(m_hwnd);

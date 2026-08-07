@@ -621,5 +621,8 @@
     "STR_Category": "分類",
     "Tip_DelItemFormat": "確定要刪除 %s 嗎？",
 
+    "Tray_ShowHide": "顯示/隱藏",
+    "Tray_Exit": "退出",
+
     "__END": ""
 }

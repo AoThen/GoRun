@@ -34,26 +34,48 @@ fn sanitize_for_log(s: &str) -> String {
 }
 
 fn setup_tray() -> tray::TrayIcon {
-    let (tray_icon, rx) = tray::TrayIcon::create(0, "GoRun");
+    let (tray_icon, _rx) = tray::TrayIcon::create(0, "GoRun");
+    tray_icon
+}
 
+fn start_tray_handler(rx: std::sync::mpsc::Receiver<TrayMessage>, ui_weak: slint::Weak<MainWindow>) {
     std::thread::spawn(move || {
         while let Ok(msg) = rx.recv() {
             match msg {
                 TrayMessage::Show => {
                     log::info!("Tray: Show window requested");
+                    let weak = ui_weak.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.set_visible(true);
+                        }
+                    })
+                    .ok();
                 }
                 TrayMessage::Hide => {
                     log::info!("Tray: Hide window requested");
+                    let weak = ui_weak.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.set_visible(false);
+                        }
+                    })
+                    .ok();
                 }
                 TrayMessage::Quit => {
                     log::info!("Tray: Quit requested");
+                    let weak = ui_weak.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.hide();
+                        }
+                    })
+                    .ok();
                     break;
                 }
             }
         }
     });
-
-    tray_icon
 }
 
 fn main() {
@@ -90,7 +112,8 @@ fn main() {
     let icon_cache = icon_cache::IconCache::new();
     let _loc = localization::Localization::new("zh-CN");
 
-    let _tray = setup_tray();
+    let (tray_icon, rx) = tray::TrayIcon::create(0, "GoRun");
+    let _tray = tray_icon;
 
     let current_category_id = manager
         .categories()
@@ -112,6 +135,8 @@ fn main() {
         }
     };
     log::info!("MainWindow created successfully");
+
+    start_tray_handler(rx, ui.as_weak());
 
     let categories: Vec<CategoryModel> = state
         .borrow()
@@ -140,7 +165,7 @@ fn main() {
 
     let state = state.borrow();
     if state.manager.is_modified() {
-        let _ = storage.save(state.manager.config());
+        let _ = storage.save_with_backup(state.manager.config());
     }
 }
 
@@ -545,7 +570,8 @@ fn open_file_location(path: &str) {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect::<Vec<u16>>();
-    let params = OsStr::new(&format!("/select,{}", path))
+    let escaped = path.replace('"', "\"\"");
+    let params = OsStr::new(&format!("/select,\"{}\"", escaped))
         .encode_wide()
         .chain(std::iter::once(0))
         .collect::<Vec<u16>>();

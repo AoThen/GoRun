@@ -625,5 +625,8 @@
     "STR_Category": "分类",
     "Tip_DelItemFormat": "确定要删除 %s 吗？",
 
+    "Tray_ShowHide": "显示/隐藏",
+    "Tray_Exit": "退出",
+
     "__END": ""
 }

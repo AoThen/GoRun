@@ -33,6 +33,10 @@ public:
     bool GetFollowMouse() const;
     void SetFollowMouse(bool enabled);
 
+    // 语言
+    std::string GetLanguage() const;
+    void SetLanguage(const std::string& langCode);
+
 private:
     Storage* m_storage = nullptr;
     bool UpdateRegistryAutoStart(bool enabled);

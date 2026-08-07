@@ -1,6 +1,7 @@
 #include "Config.h"
 #include "Storage.h"
 #include "utils/Logger.h"
+#include "utils/StringUtils.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -54,7 +55,8 @@ int Config::GetWindowY() const {
 int Config::GetWindowWidth() const {
     if (!m_storage) return 800;
     try {
-        return std::stoi(m_storage->GetConfig("windowWidth", L"800"));
+        int w = std::stoi(m_storage->GetConfig("windowWidth", L"800"));
+        return (std::max)(w, 400);
     } catch (...) {
         return 800;
     }
@@ -63,7 +65,8 @@ int Config::GetWindowWidth() const {
 int Config::GetWindowHeight() const {
     if (!m_storage) return 600;
     try {
-        return std::stoi(m_storage->GetConfig("windowHeight", L"600"));
+        int h = std::stoi(m_storage->GetConfig("windowHeight", L"600"));
+        return (std::max)(h, 300);
     } catch (...) {
         return 600;
     }
@@ -180,6 +183,18 @@ bool Config::GetFollowMouse() const {
 void Config::SetFollowMouse(bool enabled) {
     if (m_storage) {
         m_storage->SetConfig("followMouse", enabled ? L"1" : L"0");
+    }
+}
+
+std::string Config::GetLanguage() const {
+    if (!m_storage) return "zh-CN";
+    std::wstring lang = m_storage->GetConfig("language", L"zh-CN");
+    return StringUtils::WStringToUtf8(lang);
+}
+
+void Config::SetLanguage(const std::string& langCode) {
+    if (m_storage) {
+        m_storage->SetConfig("language", StringUtils::Utf8ToWString(langCode));
     }
 }
 
