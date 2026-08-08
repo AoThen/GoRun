@@ -2,6 +2,7 @@
 #include "Storage.h"
 #include "utils/Logger.h"
 #include "utils/StringUtils.h"
+#include <algorithm>
 
 #ifdef _WIN32
 #include <Windows.h>
