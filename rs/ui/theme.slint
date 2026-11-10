@@ -1,0 +1,50 @@
+export global Theme {
+    in-out property <color> bg-primary: #1a1a2e;
+    in-out property <color> text-primary: #e0e0e0;
+    in-out property <color> text-secondary: #a0a0a0;
+    in-out property <color> bg-secondary: #16213e;
+    in-out property <color> bg-card: #0f3460;
+    in-out property <color> accent: #e94560;
+    in-out property <color> drop-highlight: #204060;
+    in-out property <color> menu-bg: #2d2d2d;
+    in-out property <color> menu-hover: #3a3a5c;
+    in-out property <color> menu-border: #444444;
+    in-out property <color> error: #ff6b6b;
+
+    in-out property <length> spacing-sm: 4px;
+    in-out property <length> spacing-md: 8px;
+    in-out property <length> spacing-lg: 16px;
+
+    in-out property <length> radius-sm: 0px;
+    in-out property <length> radius-md: 6px;
+
+    in-out property <length> font-size-sm: 11px;
+    in-out property <length> font-size-md: 14px;
+
+    in-out property <length> icon-size: 64px;
+
+    callback set-dark(is-dark: bool);
+    set-dark(is-dark) => {
+        if (is-dark) {
+            bg-primary = #1a1a2e;
+            bg-secondary = #16213e;
+            bg-card = #0f3460;
+            text-primary = #e0e0e0;
+            text-secondary = #a0a0a0;
+            menu-bg = #2d2d2d;
+            menu-hover = #3a3a5c;
+            menu-border = #444444;
+            error = #ff6b6b;
+        } else {
+            bg-primary = #f5f5f5;
+            bg-secondary = #ffffff;
+            bg-card = #e8e8e8;
+            text-primary = #1a1a1a;
+            text-secondary = #666666;
+            menu-bg = #ffffff;
+            menu-hover = #e5f0ff;
+            menu-border = #cccccc;
+            error = #cc0000;
+        }
+    }
+}

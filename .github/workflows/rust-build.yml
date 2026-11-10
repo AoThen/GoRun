@@ -1,0 +1,89 @@
+name: Rust Build (GoRun-rs)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rs/**'
+      - 'resources/lang/**'
+      - '.github/workflows/rust-build.yml'
+  pull_request:
+    paths:
+      - 'rs/**'
+      - 'resources/lang/**'
+      - '.github/workflows/rust-build.yml'
+  workflow_dispatch:
+
+jobs:
+  rust-build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      - name: Build (debug)
+        run: cargo build
+
+      - name: Run unit tests
+        run: cargo test --lib
+
+      - name: Run storage integration tests
+        run: cargo test --test storage_test
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoRun-rs-release
+          path: rs/target/release/GoRun.exe
+          retention-days: 30
+
+  rust-gui-tests-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libfontconfig1-dev libfreetype6-dev xvfb
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      - name: Build with testing
+        run: cargo build
+
+      - name: Run GUI integration tests (xvfb)
+        run: xvfb-run cargo test --features backend-testing --test gui_integration_test -- --test-threads=1
+
+      - name: Run all tests (xvfb)
+        run: xvfb-run cargo test --features backend-testing -- --test-threads=1

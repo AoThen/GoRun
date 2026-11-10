@@ -1,0 +1,87 @@
+import { Theme } from "../theme.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export component ConfirmDialog {
+    in-out property <bool> dialog-visible;
+    in property <string> dialog-title: "确认";
+    in property <string> message: "";
+    in property <string> confirm-text: "确定";
+    in property <string> cancel-text: "取消";
+    in property <bool> danger: false;
+
+    callback confirm();
+    callback cancel();
+
+    visible: root.dialog-visible;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #00000060;
+
+        Rectangle {
+            width: 340px;
+            height: 160px;
+            background: Theme.bg-secondary;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.menu-border;
+
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            VerticalBox {
+                padding: 20px;
+                spacing: 16px;
+
+                Text {
+                    text: root.dialog-title;
+                    color: Theme.text-primary;
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: root.message;
+                    color: Theme.text-secondary;
+                    font-size: 13px;
+                }
+
+                HorizontalBox {
+                    alignment: end;
+                    spacing: 8px;
+
+                    cancel-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.cancel(); }
+                        Rectangle {
+                            background: cancel-ta.has-hover ? Theme.menu-hover : transparent;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.menu-border;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.cancel-text; color: Theme.text-primary; font-size: 13px; }
+                            }
+                        }
+                    }
+
+                    confirm-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.confirm(); }
+                        Rectangle {
+                            background: Theme.accent;
+                            border-radius: 6px;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.confirm-text; color: #ffffff; font-size: 13px; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

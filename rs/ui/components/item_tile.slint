@@ -1,0 +1,98 @@
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: image,
+    search-active: bool,
+}
+
+export component ItemTile {
+    callback clicked();
+    callback right-clicked(x: length, y: length);
+
+    in property <ItemModel> item;
+    in property <bool> is-icon-view: true;
+    in property <bool> selected: false;
+
+    height: root.is-icon-view ? 90px : 36px;
+    width: 80px;
+
+    TouchArea {
+        clicked => { root.clicked(); }
+        pointer-event(PointerEvent) => {
+            if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                root.right-clicked(self.pressed-x, self.pressed-y);
+            }
+        }
+
+        // 图标视图（大图标居中）
+        VerticalBox {
+            visible: root.is-icon-view;
+            padding: Theme.spacing-sm;
+            spacing: Theme.spacing-sm;
+
+            Rectangle {
+                width: Theme.icon-size;
+                height: Theme.icon-size;
+                background: Theme.bg-card;
+                border-radius: Theme.radius-md;
+
+                Image {
+                    width: parent.width;
+                    height: parent.height;
+                    source: root.item.icon-path;
+                }
+            }
+
+            Text {
+                text: root.item.name;
+                font-size: Theme.font-size-sm;
+                color: root.item.search-active ? Theme.accent : Theme.text-primary;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // 列表视图（小图标 + 名称行）
+        HorizontalBox {
+            visible: !root.is-icon-view;
+            padding: Theme.spacing-sm;
+            spacing: Theme.spacing-sm;
+
+            Rectangle {
+                width: 24px;
+                height: 24px;
+                background: Theme.bg-card;
+                border-radius: Theme.radius-sm;
+
+                Image {
+                    width: parent.width;
+                    height: parent.height;
+                    source: root.item.icon-path;
+                }
+            }
+
+            Text {
+                text: root.item.name;
+                font-size: Theme.font-size-sm;
+                color: root.item.search-active ? Theme.accent : Theme.text-primary;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+
+    // 键盘导航选中态（P2 键盘操作闭环；声明在后，覆盖于内容之上）
+    Rectangle {
+        visible: root.selected;
+        width: 100%;
+        height: 100%;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-md;
+    }
+}

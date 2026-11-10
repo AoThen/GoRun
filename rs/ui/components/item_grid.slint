@@ -1,0 +1,44 @@
+import { ListView } from "std-widgets.slint";
+import { ItemTile } from "item_tile.slint";
+import { Theme } from "../theme.slint";
+
+struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: image,
+    search-active: bool,
+}
+
+export component ItemGrid {
+    callback item-tile-clicked(index: int);
+    callback item-right-clicked(index: int, x: length, y: length);
+
+    in property <[ItemModel]> items;
+    in property <bool> is-icon-view: true;
+    in property <int> selected-index: 0;
+
+    ListView {
+        for item[index] in items: ItemTile {
+            item: item;
+            is-icon-view: root.is-icon-view;
+            selected: index == root.selected-index;
+            clicked => { root.item-tile-clicked(index); }
+            right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+        }
+    }
+
+    in property <string> empty-text: "No items here yet";
+
+    // 空状态提示（P2 #13）
+    Text {
+        visible: items.length == 0;
+        text: root.empty-text;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-md;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+}

@@ -1,0 +1,134 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 顶部菜单栏（最小实现：按钮组，等价 C++ 菜单栏入口）
+export component MenuBar {
+    callback new-item();
+    callback new-category();
+    callback toggle-view();
+    callback toggle-theme();
+    callback hotkey();
+    callback about();
+
+    in property <string> text-new-item: "New Item";
+    in property <string> text-new-category: "New Category";
+    in property <string> text-toggle-view: "Toggle View";
+    in property <string> text-toggle-theme: "Toggle Theme";
+    in property <string> text-hotkey: "Hotkey";
+    in property <string> text-about: "About";
+
+    height: 28px;
+
+    HorizontalBox {
+        spacing: Theme.spacing-sm;
+        padding: 2px;
+
+        Rectangle {
+            height: 24px;
+            border-radius: Theme.radius-sm;
+            background: btn-new-item.has-hover ? Theme.menu-hover : transparent;
+
+            btn-new-item := TouchArea {
+                clicked => { root.new-item(); }
+                Text {
+                    text: root.text-new-item;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            border-radius: Theme.radius-sm;
+            background: btn-new-cat.has-hover ? Theme.menu-hover : transparent;
+
+            btn-new-cat := TouchArea {
+                clicked => { root.new-category(); }
+                Text {
+                    text: root.text-new-category;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            border-radius: Theme.radius-sm;
+            background: btn-view.has-hover ? Theme.menu-hover : transparent;
+
+            btn-view := TouchArea {
+                clicked => { root.toggle-view(); }
+                Text {
+                    text: root.text-toggle-view;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            border-radius: Theme.radius-sm;
+            background: btn-theme.has-hover ? Theme.menu-hover : transparent;
+
+            btn-theme := TouchArea {
+                clicked => { root.toggle-theme(); }
+                Text {
+                    text: root.text-toggle-theme;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            border-radius: Theme.radius-sm;
+            background: btn-hotkey.has-hover ? Theme.menu-hover : transparent;
+
+            btn-hotkey := TouchArea {
+                clicked => { root.hotkey(); }
+                Text {
+                    text: root.text-hotkey;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            border-radius: Theme.radius-sm;
+            background: btn-about.has-hover ? Theme.menu-hover : transparent;
+
+            btn-about := TouchArea {
+                clicked => { root.about(); }
+                Text {
+                    text: root.text-about;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                }
+            }
+        }
+    }
+}

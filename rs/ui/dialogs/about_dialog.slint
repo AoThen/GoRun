@@ -1,0 +1,77 @@
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 关于对话框（普通覆盖层组件，模式同 ConfirmDialog）
+export component AboutDialog {
+    in-out property <bool> dialog-visible;
+    in property <string> version-text: "Version 1.0.0";
+    in property <string> desc-text: "Windows 10+ desktop quick launcher. MIT License.";
+    in property <string> ok-text: "OK";
+    callback ok();
+
+    visible: root.dialog-visible;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #00000060;
+
+        Rectangle {
+            width: 380px;
+            height: 200px;
+            background: Theme.bg-secondary;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.menu-border;
+
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            VerticalBox {
+                padding: 20px;
+                spacing: 12px;
+
+                Text {
+                    text: "GoRun";
+                    color: Theme.text-primary;
+                    font-size: 20px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: root.version-text;
+                    color: Theme.text-secondary;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: root.desc-text;
+                    color: Theme.text-secondary;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+
+                HorizontalBox {
+                    alignment: center;
+
+                    ok-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.ok(); }
+                        Rectangle {
+                            background: ok-ta.has-hover ? Theme.menu-hover : Theme.accent;
+                            border-radius: 6px;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.ok-text; color: #ffffff; font-size: 13px; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

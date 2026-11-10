@@ -1,0 +1,17 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component StatusBar {
+    in property <string> text;
+    in property <bool> is-dark-theme;
+
+    HorizontalBox {
+        padding: Theme.spacing-sm;
+
+        Text {
+            text: root.text;
+            font-size: Theme.font-size-sm;
+            color: Theme.text-secondary;
+        }
+    }
+}

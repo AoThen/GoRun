@@ -1,0 +1,172 @@
+import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox, SpinBox } from "std-widgets.slint";
+
+export component EditDialog inherits Window {
+    title: root.title-text;
+    width: 500px;
+    height: 450px;
+
+    callback save();
+    callback cancel();
+    callback browse-target();
+    callback browse-icon();
+    callback new-category();
+
+    in property <string> title-text: "Edit Item";
+    in property <string> label-name: "Name:";
+    in property <string> label-target: "Target:";
+    in property <string> label-arguments: "Arguments:";
+    in property <string> label-directory: "Directory:";
+    in property <string> label-icon-path: "Icon Path:";
+    in property <string> label-icon-index: "Icon Index:";
+    in property <string> label-keywords: "Keywords:";
+    in property <string> label-remark: "Remark:";
+    in property <string> label-category: "Category:";
+    in property <string> browse-text: "Browse...";
+    in property <string> run-as-admin-text: "Run as administrator";
+    in property <string> save-text: "Save";
+    in property <string> cancel-text: "Cancel";
+
+    in-out property <string> item-name;
+    in-out property <string> item-target;
+    in-out property <string> item-arguments;
+    in-out property <string> item-working-dir;
+    in-out property <string> item-icon-path;
+    in-out property <int> item-icon-index: 0;
+    in-out property <string> item-keywords;
+    in-out property <string> item-remark;
+    in-out property <bool> run-as-admin;
+    in-out property <[string]> category-names;
+    in-out property <int> selected-category-index: 0;
+    in-out property <string> error-message: "";
+    in-out property <string> add-category-text: "+";
+
+    VerticalBox {
+        padding: 16px;
+        spacing: 10px;
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-name; width: 80px; }
+            LineEdit {
+                text: root.item-name;
+                edited => { root.item-name = self.text; }
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-target; width: 80px; }
+            LineEdit {
+                text: root.item-target;
+                edited => { root.item-target = self.text; }
+            }
+            Button {
+                text: root.browse-text;
+                clicked => { root.browse-target(); }
+                width: 80px;
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-arguments; width: 80px; }
+            LineEdit {
+                text: root.item-arguments;
+                edited => { root.item-arguments = self.text; }
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-directory; width: 80px; }
+            LineEdit {
+                text: root.item-working-dir;
+                edited => { root.item-working-dir = self.text; }
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-icon-path; width: 80px; }
+            LineEdit {
+                text: root.item-icon-path;
+                edited => { root.item-icon-path = self.text; }
+            }
+            Button {
+                text: root.browse-text;
+                clicked => { root.browse-icon(); }
+                width: 80px;
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-icon-index; width: 80px; }
+            SpinBox {
+                value <=> root.item-icon-index;
+                minimum: 0;
+                maximum: 65535;
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-keywords; width: 80px; }
+            LineEdit {
+                text: root.item-keywords;
+                edited => { root.item-keywords = self.text; }
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-remark; width: 80px; }
+            LineEdit {
+                text: root.item-remark;
+                edited => { root.item-remark = self.text; }
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-category; width: 80px; }
+            ComboBox {
+                model: root.category-names;
+                current-index: root.selected-category-index;
+                selected => {
+                    root.selected-category-index = self.current-index;
+                }
+            }
+            Button {
+                text: root.add-category-text;
+                clicked => { root.new-category(); }
+                width: 32px;
+            }
+        }
+
+        HorizontalBox {
+            CheckBox {
+                text: root.run-as-admin-text;
+                checked <=> root.run-as-admin;
+            }
+        }
+
+        if root.error-message != "": HorizontalBox {
+            Text {
+                text: root.error-message;
+                color: #FF0000;
+            }
+        }
+
+        HorizontalBox {
+            alignment: end;
+            spacing: 8px;
+            height: 36px;
+            Button {
+                text: root.save-text;
+                clicked => { root.save(); }
+            }
+            Button { text: root.cancel-text; clicked => { root.cancel(); } }
+        }
+    }
+}

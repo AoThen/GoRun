@@ -1,0 +1,341 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Sidebar } from "components/sidebar.slint";
+import { SearchBar } from "components/search_bar.slint";
+import { ItemGrid } from "components/item_grid.slint";
+import { StatusBar } from "components/status_bar.slint";
+import { ContextMenu } from "components/context_menu.slint";
+import { MenuBar } from "components/menu_bar.slint";
+import { ConfirmDialog } from "dialogs/confirm_dialog.slint";
+import { InputDialog } from "dialogs/input_dialog.slint";
+import { AboutDialog } from "dialogs/about_dialog.slint";
+
+struct CategoryModel {
+    id: string,
+    name: string,
+}
+
+struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: image,
+    search-active: bool,
+}
+
+export component MainWindow inherits Window {
+    title: "GoRun";
+    min-width: 800px;
+    min-height: 600px;
+    preferred-width: 800px;
+    preferred-height: 600px;
+
+    callback search-changed(text: string);
+    callback category-selected(index: int);
+    callback new-category();
+    callback new-item-clicked();
+    callback refresh-icons();
+
+    in-out property <string> menu-text-new-item: "New Item";
+    in-out property <string> menu-text-new-category: "New Category";
+    in-out property <string> menu-text-toggle-view: "Toggle View";
+    in-out property <string> menu-text-toggle-theme: "Toggle Theme";
+    in-out property <string> menu-text-hotkey: "Hotkey";
+    in-out property <string> menu-text-about: "About";
+    in-out property <string> about-version-text: "Version 1.0.0";
+    in-out property <string> about-desc-text: "Windows 10+ desktop quick launcher. MIT License.";
+    in-out property <string> about-ok-text: "OK";
+    in-out property <string> sb-new-item-text: "New Item";
+    in-out property <string> sb-switch-list-text: "List";
+    in-out property <string> sb-switch-icon-text: "Icon";
+    in-out property <string> sb-switch-light-text: "Light";
+    in-out property <string> sb-switch-dark-text: "Dark";
+    in-out property <string> empty-text: "No items here yet";
+    in-out property <string> confirm-confirm-text: "Delete";
+    in-out property <string> confirm-cancel-text: "Cancel";
+    in-out property <string> sidebar-title-text: "Categories";
+    in-out property <string> sidebar-add-category-text: "+ Category";
+    in-out property <int> selected-item-index: 0;
+    in-out property <int> sidebar-selected-index: 0;
+    in-out property <bool> search-field-focused: false;
+    callback file-dropped(name: string, target: string);
+    callback item-tile-clicked(index: int);
+    callback toggle-view();
+    callback toggle-theme();
+    callback menu-item-selected(index: int);
+    callback hotkey();
+    callback item-right-clicked(index: int, x: length, y: length);
+    callback background-clicked();
+    callback background-right-clicked(x: length, y: length);
+    callback category-right-clicked(index: int, x: length, y: length);
+    callback escape-pressed();
+    callback item-selected();
+
+    in-out property <[CategoryModel]> categories;
+    in-out property <[ItemModel]> items;
+    in-out property <string> search-text: "";
+    in-out property <bool> is-dark-theme: false;
+    changed is-dark-theme => { Theme.set-dark(root.is-dark-theme); }
+    in-out property <bool> is-icon-view: true;
+    in-out property <string> status-text: "Ready";
+    in-out property <bool> drop-active: false;
+
+    in-out property <bool> context-menu-visible: false;
+
+    // 项目集合变化（搜索/换分类/删除）时重置键盘选中项
+    changed items => {
+        if (root.selected-item-index >= root.items.length) {
+            root.selected-item-index = 0;
+        }
+    }
+    in-out property <length> context-menu-x: 0px;
+    in-out property <length> context-menu-y: 0px;
+    in-out property <[string]> context-menu-items: [];
+
+    in-out property <bool> confirm-dialog-visible: false;
+    in-out property <string> confirm-dialog-title: "Delete Item";
+    in-out property <string> confirm-dialog-message: "";
+    callback confirm-dialog-ok();
+    callback confirm-dialog-cancel();
+
+    in-out property <bool> input-dialog-visible: false;
+    in-out property <string> input-dialog-title: "";
+    in-out property <string> input-dialog-message: "";
+    in-out property <string> input-dialog-text: "";
+    in-out property <string> input-dialog-error: "";
+    in property <string> input-dialog-confirm-text: "OK";
+    in property <string> input-dialog-cancel-text: "Cancel";
+    callback input-dialog-ok();
+    callback input-dialog-cancel();
+
+    in-out property <bool> about-dialog-visible: false;
+
+    toggle-view => { is-icon-view = !is-icon-view; }
+toggle-theme => {
+    is-dark-theme = !is-dark-theme;
+    Theme.set-dark(is-dark-theme);
+}
+
+    Rectangle {
+        background: root.drop-active ? Theme.drop-highlight : Theme.bg-primary;
+
+        // Background click catcher (bottom layer)
+        TouchArea {
+            clicked => {
+                if (root.context-menu-visible) {
+                    root.context-menu-visible = false;
+                }
+            }
+            pointer-event(PointerEvent) => {
+                if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                    root.background-right-clicked(self.pressed-x, self.pressed-y);
+                }
+            }
+        }
+
+        // Main content (middle layer), wrapped in FocusScope for Escape handling
+        FocusScope {
+            init => { self.focus(); }
+            key-pressed(event) => {
+                if (event.text == "\u{1b}") {
+                    // Esc 分层：先关弹窗/菜单，全部关闭后才清搜索并隐藏窗口
+                    if (root.input-dialog-visible) {
+                        root.input-dialog-visible = false;
+                        root.input-dialog-cancel();
+                    } else if (root.confirm-dialog-visible) {
+                        root.confirm-dialog-visible = false;
+                        root.confirm-dialog-cancel();
+                    } else if (root.about-dialog-visible) {
+                        root.about-dialog-visible = false;
+                    } else if (root.context-menu-visible) {
+                        root.context-menu-visible = false;
+                    } else {
+                        root.escape-pressed();
+                    }
+                    return accept;
+                }
+                if (event.text == "\u{2193}") {
+                    if (root.selected-item-index < root.items.length - 1) {
+                        root.selected-item-index += 1;
+                    }
+                    return accept;
+                }
+                if (event.text == "\u{2191}") {
+                    if (root.selected-item-index > 0) {
+                        root.selected-item-index -= 1;
+                    }
+                    return accept;
+                }
+                if (event.text == "\u{0d}") {
+                    if (root.items.length > 0
+                        && !root.search-field-focused
+                        && !root.confirm-dialog-visible
+                        && !root.input-dialog-visible
+                        && !root.about-dialog-visible
+                        && !root.context-menu-visible) {
+                        root.item-selected();
+                    }
+                    return accept;
+                }
+                reject
+            }
+
+            VerticalBox {
+            spacing: Theme.spacing-sm;
+            padding: Theme.spacing-md;
+
+            MenuBar {
+                text-new-item: root.menu-text-new-item;
+                text-new-category: root.menu-text-new-category;
+                text-toggle-view: root.menu-text-toggle-view;
+                text-toggle-theme: root.menu-text-toggle-theme;
+                text-hotkey: root.menu-text-hotkey;
+                text-about: root.menu-text-about;
+                new-item() => { root.new-item-clicked(); }
+                new-category() => { root.new-category(); }
+                toggle-view() => { root.toggle-view(); }
+                toggle-theme() => { root.toggle-theme(); }
+                hotkey() => { root.hotkey(); }
+                about() => { root.about-dialog-visible = true; }
+            }
+
+            HorizontalBox {
+                spacing: Theme.spacing-md;
+                padding: Theme.spacing-md;
+
+                Sidebar {
+                    categories: root.categories;
+                    selected-index: root.sidebar-selected-index;
+                    title-text: root.sidebar-title-text;
+                    add-category-text: root.sidebar-add-category-text;
+                    category-selected(index) => {
+                        root.context-menu-visible = false;
+                        root.sidebar-selected-index = index;
+                        root.category-selected(index);
+                    }
+                    category-right-clicked(index, x, y) => {
+                        root.context-menu-visible = false;
+                        root.category-right-clicked(index, x, y);
+                    }
+                    new-category() => {
+                        root.context-menu-visible = false;
+                        root.new-category();
+                    }
+                }
+
+                VerticalBox {
+                    spacing: Theme.spacing-sm;
+
+                    SearchBar {
+                        text: root.search-text;
+                        is-dark-theme: root.is-dark-theme;
+                        is-icon-view: root.is-icon-view;
+                        field-focused: root.search-field-focused;
+                        new-item-text: root.sb-new-item-text;
+                        switch-list-text: root.sb-switch-list-text;
+                        switch-icon-text: root.sb-switch-icon-text;
+                        switch-light-text: root.sb-switch-light-text;
+                        switch-dark-text: root.sb-switch-dark-text;
+                        search-changed(text) => {
+                            root.context-menu-visible = false;
+                            root.search-changed(text);
+                        }
+                        toggle-view() => {
+                            root.context-menu-visible = false;
+                            root.toggle-view();
+                        }
+                        toggle-theme() => {
+                            root.context-menu-visible = false;
+                            root.toggle-theme();
+                        }
+                        new-item-clicked() => {
+                            root.context-menu-visible = false;
+                            root.new-item-clicked();
+                        }
+                    }
+
+                    ItemGrid {
+                        items: root.items;
+                        is-icon-view: root.is-icon-view;
+                        empty-text: root.empty-text;
+                        selected-index: root.selected-item-index;
+                        item-tile-clicked(index) => {
+                            root.context-menu-visible = false;
+                            root.selected-item-index = index;
+                            root.item-tile-clicked(index);
+                        }
+                        item-right-clicked(index, x, y) => {
+                            root.context-menu-x = x;
+                            root.context-menu-y = y;
+                            root.context-menu-visible = true;
+                            root.item-right-clicked(index, x, y);
+                        }
+                    }
+
+                    StatusBar {
+                        text: root.status-text;
+                        is-dark-theme: root.is-dark-theme;
+                    }
+                }
+            }
+        }
+        }
+
+        // Context menu overlay (top layer)
+        ContextMenu {
+            visible: root.context-menu-visible;
+            x: root.context-menu-x;
+            y: root.context-menu-y;
+            menu-items: root.context-menu-items;
+            selected(index) => {
+                root.context-menu-visible = false;
+                root.menu-item-selected(index);
+            }
+        }
+
+        ConfirmDialog {
+            dialog-visible: root.confirm-dialog-visible;
+            message: root.confirm-dialog-message;
+            dialog-title: root.confirm-dialog-title;
+            confirm-text: root.confirm-confirm-text;
+            cancel-text: root.confirm-cancel-text;
+            danger: true;
+            confirm() => {
+                root.confirm-dialog-visible = false;
+                root.confirm-dialog-ok();
+            }
+            cancel() => {
+                root.confirm-dialog-visible = false;
+                root.confirm-dialog-cancel();
+            }
+        }
+
+        InputDialog {
+            dialog-visible: root.input-dialog-visible;
+            dialog-title: root.input-dialog-title;
+            message: root.input-dialog-message;
+            input-text: root.input-dialog-text;
+            error-message: root.input-dialog-error;
+            confirm-text: root.input-dialog-confirm-text;
+            cancel-text: root.input-dialog-cancel-text;
+            confirm() => {
+                root.input-dialog-visible = false;
+                root.input-dialog-ok();
+            }
+            cancel() => {
+                root.input-dialog-visible = false;
+                root.input-dialog-cancel();
+            }
+        }
+
+        AboutDialog {
+            dialog-visible: root.about-dialog-visible;
+            version-text: root.about-version-text;
+            desc-text: root.about-desc-text;
+            ok-text: root.about-ok-text;
+            ok() => {
+                root.about-dialog-visible = false;
+            }
+        }
+    }
+}

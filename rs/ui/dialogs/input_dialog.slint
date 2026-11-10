@@ -1,0 +1,121 @@
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 分类重命名输入框（普通覆盖层组件，模式同 ConfirmDialog；不继承 Window）
+export component InputDialog {
+    in-out property <bool> dialog-visible;
+    in property <string> dialog-title: "Input";
+    in property <string> message: "";
+    in-out property <string> input-text: "";
+    in-out property <string> error-message: "";
+    in property <string> confirm-text: "OK";
+    in property <string> cancel-text: "Cancel";
+    callback confirm();
+    callback cancel();
+
+    visible: root.dialog-visible;
+
+    // 弹窗打开时自动聚焦输入框（P1-5）
+    changed dialog-visible => {
+        if (root.dialog-visible) {
+            input-field.focus();
+        }
+    }
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #00000060;
+
+        Rectangle {
+            width: 360px;
+            height: 180px;
+            background: Theme.bg-secondary;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.menu-border;
+
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            VerticalBox {
+                padding: 20px;
+                spacing: 12px;
+
+                Text {
+                    text: root.dialog-title;
+                    color: Theme.text-primary;
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+
+                input-scope := FocusScope {
+                    enabled: root.dialog-visible;
+                    key-pressed(event) => {
+                        if (event.text == "\u{1b}") {
+                            root.cancel();
+                            return accept;
+                        }
+                        if (event.text == "\u{0d}") {
+                            root.confirm();
+                            return accept;
+                        }
+                        reject
+                    }
+
+                    input-field := TextInput {
+                        text: root.input-text;
+                        color: Theme.text-primary;
+                        font-size: 14px;
+                        height: 32px;
+                        width: 100%;
+                        padding: 6px;
+                        edited => { root.error-message = ""; }
+                    }
+                }
+
+                Text {
+                    text: root.error-message;
+                    color: Theme.error;
+                    font-size: 12px;
+                    visible: root.error-message != "";
+                }
+
+                HorizontalBox {
+                    alignment: end;
+                    spacing: 8px;
+
+                    cancel-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.cancel(); }
+                        Rectangle {
+                            background: cancel-ta.has-hover ? Theme.menu-hover : transparent;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.menu-border;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.cancel-text; color: Theme.text-primary; font-size: 13px; }
+                            }
+                        }
+                    }
+
+                    confirm-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.confirm(); }
+                        Rectangle {
+                            background: Theme.accent;
+                            border-radius: 6px;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.confirm-text; color: #ffffff; font-size: 13px; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

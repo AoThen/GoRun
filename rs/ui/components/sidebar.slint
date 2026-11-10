@@ -1,0 +1,78 @@
+import { VerticalBox, ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+struct CategoryModel {
+    id: string,
+    name: string,
+}
+
+export component Sidebar {
+    in property <[CategoryModel]> categories;
+    in-out property <int> selected-index: 0;
+    in property <string> title-text: "Categories";
+    in property <string> add-category-text: "+ Category";
+    callback category-selected(index: int);
+    callback category-right-clicked(index: int, x: length, y: length);
+    callback new-category();
+
+    width: 160px;
+
+    VerticalBox {
+        spacing: Theme.spacing-sm;
+        padding: Theme.spacing-md;
+
+        Text {
+            text: root.title-text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            color: Theme.text-primary;
+        }
+
+        ListView {
+            for cat[index] in categories: Rectangle {
+                height: 32px;
+                background: index == root.selected-index ? Theme.menu-hover : transparent;
+                border-radius: Theme.radius-sm;
+
+                TouchArea {
+                    clicked => {
+                        root.selected-index = index;
+                        root.category-selected(index);
+                    }
+                    pointer-event(PointerEvent) => {
+                        if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                            root.selected-index = index;
+                            root.category-right-clicked(index, self.pressed-x, self.pressed-y);
+                        }
+                    }
+
+                    Text {
+                        text: cat.name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        padding-left: Theme.spacing-md;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.menu-border;
+        }
+
+        Text {
+            text: root.add-category-text;
+            font-size: Theme.font-size-sm;
+            color: Theme.accent;
+            horizontal-alignment: center;
+
+            TouchArea {
+                clicked => {
+                    root.new-category();
+                }
+            }
+        }
+    }
+}
