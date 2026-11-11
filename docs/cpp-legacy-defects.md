@@ -17,7 +17,7 @@
 - **位置**：`src/core/IconTextureManager.cpp:24`（`m_textureCache[item.id] = texture;`）
 - **缺陷**：按 `item.id` 累积纹理缓存，无上限；`RefreshIcon` 仅清单个 id 并调用 `UnloadTextureByPath`。普通删除项目路径未释放对应 D3D11 纹理，长期增删后显存残留不释放。
 - **为何不修**：需引入缓存容量 / 引用计数策略，属功能增强。
-- **Rust 版对照**：`icon_cache` 按需加载并管理生命周期，配合资源上限 / 失效清理。
+- **Rust 版对照**：`icon_cache` 按需加载并管理生命周期；缓存为**确定性哈希命名**（FNV-1a64，键含 target/icon_path/index），编辑图标/目标自动失效，删项/删分类时定点清理。无目录级孤儿清理（重置配置/版本升级后可能残留旧图标文件）。
 
 ## 3. 删除分类无确认
 
@@ -53,6 +53,17 @@
 - **缺陷**：窗口 / ImGui 缩放采用**增量累加**（每次 `+=` 比例差），而非基于新 DPI **绝对重算**；多次跨 DPI 屏幕拖动后缩放比例逐步累积漂移。
 - **为何不修**：需重写缩放基准逻辑，属架构级修改。
 - **Rust 版对照**：基于当前 `scale factor` 绝对计算布局与窗口尺寸。
+
+## 8. `%so%` 搜索参数无注入防护（安全类缺陷）
+
+> 标注：本条为**安全类**缺陷，与其余 7 项功能/健壮性缺陷区隔。
+
+- **位置**：`src/core/Runner.cpp:63-87`（`ExpandVariables` 将 `m_searchQuery` 原样替换进 `%so%`）；`src/core/Runner.cpp:100-102` / `:152-154`（target/arguments/workingDir 全部先展开后 `ShellExecuteExW`）；`src/core/Runner.h:16`（`SetSearchQuery` 裸 setter）
+- **缺陷**：搜索词不做任何字符校验即替换进 target / arguments / workingDir 后执行。Rust 主线已对 shell 型目标（cmd/powershell/mshta/wscript/cscript + 脚本扩展名）做 `%so%` 注入防护（`runner.rs` `shell_kind` + `is_search_param_safe`），C++ 版无等价物，脚本型项目（含 `.vbs/.js/.hta/.wsf` 及指向解释器的 `.lnk`）可被搜索词注入。
+- **附带缺陷 8a（陈旧搜索词残留）**：`src/ui/MainWindow.cpp:438-441` 清空搜索分支仅调 `m_itemGrid.SetSearchQuery(L"")`，未调 `m_runner->SetSearchQuery(L"")`（对照 `:499-500` 搜索态成对设置）。用户搜索过一次后退出搜索态，`m_searchQuery` 永久残留，此后**非搜索态**双击任何含 `%so%` 的项目都会注入上次的搜索词，触发面更大。
+- **附带缺陷 8b（`%so%` 字面量死循环 DoS）**：`src/core/Runner.cpp:65-68` 的 `while(find(L"%so%"))` 每次从串首重新查找，若搜索词本身含字面量 `%so%`，替换后新文本仍含 `%so%` → 无限循环，界面冻结。
+- **为何不修**：安全修复虽不受功能冻结限制，但 C++ 版已进入维护模式且 Rust 主线已完整实现防护；在冻结分支上修复会引入回归风险，收益低于迁移成本。建议发布说明/更新日志告知用户"C++ 构建不含 `%so%` 注入防护，请迁移至 `rs/` 构建"。
+- **Rust 版对照**：`runner.rs` 的 `shell_kind`（含 `ScriptHost` 族）`+ is_search_param_safe` 对含 `%so%` 的 target/arguments/working_dir 统一拦截不安全搜索词。
 
 ---
 
