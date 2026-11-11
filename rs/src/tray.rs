@@ -546,15 +546,3 @@ unsafe extern "system" fn tray_wnd_proc(
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tray_message_enum() {
-        let _show = TrayMessage::Show;
-        let _hide = TrayMessage::Hide;
-        let _quit = TrayMessage::Quit;
-    }
-}

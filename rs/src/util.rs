@@ -39,3 +39,62 @@ pub fn window_on_screen(x: i32, y: i32, w: i32, h: i32) -> bool {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn loc(lang: &str) -> Rc<RefCell<Localization>> {
+        Rc::new(RefCell::new(Localization::new(lang)))
+    }
+
+    #[test]
+    fn test_tr_fill_brace_placeholder() {
+        let l = loc("zh-CN");
+        assert_eq!(tr_fill(&l, "Status_RunFail", "Notepad"), "运行失败：Notepad");
+    }
+
+    #[test]
+    fn test_tr_fill_percent_s_placeholder() {
+        let l = loc("zh-CN");
+        assert_eq!(
+            tr_fill(&l, "Tip_DelItemFormat", "Notepad"),
+            "确定要删除 Notepad 吗？"
+        );
+        let le = loc("en-US");
+        assert_eq!(
+            tr_fill(&le, "Tip_DelItemFormat", "Notepad"),
+            "Are you sure you want to delete Notepad?"
+        );
+    }
+
+    #[test]
+    fn test_tr_fill_missing_key_returns_key_with_placeholder() {
+        // 缺键时 tr 返回键本身，再做占位符替换（特征化）
+        let l = loc("zh-CN");
+        assert_eq!(tr_fill(&l, "MissingKey", "x"), "MissingKey");
+        assert_eq!(tr_fill(&l, "Missing{0}Key", "x"), "MissingxKey");
+        assert_eq!(tr_fill(&l, "Missing%sKey", "x"), "MissingxKey");
+    }
+
+    #[test]
+    fn test_tr_fill_replaces_both_placeholders() {
+        let l = loc("zh-CN");
+        assert_eq!(tr_fill(&l, "{0} and %s", "v"), "v and v");
+    }
+
+    #[test]
+    fn test_sanitize_for_log_folds_newlines() {
+        assert_eq!(sanitize_for_log("a\nb"), "a\\nb");
+        assert_eq!(sanitize_for_log("a\rb"), "a\\rb");
+        assert_eq!(sanitize_for_log("a\n\rb"), "a\\n\\rb");
+        assert_eq!(sanitize_for_log("normal"), "normal");
+    }
+
+    #[test]
+    fn test_sanitize_for_log_keeps_tab_and_other_control() {
+        // 与 logger::sanitize 区别：util 版本仅折叠 \n \r，不动制表符/其他控制字符
+        assert_eq!(sanitize_for_log("tab\there"), "tab\there");
+        assert_eq!(sanitize_for_log("a\tb"), "a\tb");
+    }
+}

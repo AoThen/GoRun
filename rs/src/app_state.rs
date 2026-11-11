@@ -40,3 +40,68 @@ impl AppState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::AppConfig;
+
+    fn make_state(path: String) -> AppState {
+        AppState {
+            manager: ItemManager::new(AppConfig::default()),
+            storage: Storage::new(path),
+            icon_cache: IconCache::new(),
+            current_category_id: String::new(),
+            search_query: String::new(),
+            edit_dialog: None,
+            loc: Rc::new(RefCell::new(Localization::new("zh-CN"))),
+            save_fail_notified: false,
+        }
+    }
+
+    #[test]
+    fn test_save_if_modified_unmodified_returns_true() {
+        let ok = std::env::temp_dir()
+            .join(format!("gorun_appstate_unmod_{}.json", std::process::id()))
+            .to_str()
+            .unwrap()
+            .to_string();
+        let mut state = make_state(ok);
+        assert!(!state.manager.is_modified());
+        assert!(state.save_if_modified());
+        assert!(!state.save_fail_notified);
+        let _ = std::fs::remove_file(&ok);
+    }
+
+    #[test]
+    fn test_save_if_modified_success_clears_flag() {
+        let ok = std::env::temp_dir()
+            .join(format!("gorun_appstate_ok_{}.json", std::process::id()))
+            .to_str()
+            .unwrap()
+            .to_string();
+        let mut state = make_state(ok);
+        state.save_fail_notified = true;
+        let _ = state.manager.config_mut();
+        assert!(state.manager.is_modified());
+        assert!(state.save_if_modified());
+        assert!(!state.manager.is_modified());
+        assert!(!state.save_fail_notified);
+        let _ = std::fs::remove_file(&ok);
+    }
+
+    #[test]
+    fn test_save_if_modified_failure_sets_flag() {
+        // 父路径为文件 → save 写盘失败，验证失败路径置位 save_fail_notified 且保留 modified
+        let blocker = std::env::temp_dir().join(format!("gorun_block_{}.txt", std::process::id()));
+        std::fs::write(&blocker, b"x").unwrap();
+        let fail_path = format!("{}/config.json", blocker.to_str().unwrap());
+        let mut state = make_state(fail_path);
+        let _ = state.manager.config_mut();
+        assert!(state.manager.is_modified());
+        assert!(!state.save_if_modified());
+        assert!(state.manager.is_modified());
+        assert!(state.save_fail_notified);
+        let _ = std::fs::remove_file(&blocker);
+    }
+}

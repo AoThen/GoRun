@@ -12,6 +12,18 @@ use crate::model::Item;
 use crate::{fileops, ui_sync, EditDialog, MainWindow};
 use slint::ComponentHandle;
 
+/// 校验新建项目输入。返回错误提示的本地化键（名称空优先于目标空），均合法返回 None。
+/// 抽为纯函数便于单测输入校验分支（对齐 C++ EditDialog 的名称/目标非空校验）。
+pub fn validate_item_input(name: &str, target: &str) -> Option<&'static str> {
+    if name.trim().is_empty() {
+        Some("Tip_NameEmpty")
+    } else if target.trim().is_empty() {
+        Some("Tip_TargetEmpty")
+    } else {
+        None
+    }
+}
+
 /// 展示新建项目对话框（名称预填"新建项目"，保存时新增）。
 pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<AppState>>) {
     let (categories, selected_cat_idx, default_name) = {
@@ -93,12 +105,10 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
                 // 输入验证：名称与目标非空（对齐 C++ EditDialog）
                 let name = dlg.get_item_name().to_string();
                 let target = dlg.get_item_target().to_string();
-                if name.trim().is_empty() || target.trim().is_empty() {
-                    let loc = state_save.borrow().loc.clone();
-                    let msg = if name.trim().is_empty() {
-                        loc.borrow().tr("Tip_NameEmpty").to_string()
-                    } else {
-                        loc.borrow().tr("Tip_TargetEmpty").to_string()
+                if let Some(err_key) = validate_item_input(&name, &target) {
+                    let msg = {
+                        let loc = state_save.borrow().loc.clone();
+                        loc.borrow().tr(err_key).to_string()
                     };
                     dlg.set_error_message(msg.into());
                     return;
@@ -177,5 +187,39 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
         {
             log::error!("Failed to show dialog: {}", e);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_item_input;
+
+    #[test]
+    fn test_validate_both_empty_reports_name() {
+        assert_eq!(validate_item_input("", ""), Some("Tip_NameEmpty"));
+    }
+
+    #[test]
+    fn test_validate_name_whitespace_only() {
+        assert_eq!(validate_item_input("  ", "target"), Some("Tip_NameEmpty"));
+    }
+
+    #[test]
+    fn test_validate_target_empty_reports_target() {
+        assert_eq!(validate_item_input("name", ""), Some("Tip_TargetEmpty"));
+        assert_eq!(validate_item_input("name", "   "), Some("Tip_TargetEmpty"));
+    }
+
+    #[test]
+    fn test_validate_name_empty_takes_priority_over_target() {
+        // 名称空优先于目标空（对齐原 if name.empty || target.empty 后 name 判定）
+        assert_eq!(validate_item_input("", ""), Some("Tip_NameEmpty"));
+        assert_eq!(validate_item_input("", "  "), Some("Tip_NameEmpty"));
+    }
+
+    #[test]
+    fn test_validate_valid() {
+        assert_eq!(validate_item_input("name", "target"), None);
+        assert_eq!(validate_item_input(" name ", " target "), None);
     }
 }

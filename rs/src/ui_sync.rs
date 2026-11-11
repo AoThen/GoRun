@@ -224,24 +224,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_create_category_model() {
-        let cat = CategoryModel {
-            id: "cat_1".into(),
-            name: "Games".into(),
-        };
-        assert_eq!(cat.id, "cat_1");
-        assert_eq!(cat.name, "Games");
+    fn test_run_error_text_maps_each_error_to_localized_key() {
+        let loc = Rc::new(RefCell::new(Localization::new("zh-CN")));
+        assert_eq!(run_error_text(&loc, &RunError::None), "成功");
+        assert_eq!(run_error_text(&loc, &RunError::FileNotFound), "找不到指定的文件");
+        assert_eq!(run_error_text(&loc, &RunError::PathNotFound), "找不到指定的路径");
+        assert_eq!(run_error_text(&loc, &RunError::AccessDenied), "访问被拒绝");
+        assert_eq!(run_error_text(&loc, &RunError::OutOfMemory), "内存不足");
+        assert_eq!(
+            run_error_text(&loc, &RunError::DllNotFound),
+            "找不到指定的 DLL 文件"
+        );
+        assert_eq!(run_error_text(&loc, &RunError::Cancelled), "已取消提权请求");
+        assert_eq!(
+            run_error_text(&loc, &RunError::UnsafeSearchParam),
+            "搜索参数含不安全命令字符，已拒绝执行"
+        );
+        assert_eq!(run_error_text(&loc, &RunError::Unknown), "未知错误");
     }
 
     #[test]
-    fn test_create_item_model() {
-        let item = ItemModel {
-            id: "item_1".into(),
-            name: "Notepad".into(),
-            target: "C:\\Windows\\notepad.exe".into(),
-            icon_path: slint::Image::default(),
-            search_active: false,
-        };
-        assert_eq!(item.name, "Notepad");
+    fn test_run_error_text_changes_with_language() {
+        // 语言切换影响输出（行为测试，非实现自证）
+        let zh = Rc::new(RefCell::new(Localization::new("zh-CN")));
+        let en = Rc::new(RefCell::new(Localization::new("en-US")));
+        assert_eq!(run_error_text(&zh, &RunError::FileNotFound), "找不到指定的文件");
+        assert_eq!(run_error_text(&en, &RunError::FileNotFound), "File not found");
     }
 }
