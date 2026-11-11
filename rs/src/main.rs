@@ -277,10 +277,10 @@ fn main() {
                     // 下次新的保存失败会再次置位并提示，不长期覆盖其他状态信息。
                     let notify_fail = state_geo.borrow().save_fail_notified;
                     if notify_fail {
-                        let msg = {
-                            let st = state_geo.borrow();
-                            st.loc.borrow().tr("Status_SaveFailed").to_string()
-                        };
+                        // 先克隆 loc 再取文案，避免 Ref 临时值在尾表达式处被借用检查器
+                        // 认为与外层 borrow 重叠（E0597）
+                        let loc_ref = state_geo.borrow().loc.clone();
+                        let msg = loc_ref.borrow().tr("Status_SaveFailed").to_string();
                         ui.set_status_text(msg.into());
                         state_geo.borrow_mut().save_fail_notified = false;
                     }
