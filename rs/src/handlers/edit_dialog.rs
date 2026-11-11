@@ -150,6 +150,17 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
                 }
                 state_cancel.borrow_mut().edit_dialog = None;
             });
+
+            // P2-06：标题栏 X 关闭等价取消，清空 edit_dialog 状态（slint 默认关闭=hide）
+            let dialog_weak_close = dialog_weak.clone();
+            let state_close = state.clone();
+            dlg_handle.window().on_close_requested(move || {
+                if let Some(d) = dialog_weak_close.upgrade() {
+                    let _ = d.hide();
+                }
+                state_close.borrow_mut().edit_dialog = None;
+                slint::CloseRequestResponse::HideWindow
+            });
         }
 
         state.borrow_mut().edit_dialog = Some(dialog);

@@ -202,23 +202,32 @@ fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
             }
         });
 
-    // %so% 注入防护（P0-1）：shell 型目标（cmd/bat/ps）将搜索参数替换进参数时，
+    // %so% 注入防护（P0-1）：shell 型目标/脚本宿主将搜索参数替换进任意字段时，
     // 搜索参数含 shell 元字符则拒绝执行，防止 cmd /c %so% 类配置被注入。
-    if let Some(t) = &args_template {
-        if t.contains("%so%")
-            && matches!(shell_kind(final_target), ShellKind::Cmd | ShellKind::PowerShell)
-            && !is_search_param_safe(search_param)
-        {
-            log::warn!(
-                "Run rejected: shell target {} with %so% and unsafe search param",
-                final_target
-            );
-            return RunResult {
-                success: false,
-                error: RunError::UnsafeSearchParam,
-                error_message: get_error_message(&RunError::UnsafeSearchParam),
-            };
-        }
+    // 检查覆盖 target/arguments/working_dir 三个可含 %so% 的字段（%so% 非环境变量，
+    // expand_pre 不消耗它，故检查原始字段等价于检查展开前形态）。
+    let so_in_fields = args_template
+        .as_ref()
+        .map(|t| t.contains("%so%"))
+        .unwrap_or(false)
+        || item.target.contains("%so%")
+        || item.working_dir.contains("%so%");
+    if so_in_fields
+        && matches!(
+            shell_kind(final_target),
+            ShellKind::Cmd | ShellKind::PowerShell | ShellKind::ScriptHost
+        )
+        && !is_search_param_safe(search_param)
+    {
+        log::warn!(
+            "Run rejected: shell target {} with %so% and unsafe search param",
+            final_target
+        );
+        return RunResult {
+            success: false,
+            error: RunError::UnsafeSearchParam,
+            error_message: get_error_message(&RunError::UnsafeSearchParam),
+        };
     }
     let final_args = args_template.map(|t| expand_search(&t, search_param));
     let final_dir = resolved
@@ -243,6 +252,9 @@ fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
 pub enum ShellKind {
     Cmd,
     PowerShell,
+    /// 会二次解释参数的脚本宿主：mshta/wscript/cscript 及常见脚本扩展名。
+    /// %so% 注入防护必须覆盖它们，否则 `mshta javascript:...` 类 payload 可绕过。
+    ScriptHost,
     Other,
 }
 
@@ -260,6 +272,20 @@ pub fn shell_kind(target: &str) -> ShellKind {
         || file_name.ends_with(".ps1")
     {
         ShellKind::PowerShell
+    } else if file_name == "mshta.exe"
+        || file_name == "mshta"
+        || file_name == "wscript.exe"
+        || file_name == "wscript"
+        || file_name == "cscript.exe"
+        || file_name == "cscript"
+        || file_name.ends_with(".vbs")
+        || file_name.ends_with(".js")
+        || file_name.ends_with(".jse")
+        || file_name.ends_with(".hta")
+        || file_name.ends_with(".wsf")
+        || file_name.ends_with(".wsh")
+    {
+        ShellKind::ScriptHost
     } else {
         ShellKind::Other
     }
@@ -599,6 +625,16 @@ mod tests {
         );
         assert_eq!(shell_kind("C:\\x\\pwsh.exe"), ShellKind::PowerShell);
         assert_eq!(shell_kind("C:\\x\\script.ps1"), ShellKind::PowerShell);
+        // 脚本宿主（P1-01）：mshta/wscript/cscript + 常见脚本扩展名
+        assert_eq!(shell_kind("C:\\Windows\\System32\\mshta.exe"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\Windows\\System32\\wscript.exe"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\Windows\\System32\\cscript.exe"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\x\\evil.vbs"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\x\\evil.js"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\x\\evil.jse"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\x\\evil.hta"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\x\\evil.wsf"), ShellKind::ScriptHost);
+        assert_eq!(shell_kind("C:\\x\\evil.wsh"), ShellKind::ScriptHost);
         assert_eq!(shell_kind("C:\\x\\app.exe"), ShellKind::Other);
         assert_eq!(shell_kind("notepad"), ShellKind::Other);
     }

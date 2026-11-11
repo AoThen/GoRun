@@ -167,6 +167,7 @@ pub fn apply_localized_texts(ui: &MainWindow, loc: &Rc<RefCell<Localization>>, d
     ui.set_about_desc_text(lb.tr("About_Desc").into());
     ui.set_about_ok_text(lb.tr("Btn_OK").into());
     ui.set_sb_new_item_text(lb.tr("Menu_NewItem").into());
+    ui.set_sb_search_hint_text(lb.tr("Tip_Search").into());
     ui.set_sb_switch_list_text(lb.tr("SB_SwitchList").into());
     ui.set_sb_switch_icon_text(lb.tr("SB_SwitchIcon").into());
     ui.set_sb_switch_light_text(lb.tr("SB_SwitchLight").into());

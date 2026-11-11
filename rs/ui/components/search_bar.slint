@@ -6,6 +6,7 @@ export component SearchBar {
     in property <bool> is-dark-theme;
     in-out property <bool> is-icon-view: true;
     in-out property <bool> field-focused: false;
+    in property <string> search-hint: "";
     in property <string> new-item-text: "New Item";
     in property <string> switch-list-text: "List";
     in property <string> switch-icon-text: "Icon";
@@ -26,6 +27,7 @@ export component SearchBar {
 
             LineEdit {
                 text: root.text;
+                placeholder-text: root.search-hint;
                 edited => { root.search-changed(self.text); }
                 font-size: Theme.font-size-sm;
                 changed has-focus => { root.field-focused = self.has-focus; }

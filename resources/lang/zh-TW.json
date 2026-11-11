@@ -137,9 +137,6 @@
     "Menu_Sort_Name": "名稱",
     "Menu_Sort_Type": "類型",
     "Menu_Sort_RunCount": "開啟次數",
-    "Menu_Sort_create": "建立時間",
-    "Menu_Sort_lastRun": "上次執行時間",
-    "Menu_Sort_lastEdit": "上次編輯時間",
     "Menu_Increment": "遞增",
     "Menu_Decrement": "遞減",
     "Menu_ExcludeSearch": "排除搜尋",
@@ -660,9 +657,12 @@
     "Tip_ExternalBackup": "外部配置已備份，未載入執行",
     "Tip_ExternalConfigTitle": "偵測到外部設定",
     "Tip_ExternalConfigMsg": "設定未通過完整性校驗（可能是外部產生或被修改，也可能是舊版本設定）。是否信任並匯入其項目資料？",
+    "Tip_ExternalConfigCount": "將匯入 {0} 個分類、{1} 個項目",
     "Btn_TrustImport": "信任並匯入",
     "Status_ExternalImported": "已匯入外部設定",
     "Status_ExternalImportFail": "外部設定匯入失敗",
+    "Status_SaveFailed": "設定儲存失敗，資料未寫入磁碟",
+    "Status_CorruptQuarantined": "設定損毀，已隔離為 {0}，使用預設設定",
 
     "__END": ""
 }

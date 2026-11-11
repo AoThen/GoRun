@@ -71,10 +71,17 @@ fn main() {
             .to_string(),
     );
 
-    let mut app_config = storage
-        .load()
-        .or_else(|| storage.load_from_backup())
-        .unwrap_or_default();
+    // P2-05：区分"文件不存在"与"文件损坏"。损坏且无可用备份时隔离坏文件留证，
+    // 避免后续保存覆盖坏数据/污染备份链；有可用备份时 load_from_backup 已自愈。
+    let loaded = storage.load();
+    let restored = if loaded.is_none() {
+        storage.load_from_backup()
+    } else {
+        None
+    };
+    let corrupt_no_backup =
+        !first_run && loaded.is_none() && restored.is_none();
+    let mut app_config = loaded.or(restored).unwrap_or_default();
     // P2-3：记录是否自动创建了默认分类，供后续用当前语言重命名（外部隔离分支会置 true）
     let mut created_default_cat = app_config.data.categories.is_empty();
     if created_default_cat {
@@ -88,6 +95,27 @@ fn main() {
         };
         app_config.data.categories.push(default_cat);
     }
+
+    // P2-05：损坏且无可用备份 → 隔离坏文件（留证），使用默认配置继续运行
+    let corrupt_quarantined: Option<String> = if corrupt_no_backup {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let corrupt_path = format!("{}.corrupt.{}", config_path, ts);
+        if std::fs::rename(&config_path, &corrupt_path).is_ok() {
+            log::warn!("Corrupt config quarantined to: {}", corrupt_path);
+            Some(corrupt_path)
+        } else {
+            log::error!(
+                "Failed to quarantine corrupt config {}; will run with default in memory",
+                config_path
+            );
+            None
+        }
+    } else {
+        None
+    };
 
     log::info!("Config loaded from: {:?}", config::config_path());
     // 信任边界（P0-2）：非首启、含条目且未通过完整性校验 → 视为外部/未信任配置。
@@ -184,6 +212,7 @@ fn main() {
         search_query: String::new(),
         edit_dialog: None,
         loc: loc.clone(),
+        save_fail_notified: false,
     }));
 
     let ui = match MainWindow::new() {
@@ -244,6 +273,17 @@ fn main() {
             move || {
                 if let Some(ui) = weak_geo.upgrade() {
                     geometry::save_window_geometry(&ui, &state_geo);
+                    // P2-05：保存失败一次性状态栏提示（避免静默丢数据）；显示后复位，
+                    // 下次新的保存失败会再次置位并提示，不长期覆盖其他状态信息。
+                    let notify_fail = state_geo.borrow().save_fail_notified;
+                    if notify_fail {
+                        let msg = {
+                            let st = state_geo.borrow();
+                            st.loc.borrow().tr("Status_SaveFailed").to_string()
+                        };
+                        ui.set_status_text(msg.into());
+                        state_geo.borrow_mut().save_fail_notified = false;
+                    }
                     let actions: Vec<tray_ui::TrayUiAction> = tray_ui
                         .lock()
                         .map(|mut q| q.drain(..).collect())
@@ -330,6 +370,13 @@ fn main() {
             loc.borrow().tr("Tip_ExternalBackup"),
             config_path.display()
         );
+        ui.set_status_text(msg.into());
+    }
+    if let Some(corrupt_path) = &corrupt_quarantined {
+        let msg = loc
+            .borrow()
+            .tr("Status_CorruptQuarantined")
+            .replace("{0}", corrupt_path);
         ui.set_status_text(msg.into());
     }
 

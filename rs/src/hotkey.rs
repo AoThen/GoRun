@@ -204,15 +204,28 @@ impl HotkeyManager {
                         }
                         // P2-8：MsgWaitForMultipleObjects + 500ms 超时阻塞等待，
                         // 替代 50ms 忙轮询 sleep；空闲时 CPU 占用近零。
-                        // 不传事件句柄（None），唤醒掩码 QS_ALLINPUT；有消息时返回
-                        // 值含 MWMO_MESSAGE (0x80000000)，超时返回 WAIT_TIMEOUT (258)
+                        // 不传事件句柄（None），唤醒掩码 QS_ALLINPUT；官方语义：
+                        // 有匹配消息返回 WAIT_OBJECT_0(0)，超时返回 WAIT_TIMEOUT(258)，
+                        // 失败返回 WAIT_FAILED(0xFFFFFFFF)。
                         let waited = MsgWaitForMultipleObjects(None, FALSE, 500, QS_ALLINPUT);
-                        if waited.0 == 0x80000000 {
-                            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE) == TRUE {
-                                if msg.message == WM_HOTKEY && msg.wParam.0 as u32 == hotkey_id {
-                                    let _ = sender.send(());
+                        // windows crate 返回 WAIT_EVENT(pub u32)；用字面量避免
+                        // 常量类型不一致（WAIT_TIMEOUT=258, WAIT_FAILED=0xFFFFFFFF）。
+                        match waited.0 {
+                            258 => {} // WAIT_TIMEOUT：空闲，继续阻塞等待
+                            0xFFFF_FFFF => {
+                                log::error!("HotkeyManager: MsgWaitForMultipleObjects failed");
+                                break;
+                            }
+                            _ => {
+                                // 有消息（WAIT_OBJECT_0 等）：排空消息队列并分发
+                                while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE) == TRUE {
+                                    if msg.message == WM_HOTKEY
+                                        && msg.wParam.0 as u32 == hotkey_id
+                                    {
+                                        let _ = sender.send(());
+                                    }
+                                    let _ = DispatchMessageW(&msg);
                                 }
-                                let _ = DispatchMessageW(&msg);
                             }
                         }
                     }

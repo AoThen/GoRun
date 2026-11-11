@@ -10,6 +10,11 @@ use slint::ComponentHandle;
 pub fn save_window_geometry(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
     // 必须在事件循环内/窗口销毁前调用；position()/size() 返回物理像素（与 C++ GetWindowRect 一致）
     let pos = ui.window().position();
+    // P2-04：最小化时 GetWindowRect 返回约 (-32000,-32000)，直接落盘会污染配置。
+    // 双保险：slint 公开 is_minimized() + 坐标哨兵检查（正常坐标远不到 -10000）。
+    if ui.window().is_minimized() || pos.x < -10000 || pos.y < -10000 {
+        return;
+    }
     let size = ui.window().size();
     let w = size.width as i32;
     let h = size.height as i32;
@@ -44,10 +49,11 @@ pub fn position_at_cursor(ui: &MainWindow) {
         use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
         let mut pt = POINT::default();
         if unsafe { GetCursorPos(&mut pt).is_ok() } {
-            let sf = ui.window().scale_factor();
+            // P2-04：GetCursorPos 与 set_position 均为物理像素语义，
+            // 直接用物理尺寸居中，避免 DPI≠100% 时把逻辑宽高混入物理坐标造成偏移。
             let size = ui.window().size();
-            let w = (size.width as f32 / sf).max(1.0);
-            let h = (size.height as f32 / sf).max(1.0);
+            let w = (size.width as f32).max(1.0);
+            let h = (size.height as f32).max(1.0);
             let x = (pt.x as f32 - w * 0.5).max(0.0) as i32;
             let y = (pt.y as f32 - h * 0.5).max(0.0) as i32;
             use slint::PhysicalPosition;

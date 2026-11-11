@@ -23,11 +23,15 @@ pub fn window_on_screen(x: i32, y: i32, w: i32, h: i32) -> bool {
     #[cfg(windows)]
     {
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN,
+            GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+            SM_YVIRTUALSCREEN,
         };
-        let sw = unsafe { GetSystemMetrics(SM_CXSCREEN) };
-        let sh = unsafe { GetSystemMetrics(SM_CYSCREEN) };
-        sw > 0 && sh > 0 && x < sw && y < sh && (x + w) > 0 && (y + h) > 0
+        // P2-04：用虚拟桌面 metrics 而非主屏，副屏上的窗口才能被正确判为可恢复。
+        let vx = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+        let vy = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+        let vw = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+        let vh = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+        vw > 0 && vh > 0 && x >= vx && y >= vy && x < vx + vw && y < vy + vh
     }
     #[cfg(not(windows))]
     {

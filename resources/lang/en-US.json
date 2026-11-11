@@ -142,9 +142,6 @@
     "Menu_Sort_Name": "Name",
     "Menu_Sort_Type": "Type",
     "Menu_Sort_RunCount": "Open Count",
-    "Menu_Sort_Create": "Creation Time",
-    "Menu_Sort_LastRun": "Last Run Time",
-    "Menu_Sort_LastEdit": "Last Edit Time",
     "Menu_Increment": "Ascending",
     "Menu_Decrement": "Descending",
     "Menu_ExcludeSearch": "Exclude Search",
@@ -666,9 +663,12 @@
     "Tip_ExternalBackup": "External config backed up, not loaded",
     "Tip_ExternalConfigTitle": "External config detected",
     "Tip_ExternalConfigMsg": "The config failed integrity verification (possibly external, modified, or from an older version). Trust and import its item data?",
+    "Tip_ExternalConfigCount": "Will import {0} categories and {1} items",
     "Btn_TrustImport": "Trust & Import",
     "Status_ExternalImported": "External config imported",
     "Status_ExternalImportFail": "Failed to import external config",
+    "Status_SaveFailed": "Failed to save config; changes not written to disk",
+    "Status_CorruptQuarantined": "Config corrupted; quarantined to {0}, using defaults",
 
     "__END": ""
 }

@@ -46,6 +46,7 @@ export component MainWindow inherits Window {
     in-out property <string> about-desc-text: "Windows 10+ desktop quick launcher. MIT License.";
     in-out property <string> about-ok-text: "OK";
     in-out property <string> sb-new-item-text: "New Item";
+    in-out property <string> sb-search-hint-text: "Search";
     in-out property <string> sb-switch-list-text: "List";
     in-out property <string> sb-switch-icon-text: "Icon";
     in-out property <string> sb-switch-light-text: "Light";
@@ -128,6 +129,9 @@ toggle-theme => {
             }
             pointer-event(PointerEvent) => {
                 if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                    root.context-menu-x = self.pressed-x;
+                    root.context-menu-y = self.pressed-y;
+                    root.context-menu-visible = true;
                     root.background-right-clicked(self.pressed-x, self.pressed-y);
                 }
             }
@@ -154,19 +158,19 @@ toggle-theme => {
                     }
                     return accept;
                 }
-                if (event.text == "\u{2193}") {
+                if (event.text == Key.DownArrow) {
                     if (root.selected-item-index < root.items.length - 1) {
                         root.selected-item-index += 1;
                     }
                     return accept;
                 }
-                if (event.text == "\u{2191}") {
+                if (event.text == Key.UpArrow) {
                     if (root.selected-item-index > 0) {
                         root.selected-item-index -= 1;
                     }
                     return accept;
                 }
-                if (event.text == "\u{0d}") {
+                if (event.text == Key.Return || event.text == "\u{0d}") {
                     if (root.items.length > 0
                         && !root.search-field-focused
                         && !root.confirm-dialog-visible
@@ -214,7 +218,9 @@ toggle-theme => {
                         root.category-selected(index);
                     }
                     category-right-clicked(index, x, y) => {
-                        root.context-menu-visible = false;
+                        root.context-menu-x = x;
+                        root.context-menu-y = y;
+                        root.context-menu-visible = true;
                         root.category-right-clicked(index, x, y);
                     }
                     new-category() => {
@@ -232,6 +238,7 @@ toggle-theme => {
                         is-icon-view: root.is-icon-view;
                         field-focused: root.search-field-focused;
                         new-item-text: root.sb-new-item-text;
+                        search-hint: root.sb-search-hint-text;
                         switch-list-text: root.sb-switch-list-text;
                         switch-icon-text: root.sb-switch-icon-text;
                         switch-light-text: root.sb-switch-light-text;

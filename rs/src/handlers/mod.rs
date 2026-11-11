@@ -428,6 +428,9 @@ pub fn wire_handler(
                                 ui.set_confirm_dialog_message(
                                     util::tr_fill(&loc_m, "Tip_DelCate", &cat_name).into(),
                                 );
+                                ui.set_confirm_confirm_text(
+                                    loc_m.borrow().tr("Btn_Del").to_string().into(),
+                                );
                                 ui.set_confirm_dialog_visible(true);
                             }
                         }
@@ -549,6 +552,9 @@ pub fn wire_handler(
                         );
                         ui.set_confirm_dialog_message(
                             util::tr_fill(&loc_m, "Tip_RunAll", &cat_name).into(),
+                        );
+                        ui.set_confirm_confirm_text(
+                            loc_m.borrow().tr("Btn_Execute").to_string().into(),
                         );
                         ui.set_confirm_dialog_visible(true);
                     }
@@ -722,6 +728,16 @@ pub fn wire_handler(
                                     }
                                     state_cancel.borrow_mut().edit_dialog = None;
                                 });
+                                // P2-06：标题栏 X 关闭等价取消
+                                let dialog_weak_close = dialog_weak.clone();
+                                let state_close = state_menu.clone();
+                                dlg_handle.window().on_close_requested(move || {
+                                    if let Some(d) = dialog_weak_close.upgrade() {
+                                        let _ = d.hide();
+                                    }
+                                    state_close.borrow_mut().edit_dialog = None;
+                                    slint::CloseRequestResponse::HideWindow
+                                });
                             }
 
                             state.edit_dialog = Some(dialog);
@@ -755,6 +771,9 @@ pub fn wire_handler(
                                 loc_a.borrow().tr("Tip_UndoNotPossible")
                             );
                             ui.set_confirm_dialog_message(msg.into());
+                            ui.set_confirm_confirm_text(
+                                loc_a.borrow().tr("Btn_Execute").to_string().into(),
+                            );
                             ui.set_confirm_dialog_visible(true);
                         }
                         return;
@@ -772,6 +791,9 @@ pub fn wire_handler(
                             );
                             ui.set_confirm_dialog_message(
                                 util::tr_fill(&loc_m, "Tip_DelItem", &item_name).into(),
+                            );
+                            ui.set_confirm_confirm_text(
+                                loc_m.borrow().tr("Btn_Del").to_string().into(),
                             );
                             ui.set_confirm_dialog_visible(true);
                         }
@@ -961,6 +983,8 @@ pub fn wire_handler(
                     ui_sync::refresh_items_ui(&ui, &state_confirm.borrow(), &cat_id, &query);
                 }
             }
+            // 删除项处理完毕后必须返回，避免与后续提权/运行全部 pending 级联执行
+            return;
         }
         // 提权运行确认（右键菜单 → 确认弹窗 → 执行）
         if let Some(id) = pra_admin_ok.borrow_mut().take() {
@@ -1190,9 +1214,25 @@ pub fn wire_handler(
     });
 
     // P0-8：检测到外部/未信任配置时弹确认框，信任导入或保持隔离
-    if pending_external_trust.borrow().is_some() {
+    if let Some(backup) = pending_external_trust.borrow().clone() {
         ui.set_confirm_dialog_title(loc.borrow().tr("Tip_ExternalConfigTitle").to_string().into());
-        ui.set_confirm_dialog_message(loc.borrow().tr("Tip_ExternalConfigMsg").to_string().into());
+        // P1-05：追加导入规模计数，帮助用户在盲信导入前了解数据量
+        let count_msg = crate::storage::Storage::new(backup)
+            .load()
+            .map(|cfg| {
+                loc.borrow()
+                    .tr("Tip_ExternalConfigCount")
+                    .replace("{0}", &cfg.data.categories.len().to_string())
+                    .replace("{1}", &cfg.data.items.len().to_string())
+            })
+            .unwrap_or_default();
+        let base_msg = loc.borrow().tr("Tip_ExternalConfigMsg").to_string();
+        let msg = if count_msg.is_empty() {
+            base_msg
+        } else {
+            format!("{}\n{}", base_msg, count_msg)
+        };
+        ui.set_confirm_dialog_message(msg.into());
         ui.set_confirm_confirm_text(loc.borrow().tr("Btn_TrustImport").to_string().into());
         ui.set_confirm_dialog_visible(true);
     }

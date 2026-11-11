@@ -253,7 +253,7 @@ impl Storage {
             window_height: raw_config.window_height,
         };
 
-        let categories: Vec<Category> = raw
+        let mut categories: Vec<Category> = raw
             .categories
             .into_iter()
             .map(|c| Category {
@@ -269,7 +269,7 @@ impl Storage {
             })
             .collect();
 
-        let items: Vec<Item> = raw
+        let mut items: Vec<Item> = raw
             .items
             .into_iter()
             .map(|i| Item {
@@ -289,6 +289,12 @@ impl Storage {
             })
             .collect();
 
+        // P2-03：加载时按 sortOrder 稳定排序（分类按 sort_order；项目按
+        // (category_id, sort_order)），一次性修复 C++ 生成配置中"数组序≠sortOrder 序"
+        // 的历史数据，保证迁移后展示顺序与 C++ 渲染端一致。
+        categories.sort_by_key(|c| c.sort_order);
+        items.sort_by_key(|i| (i.category_id.clone(), i.sort_order));
+
         log::info!(
             "Config loaded: {} categories, {} items",
             categories.len(),
@@ -304,37 +310,46 @@ impl Storage {
     }
 
     pub fn save(&self, app_config: &AppConfig) -> bool {
+        // P2-03：保存前按数组顺序重编号 sortOrder（0..n-1 / 分类内 0..m-1），
+        // 保证写回的 JSON 数组序 ≡ sortOrder 序，与 C++ 渲染端排序语义恒一致。
         let raw_categories: Vec<RawCategory> = app_config
             .data
             .categories
             .iter()
-            .map(|c| RawCategory {
+            .enumerate()
+            .map(|(idx, c)| RawCategory {
                 id: c.id.clone(),
                 name: c.name.clone(),
-                sort_order: c.sort_order,
+                sort_order: idx as i32,
                 view_type: c.view_type.clone() as i32,
                 icon_size: c.icon_size,
             })
             .collect();
 
+        let mut cat_counters: HashMap<&str, i32> = HashMap::new();
         let raw_items: Vec<RawItem> = app_config
             .data
             .items
             .iter()
-            .map(|i| RawItem {
-                id: i.id.clone(),
-                name: i.name.clone(),
-                target: i.target.clone(),
-                arguments: i.arguments.clone(),
-                working_dir: i.working_dir.clone(),
-                icon_path: i.icon_path.clone(),
-                icon_index: i.icon_index,
-                run_as_admin: i.run_as_admin,
-                run_count: i.run_count,
-                keywords: i.keywords.clone(),
-                remark: i.remark.clone(),
-                category_id: i.category_id.clone(),
-                sort_order: i.sort_order,
+            .map(|i| {
+                let so = cat_counters.entry(i.category_id.as_str()).or_insert(0);
+                let cur = *so;
+                *so += 1;
+                RawItem {
+                    id: i.id.clone(),
+                    name: i.name.clone(),
+                    target: i.target.clone(),
+                    arguments: i.arguments.clone(),
+                    working_dir: i.working_dir.clone(),
+                    icon_path: i.icon_path.clone(),
+                    icon_index: i.icon_index,
+                    run_as_admin: i.run_as_admin,
+                    run_count: i.run_count,
+                    keywords: i.keywords.clone(),
+                    remark: i.remark.clone(),
+                    category_id: i.category_id.clone(),
+                    sort_order: cur,
+                }
             })
             .collect();
 
@@ -456,6 +471,14 @@ impl Storage {
                 log::info!("Trying to load from backup: {}", backup_path);
                 let backup_storage = Storage::new(backup_path.clone());
                 if let Some(config) = backup_storage.load() {
+                    // P1-05：已签名（含 config_integrity）但校验不通过的备份视为被篡改，
+                    // 跳过继续尝试下一个；未签名的旧版/迁移配置仍按最佳恢复处理（恢复即重签）。
+                    if config.extra_config.contains_key("config_integrity")
+                        && !verify_integrity(&config)
+                    {
+                        log::warn!("Backup {} failed integrity check, trying next", backup_path);
+                        continue;
+                    }
                     log::info!("Successfully loaded from backup: {}", backup_path);
                     if self.save(&config) {
                         log::info!("Restored backup to main config file");

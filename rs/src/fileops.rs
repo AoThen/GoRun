@@ -11,7 +11,8 @@ pub fn browse_file_dialog(title: &str, filter: &str) -> Option<String> {
 
     let title_w: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
     let filter_w: Vec<u16> = filter.encode_utf16().chain(std::iter::once(0)).collect();
-    let mut file_buf = vec![0u16; 1024];
+    // P3-04：Windows 长路径上限 32767 个 UTF-16，1024 会截断超长路径导致对话框失败
+    let mut file_buf = vec![0u16; 32768];
     let mut ofn = OPENFILENAMEW {
         lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
         hwndOwner: HWND::default(),

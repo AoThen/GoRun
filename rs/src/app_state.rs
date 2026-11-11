@@ -17,16 +17,26 @@ pub struct AppState {
     pub search_query: String,
     pub edit_dialog: Option<EditDialog>,
     pub loc: Rc<RefCell<Localization>>,
+    /// 保存失败标志：置位后由周期 Timer 一次性写状态栏提示，避免静默丢数据。
+    pub save_fail_notified: bool,
 }
 
 impl AppState {
-    pub fn save_if_modified(&mut self) {
+    /// 保存修改。返回是否成功（无修改视为成功）。
+    /// 失败时置位 `save_fail_notified`，供 UI 层轮询提示。
+    pub fn save_if_modified(&mut self) -> bool {
         if self.manager.is_modified() {
             if self.storage.save_with_backup(self.manager.config()) {
                 self.manager.reset_modified();
+                self.save_fail_notified = false;
+                true
             } else {
                 log::error!("Failed to save config after modification");
+                self.save_fail_notified = true;
+                false
             }
+        } else {
+            true
         }
     }
 }

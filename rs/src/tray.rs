@@ -362,7 +362,8 @@ fn popup_tray_menu(hwnd: HWND, sender: &Sender<TrayMessage>) {
         match cmd.0 {
             0 => {}
             id if id == MENU_ID_SHOW as i32 => {
-                let _ = sender.send(TrayMessage::Show);
+                // P3-03：菜单项文案"显示/隐藏"，动作应为 Toggle（否则窗口已显示时无效果）
+                let _ = sender.send(TrayMessage::Toggle);
             }
             id if id == MENU_ID_AUTOSTART as i32 => {
                 let _ = sender.send(TrayMessage::ToggleAutoStart);

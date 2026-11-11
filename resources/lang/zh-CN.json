@@ -140,9 +140,6 @@
     "Menu_Sort_Name": "名称",
     "Menu_Sort_Type": "类型",
     "Menu_Sort_RunCount": "打开次数",
-    "Menu_Sort_create": "创建时间",
-    "Menu_Sort_lastRun": "上次运行时间",
-    "Menu_Sort_lastEdit": "上次编辑时间",
     "Menu_Increment": "递增",
     "Menu_Decrement": "递减",
     "Menu_ExcludeSearch": "排除搜索",
@@ -664,9 +661,12 @@
     "Tip_ExternalBackup": "外部配置已备份，未加载执行",
     "Tip_ExternalConfigTitle": "检测到外部配置",
     "Tip_ExternalConfigMsg": "配置未通过完整性校验（可能是外部生成或被修改，也可能是旧版本配置）。是否信任并导入其项目数据？",
+    "Tip_ExternalConfigCount": "将导入 {0} 个分类、{1} 个项目",
     "Btn_TrustImport": "信任并导入",
     "Status_ExternalImported": "已导入外部配置",
     "Status_ExternalImportFail": "外部配置导入失败",
+    "Status_SaveFailed": "配置保存失败，数据未落盘",
+    "Status_CorruptQuarantined": "配置损坏，已隔离为 {0}，使用默认配置",
 
     "__END": ""
 }
