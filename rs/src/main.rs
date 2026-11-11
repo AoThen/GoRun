@@ -102,14 +102,14 @@ fn main() {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let corrupt_path = format!("{}.corrupt.{}", config_path, ts);
+        let corrupt_path = format!("{}.corrupt.{}", config_path.display(), ts);
         if std::fs::rename(&config_path, &corrupt_path).is_ok() {
             log::warn!("Corrupt config quarantined to: {}", corrupt_path);
             Some(corrupt_path)
         } else {
             log::error!(
                 "Failed to quarantine corrupt config {}; will run with default in memory",
-                config_path
+                config_path.display()
             );
             None
         }

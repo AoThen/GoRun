@@ -1214,7 +1214,9 @@ pub fn wire_handler(
     });
 
     // P0-8：检测到外部/未信任配置时弹确认框，信任导入或保持隔离
-    if let Some(backup) = pending_external_trust.borrow().clone() {
+    // 先 clone 到局部变量，避免 Ref 临时值在 if-let 块结束前被借用检查器认为仍存活（E0597）
+    let pending_trust = pending_external_trust.borrow().clone();
+    if let Some(backup) = pending_trust {
         ui.set_confirm_dialog_title(loc.borrow().tr("Tip_ExternalConfigTitle").to_string().into());
         // P1-05：追加导入规模计数，帮助用户在盲信导入前了解数据量
         let count_msg = crate::storage::Storage::new(backup)
