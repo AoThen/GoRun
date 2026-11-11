@@ -51,6 +51,8 @@ windows = { version = "0.57", features = [
     "Win32_Security",
 ] }
 raw-window-handle = "0.6"
+hmac = "0.12"
+sha2 = "0.10"
 
 [profile.release]
 opt-level = 3

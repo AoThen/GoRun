@@ -94,9 +94,19 @@ pub fn import_external_config(
             .insert("generated_by".to_string(), "gorun-rs".to_string());
     }
     st.current_category_id = new_current;
-    st.save_if_modified();
+    // P0-4：仅当保存成功后才移除隔离备份；保存失败时保留备份留证，避免数据丢失。
+    let saved = st.save_if_modified();
     let cur = st.current_category_id.clone();
     drop(st);
+    if !saved {
+        log::error!("Failed to save imported external config, backup kept: {}", backup);
+        if let Some(ui) = weak_ui.upgrade() {
+            let loc = state.borrow().loc.clone();
+            let msg = loc.borrow().tr("Status_SaveFailed").to_string();
+            ui.set_status_text(msg.into());
+        }
+        return false;
+    }
     // 导入成功后移除隔离备份，避免磁盘残留
     if let Err(e) = std::fs::remove_file(backup) {
         log::warn!("Failed to remove external config backup {}: {}", backup, e);

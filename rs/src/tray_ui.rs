@@ -135,16 +135,17 @@ pub fn handle_tray_ui_action(
                 .get("follow_mouse")
                 .map(|v| v == "1")
                 .unwrap_or(false);
-            crate::tray::set_ui_state(follow, &lang);
-            log::info!("Language set to {}", lang);
             drop(s);
-            // 刷新共享语言表（AppState.loc）+ 菜单栏/空状态/确认/侧栏文本
+            // P2：先更新菜单文本（tray().texts）再写 checkmark（tray().lang）。
+            // 竞态窗口下用户看到"旧 checkmark + 新文本"，比"新 checkmark + 旧文本"更不易察觉。
             let new_loc = {
                 let st = state.borrow();
                 *st.loc.borrow_mut() = Localization::new(&lang);
                 st.loc.clone()
             };
             apply_localized_texts(ui, &new_loc, ui.get_is_dark_theme());
+            crate::tray::set_ui_state(follow, &lang);
+            log::info!("Language set to {}", lang);
         }
     }
 }

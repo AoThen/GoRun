@@ -3,7 +3,9 @@ use std::fs;
 use std::io::{BufReader, Write};
 use std::path::Path;
 
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 use crate::model::{AppConfig, AppData, Category, Config, Item, ViewType};
 
@@ -159,8 +161,13 @@ struct RawItem {
 }
 
 /// P0-2 完整性值：对配置内容（version/categories/items/config/排序后的 extra）做
-/// FNV-1a 64。算法公开是便携配置的取舍（换机/共享时配置可整体携带），真正的
-/// 信任控制点是启动确认弹窗，此值用于把"外部/被篡改"从"仅缺标记"升级为可检测。
+/// HMAC-SHA256。密钥编译进二进制（可被逆向提取，但比公开哈希门槛显著提高），
+/// 防的是"读源码即可伪造"的普通攻击者；真正信任控制点是启动确认弹窗，
+/// 此值用于把"外部/被篡改"从"仅缺标记"升级为可检测。
+/// 前缀 `hmac:` 用于区分新旧格式：旧版 `fnv1a64:` 配置在升级后无法匹配，
+/// 会触发隔离 + 确认弹窗，强制用户审阅目标后重新签名（预期安全行为）。
+const INTEGRITY_KEY: &[u8] = b"GoRun-rs-HMAC-Key-v1";
+
 pub fn compute_integrity(cfg: &AppConfig) -> String {
     let extra: std::collections::BTreeMap<&str, &str> = cfg
         .extra_config
@@ -181,12 +188,11 @@ pub fn compute_integrity(cfg: &AppConfig) -> String {
         },
         "extra": serde_json::to_value(&extra).unwrap_or_default(),
     });
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in payload.to_string().as_bytes() {
-        hash ^= b as u64;
-        hash = hash.wrapping_mul(0x1_0000_0001_b3);
-    }
-    format!("fnv1a64:{:016x}", hash)
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(INTEGRITY_KEY).expect("HMAC key length must be valid");
+    mac.update(payload.to_string().as_bytes());
+    let tag = mac.finalize().into_bytes();
+    format!("hmac:{}", tag.iter().map(|b| format!("{:02x}", b)).collect::<String>())
 }
 
 /// P0-2 信任校验：标记值精确匹配 + 内容完整性匹配，两者缺一即视为未信任。
@@ -608,7 +614,24 @@ mod tests {
         let a = compute_integrity(&config);
         let b = compute_integrity(&config);
         assert_eq!(a, b);
-        assert!(a.starts_with("fnv1a64:"));
+        assert!(a.starts_with("hmac:"));
+    }
+
+    #[test]
+    fn test_legacy_fnv_integrity_rejected() {
+        // 旧版 `fnv1a64:` 格式配置在 HMAC 校验下必须失败，以触发隔离 + 确认弹窗（迁移路径）。
+        // 同时证明"仅重算公开哈希（旧 FNV 攻击）"无法伪造 HMAC——产出值仍以 `fnv1a64:` 开头，
+        // 与 `hmac:` 前缀不匹配，校验必失败。
+        let mut config = AppConfig::default();
+        config.extra_config.insert("generated_by".to_string(), "gorun-rs".to_string());
+        config.extra_config.insert("config_integrity".to_string(), "fnv1a64:0123456789abcdef".to_string());
+        config.data.items.push(Item {
+            id: "item_x".into(),
+            name: "Foo".into(),
+            target: "C:\\foo.exe".into(),
+            ..Default::default()
+        });
+        assert!(!verify_integrity(&config));
     }
 
     #[test]

@@ -1,6 +1,5 @@
 // 本地化：语言文件编译期嵌入（resources/lang/*.json），tr() 取键值；
 // 语言切换时构造新实例重新解析。UI 文本接线：菜单栏 + 空状态（最小版）。
-#![allow(dead_code)]
 
 use std::collections::HashMap;
 
@@ -46,6 +45,7 @@ impl Localization {
         self.strings.get(key).map(|s| s.as_str()).unwrap_or(key)
     }
 
+    #[allow(dead_code)]
     pub fn language_code(&self) -> &str {
         &self.lang_code
     }

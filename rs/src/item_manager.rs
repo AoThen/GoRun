@@ -1,6 +1,6 @@
-// 以下方法当前无调用者，但为规划中的功能（拖拽排序、分类编辑、移动条目等）预留，
-// 保留而非删除；文件级 #![allow(dead_code)] 抑制编译警告。
-#![allow(dead_code)]
+// 预留方法（如分类编辑 update_category）当前无调用者，保留而非删除；
+// 以精确 #[allow(dead_code)] 标注，仅对确实无调用的预留方法抑制警告，
+// 让新增的意外死代码重新可见（替代文件级 #![allow(dead_code)]）。
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -56,6 +56,8 @@ impl ItemManager {
             .collect()
     }
 
+    /// P1-9：全量项目（仅集成测试引用；bin 目标内无调用，标注抑制警告）。
+    #[allow(dead_code)]
     pub fn all_items(&self) -> Vec<Item> {
         self.config.data.items.clone()
     }
@@ -139,6 +141,7 @@ impl ItemManager {
         self.modified = true;
     }
 
+    #[allow(dead_code)]
     pub fn update_category(&mut self, category: &Category) -> bool {
         if let Some(c) = self
             .config

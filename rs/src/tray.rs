@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[cfg(windows)]
 use std::sync::OnceLock;
 #[cfg(windows)]
@@ -281,6 +279,7 @@ impl TrayIcon {
         }
     }
 
+    #[allow(dead_code)]
     pub fn show_menu(&self) {
         popup_tray_menu(self.hwnd, &self.sender);
     }
@@ -491,8 +490,10 @@ impl TrayIcon {
         (Self { _private: () }, rx)
     }
 
+    #[allow(dead_code)]
     pub fn destroy(&mut self) {}
 
+    #[allow(dead_code)]
     pub fn show_menu(&self) {}
 }
 

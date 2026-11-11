@@ -18,32 +18,40 @@ pub fn spawn_icon_refresh(ui: &MainWindow, icon_cache: IconCache, items: Vec<Ite
     }
     let weak = ui.as_weak();
     std::thread::spawn(move || {
+        // P1：单线程内预收集所有 (id, path) 更新，避免每项一次 invoke_from_event_loop
+        // 且每次 O(N) 扫描模型（旧实现总复杂度 O(N²)，大分类时卡顿 UI）。
+        let mut updates: Vec<(String, String)> = Vec::new();
         for item in &items {
             if let Some(path) = icon_cache.refresh_icon(item) {
-                let weak = weak.clone();
-                let id = item.id.clone();
-                let path_str = path.to_string_lossy().to_string();
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(ui) = weak.upgrade() {
-                        use slint::Model;
-                        let model = ui.get_items();
-                        for i in 0..model.row_count() {
-                            if let Some(row) = model.row_data(i) {
-                                if row.id.as_str() == id.as_str() {
-                                    let mut new_row = row;
-                                    new_row.icon_path =
-                                        slint::Image::load_from_path(std::path::Path::new(&path_str))
-                                            .unwrap_or_default();
-                                    model.set_row_data(i, new_row);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                })
-                .ok();
+                updates.push((item.id.clone(), path.to_string_lossy().to_string()));
             }
         }
+        if updates.is_empty() {
+            return;
+        }
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(ui) = weak.upgrade() {
+                use slint::Model;
+                let model = ui.get_items();
+                // 构建 id -> path 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新。
+                let id_to_path: std::collections::HashMap<&str, &str> = updates
+                    .iter()
+                    .map(|(id, path)| (id.as_str(), path.as_str()))
+                    .collect();
+                for i in 0..model.row_count() {
+                    if let Some(row) = model.row_data(i) {
+                        if let Some(path_str) = id_to_path.get(row.id.as_str()) {
+                            let mut new_row = row;
+                            new_row.icon_path =
+                                slint::Image::load_from_path(std::path::Path::new(path_str))
+                                    .unwrap_or_default();
+                            model.set_row_data(i, new_row);
+                        }
+                    }
+                }
+            }
+        })
+        .ok();
     });
 }
 

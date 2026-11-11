@@ -574,8 +574,10 @@ pub fn wire_handler(
             };
             if let Some(item) = items.get(item_idx as usize) {
                 let item = item.clone();
-                // 搜索态隐藏 MoveUp/Down，其 Run/RefreshIcon/Properties/MoveTo 索引前移 2
-                let move_offset = if state.search_query.is_empty() { 2 } else { 0 };
+                // 搜索态隐藏 MoveUp/Down，其 Run/RefreshIcon/Properties/MoveTo 索引前移 2。
+                // normal_mode = 查询为空（非搜索态），此时 MoveUp/Down 存在于菜单索引 5/6。
+                let normal_mode = state.search_query.is_empty();
+                let move_offset = if normal_mode { 2 } else { 0 };
                 let run_idx = move_offset + 5;
                 let refresh_idx = move_offset + 6;
                 let props_idx = move_offset + 7;
@@ -881,7 +883,9 @@ pub fn wire_handler(
                             }
                         }
                     }
-                    5 => {
+                    // P4：MoveUp/MoveDown 固定位于索引 5/6（仅非搜索态存在）；
+                    // guard 带 normal_mode 使搜索态（索引 5/6 被 Run/Refresh 占用）不误路由。
+                    x if x == 5 && normal_mode => {
                         if state.manager.move_item_up(&item.id) {
                             state.save_if_modified();
                             let cat_id = state.current_category_id.clone();
@@ -893,7 +897,7 @@ pub fn wire_handler(
                             return;
                         }
                     }
-                    6 => {
+                    x if x == 6 && normal_mode => {
                         if state.manager.move_item_down(&item.id) {
                             state.save_if_modified();
                             let cat_id = state.current_category_id.clone();
@@ -1026,6 +1030,14 @@ pub fn wire_handler(
                             ui.set_status_text(msg.into());
                         }
                     });
+                }
+            } else {
+                // P5：项目已被删除时静默失败会误导用户，状态栏提示。
+                log::warn!("Run-as-admin: item {} not found", id);
+                if let Some(ui) = weak_ui_confirm.upgrade() {
+                    let loc_m = state_confirm.borrow().loc.clone();
+                    let msg = loc_m.borrow().tr("Tip_ItemNotFound").to_string();
+                    ui.set_status_text(msg.into());
                 }
             }
             return;
@@ -1223,8 +1235,10 @@ pub fn wire_handler(
     if let Some(backup) = pending_trust {
         ui.set_confirm_dialog_title(loc.borrow().tr("Tip_ExternalConfigTitle").to_string().into());
         // P1-05：追加导入规模计数，帮助用户在盲信导入前了解数据量
-        let count_msg = crate::storage::Storage::new(backup)
-            .load()
+        // P0-3：进一步展示目标路径（前 10 个 + 剩余计数），让用户对导入内容知情。
+        let cfg_opt = crate::storage::Storage::new(backup).load();
+        let count_msg = cfg_opt
+            .as_ref()
             .map(|cfg| {
                 loc.borrow()
                     .tr("Tip_ExternalConfigCount")
@@ -1232,12 +1246,47 @@ pub fn wire_handler(
                     .replace("{1}", &cfg.data.items.len().to_string())
             })
             .unwrap_or_default();
+        let targets_msg = cfg_opt
+            .as_ref()
+            .and_then(|cfg| {
+                if cfg.data.items.is_empty() {
+                    return None;
+                }
+                const MAX_SHOWN: usize = 10;
+                let shown: Vec<&str> = cfg
+                    .data
+                    .items
+                    .iter()
+                    .take(MAX_SHOWN)
+                    .map(|i| i.target.as_str())
+                    .collect();
+                let mut lines = shown.join("\n");
+                let remaining = cfg.data.items.len().saturating_sub(MAX_SHOWN);
+                if remaining > 0 {
+                    lines.push_str("\n");
+                    lines.push_str(
+                        &loc.borrow()
+                            .tr("Tip_ExternalConfigMore")
+                            .replace("{0}", &remaining.to_string()),
+                    );
+                }
+                Some(
+                    loc.borrow()
+                        .tr("Tip_ExternalConfigTargets")
+                        .replace("{0}", &lines),
+                )
+            })
+            .unwrap_or_default();
         let base_msg = loc.borrow().tr("Tip_ExternalConfigMsg").to_string();
-        let msg = if count_msg.is_empty() {
+        let mut msg = if count_msg.is_empty() {
             base_msg
         } else {
             format!("{}\n{}", base_msg, count_msg)
         };
+        if !targets_msg.is_empty() {
+            msg.push('\n');
+            msg.push_str(&targets_msg);
+        }
         ui.set_confirm_dialog_message(msg.into());
         ui.set_confirm_confirm_text(loc.borrow().tr("Btn_TrustImport").to_string().into());
         ui.set_confirm_dialog_visible(true);
