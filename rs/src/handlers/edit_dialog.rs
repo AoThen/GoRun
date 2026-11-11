@@ -108,7 +108,10 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
                 if let Some(err_key) = validate_item_input(&name, &target) {
                     let msg = {
                         let loc = state_save.borrow().loc.clone();
-                        loc.borrow().tr(err_key).to_string()
+                        // E0597：块尾表达式中的 Ref 临时会延长到块末尾，导致 loc 先被 drop
+                        // 仍被借用；绑定到局部 x 使 Ref 在语句末尾释放（编译器建议形式）。
+                        let x = loc.borrow().tr(err_key).to_string();
+                        x
                     };
                     dlg.set_error_message(msg.into());
                     return;
