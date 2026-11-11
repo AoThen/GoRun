@@ -34,7 +34,6 @@ pub fn setup_drop_handler(ui: &MainWindow) {
                     let weak = weak_ui.clone();
                     slint::invoke_from_event_loop(move || {
                         if let Some(ui) = weak.upgrade() {
-                            ui.set_drop_active(false);
                             for path in &paths {
                                 let target = path.to_string_lossy().to_string();
                                 let name = path

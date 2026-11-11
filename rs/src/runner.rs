@@ -15,7 +15,12 @@ pub fn run_as_admin(item: &Item, search_param: &str) -> RunResult {
 pub fn run_all(items: &[Item], search_param: &str) -> Vec<RunResult> {
     let mut results = Vec::with_capacity(items.len());
     for item in items {
-        let result = run(item, search_param);
+        // 尊重项目"管理员运行"标志，与双击/回车行为一致（P0）
+        let result = if item.run_as_admin {
+            run_as_admin(item, search_param)
+        } else {
+            run(item, search_param)
+        };
         if !result.success {
             log::warn!(
                 "Run all: failed to run {} ({}) - {}",
@@ -260,7 +265,11 @@ pub enum ShellKind {
 
 pub fn shell_kind(target: &str) -> ShellKind {
     let name = target.to_lowercase();
-    let file_name = name.rsplit(['/', '\\']).next().unwrap_or(&name);
+    let file_name = name
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(&name)
+        .trim();
     if file_name == "cmd.exe"
         || file_name == "cmd"
         || file_name.ends_with(".bat")

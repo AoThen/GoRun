@@ -163,6 +163,10 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
             });
         }
 
+        // P0：打开新对话框前关闭旧实例，避免多实例并存导致状态跟踪不一致
+        if let Some(old) = state.borrow_mut().edit_dialog.take() {
+            let _ = old.hide();
+        }
         state.borrow_mut().edit_dialog = Some(dialog);
         if let Err(e) = state
             .borrow()

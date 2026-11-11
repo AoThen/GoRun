@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::config;
 use crate::model::Item;
@@ -9,6 +11,8 @@ use crate::model::Item;
 #[derive(Clone)]
 pub struct IconCache {
     cache_dir: PathBuf,
+    /// item_id -> 最近一次缓存文件名；编辑图标/目标/索引后按映射表清理旧文件
+    item_keys: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl IconCache {
@@ -16,7 +20,10 @@ impl IconCache {
         let dir = config::icons_dir();
         let _ = fs::create_dir_all(&dir);
         log::info!("IconCache initialized: dir={:?}", dir);
-        IconCache { cache_dir: dir }
+        IconCache {
+            cache_dir: dir,
+            item_keys: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     fn cache_key(id: &str, icon_path: &str, icon_index: i32, target: &str) -> u64 {
@@ -54,6 +61,23 @@ impl IconCache {
     }
 
     pub fn delete_cache(&self, item: &Item) {
+        // 编辑图标/目标/索引后缓存键变化，旧键文件按映射表清理（无界增长修复）
+        if let Some(old_name) = self
+            .item_keys
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&item.id)
+        {
+            let old_path = self.cache_dir.join(&old_name);
+            if old_path.exists() {
+                log::debug!(
+                    "Icon cache deleted (old key): id={}, file={}",
+                    item.id,
+                    old_name
+                );
+                let _ = fs::remove_file(&old_path);
+            }
+        }
         let path = self.cache_path(item);
         if path.exists() {
             log::debug!("Icon cache deleted: id={}", item.id);
@@ -95,6 +119,14 @@ impl IconCache {
         }
 
         if success {
+            let file_name = cache_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            self.item_keys
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(item.id.clone(), file_name);
             log::info!("Icon saved: {:?}", cache_path);
             Some(cache_path)
         } else {

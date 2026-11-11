@@ -222,6 +222,19 @@ impl ItemManager {
             log::warn!("Item add failed: empty category_id");
             return false;
         }
+        if !self
+            .config
+            .data
+            .categories
+            .iter()
+            .any(|c| c.id == item.category_id)
+        {
+            log::warn!(
+                "Item add failed: category_id {} not found",
+                item.category_id
+            );
+            return false;
+        }
         if item.id.is_empty() {
             item.id = crate::model::generate_id("item");
         }
@@ -257,6 +270,16 @@ impl ItemManager {
     }
 
     pub fn move_item(&mut self, item_id: &str, category_id: &str) -> bool {
+        if !self
+            .config
+            .data
+            .categories
+            .iter()
+            .any(|c| c.id == category_id)
+        {
+            log::warn!("Item move failed: category_id {} not found", category_id);
+            return false;
+        }
         if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item_id) {
             i.category_id = category_id.to_string();
             self.modified = true;
@@ -508,6 +531,11 @@ mod tests {
     #[test]
     fn test_add_update_delete_item() {
         let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
         assert!(m.add_item(make_item("i1", "One", "c1")));
         assert!(m.is_modified());
         assert_eq!(m.config.data.items.len(), 1);
@@ -560,6 +588,16 @@ mod tests {
     #[test]
     fn test_move_item() {
         let mut m = make_manager(vec![make_item("i1", "A", "c1")]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
         assert!(m.move_item("i1", "c2"));
         assert_eq!(m.config.data.items[0].category_id, "c2");
         assert!(!m.move_item("nope", "c2"));
@@ -590,6 +628,11 @@ mod tests {
     #[test]
     fn test_handle_drop_adds_items() {
         let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
         let paths = vec![std::path::PathBuf::from("C:\\Tools\\foo.exe")];
         let n = m.handle_drop(&paths, "c1");
         assert_eq!(n, 1);

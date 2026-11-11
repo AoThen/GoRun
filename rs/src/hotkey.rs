@@ -181,9 +181,12 @@ impl HotkeyManager {
                     };
                     use windows::Win32::UI::WindowsAndMessaging::{
                         DispatchMessageW, MsgWaitForMultipleObjects, PeekMessageW, QS_ALLINPUT,
-                        MSG, PM_REMOVE, WM_HOTKEY,
+                        MSG, PM_NOREMOVE, PM_REMOVE, WM_HOTKEY,
                     };
 
+                    let mut msg: MSG = std::mem::zeroed();
+                    // 确保注册线程拥有消息队列（P0 防御：RegisterHotKey 要求线程有消息队列）
+                    let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
                     let ok = RegisterHotKey(
                         None,
                         hotkey_id as i32,
@@ -196,7 +199,6 @@ impl HotkeyManager {
                         return;
                     }
 
-                    let mut msg: MSG = std::mem::zeroed();
                     loop {
                         if kill_rx.try_recv().is_ok() {
                             log::info!("HotkeyManager: message pump thread received kill signal");

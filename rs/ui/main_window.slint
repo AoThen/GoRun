@@ -79,7 +79,6 @@ export component MainWindow inherits Window {
     changed is-dark-theme => { Theme.set-dark(root.is-dark-theme); }
     in-out property <bool> is-icon-view: true;
     in-out property <string> status-text: "Ready";
-    in-out property <bool> drop-active: false;
 
     in-out property <bool> context-menu-visible: false;
 
@@ -118,7 +117,7 @@ toggle-theme => {
 }
 
     Rectangle {
-        background: root.drop-active ? Theme.drop-highlight : Theme.bg-primary;
+        background: Theme.bg-primary;
 
         // Background click catcher (bottom layer)
         TouchArea {

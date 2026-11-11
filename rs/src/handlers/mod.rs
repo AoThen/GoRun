@@ -740,6 +740,10 @@ pub fn wire_handler(
                                 });
                             }
 
+                            // P0：打开新对话框前关闭旧实例，避免多实例并存导致状态跟踪不一致
+                            if let Some(old) = state.edit_dialog.take() {
+                                let _ = old.hide();
+                            }
                             state.edit_dialog = Some(dialog);
 
                             if let Err(e) = state
