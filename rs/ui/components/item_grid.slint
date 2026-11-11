@@ -19,10 +19,13 @@ export component ItemGrid {
     in property <int> selected-index: 0;
 
     ListView {
+        id: list;
         for item[index] in items: ItemTile {
             item: item;
             is-icon-view: root.is-icon-view;
             selected: index == root.selected-index;
+            // 图标视图 80px 网格，列表视图拉伸到 ListView 宽度（修复名称被 elide）
+            width: root.is-icon-view ? 80px : list.width;
             clicked => { root.item-tile-clicked(index); }
             right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
         }

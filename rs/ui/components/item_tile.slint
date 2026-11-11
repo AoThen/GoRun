@@ -18,8 +18,6 @@ export component ItemTile {
     in property <bool> selected: false;
 
     height: root.is-icon-view ? 90px : 36px;
-    // 列表视图下由 ListView 拉伸到容器宽度（auto），避免名称被 elide 不可见
-    width: root.is-icon-view ? 80px : auto;
 
     TouchArea {
         clicked => { root.clicked(); }
