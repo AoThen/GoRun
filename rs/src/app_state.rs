@@ -46,10 +46,10 @@ mod tests {
     use super::*;
     use crate::model::AppConfig;
 
-    fn make_state(path: String) -> AppState {
+    fn make_state(path: &str) -> AppState {
         AppState {
             manager: ItemManager::new(AppConfig::default()),
-            storage: Storage::new(path),
+            storage: Storage::new(path.to_string()),
             icon_cache: IconCache::new(),
             current_category_id: String::new(),
             search_query: String::new(),
@@ -66,7 +66,7 @@ mod tests {
             .to_str()
             .unwrap()
             .to_string();
-        let mut state = make_state(ok);
+        let mut state = make_state(&ok);
         assert!(!state.manager.is_modified());
         assert!(state.save_if_modified());
         assert!(!state.save_fail_notified);
@@ -80,7 +80,7 @@ mod tests {
             .to_str()
             .unwrap()
             .to_string();
-        let mut state = make_state(ok);
+        let mut state = make_state(&ok);
         state.save_fail_notified = true;
         let _ = state.manager.config_mut();
         assert!(state.manager.is_modified());
@@ -96,7 +96,7 @@ mod tests {
         let blocker = std::env::temp_dir().join(format!("gorun_block_{}.txt", std::process::id()));
         std::fs::write(&blocker, b"x").unwrap();
         let fail_path = format!("{}/config.json", blocker.to_str().unwrap());
-        let mut state = make_state(fail_path);
+        let mut state = make_state(&fail_path);
         let _ = state.manager.config_mut();
         assert!(state.manager.is_modified());
         assert!(!state.save_if_modified());
