@@ -471,11 +471,15 @@ impl Storage {
                 log::info!("Trying to load from backup: {}", backup_path);
                 let backup_storage = Storage::new(backup_path.clone());
                 if let Some(config) = backup_storage.load() {
-                    // P1-05：已签名（含 config_integrity）但校验不通过的备份视为被篡改，
-                    // 跳过继续尝试下一个；未签名的旧版/迁移配置仍按最佳恢复处理（恢复即重签）。
-                    if config.extra_config.contains_key("config_integrity")
-                        && !verify_integrity(&config)
-                    {
+                    // P1-05：仅当备份"声称是 gorun-rs 签名配置"（带 generated_by 标记）
+                    // 但完整性校验不通过时才视为被篡改并跳过；未签名的旧版/迁移配置
+                    // 仍按最佳恢复处理（恢复时由 save 重新签名），避免破坏既有恢复路径。
+                    let is_signed = config
+                        .extra_config
+                        .get("generated_by")
+                        .map(|v| v == "gorun-rs")
+                        .unwrap_or(false);
+                    if is_signed && !verify_integrity(&config) {
                         log::warn!("Backup {} failed integrity check, trying next", backup_path);
                         continue;
                     }
