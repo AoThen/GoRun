@@ -144,6 +144,9 @@ struct RawItem {
     working_dir: String,
     #[serde(rename = "iconPath", default)]
     icon_path: String,
+    /// 自动提取图标的缓存路径（P0）：重启后据此恢复图标。
+    #[serde(rename = "cachedIcon", default)]
+    cached_icon: String,
     #[serde(rename = "iconIndex", default)]
     icon_index: i32,
     #[serde(rename = "runAsAdmin", default)]
@@ -285,6 +288,7 @@ impl Storage {
                 arguments: i.arguments,
                 working_dir: i.working_dir,
                 icon_path: i.icon_path,
+                cached_icon: i.cached_icon,
                 icon_index: i.icon_index.max(0),
                 run_as_admin: i.run_as_admin,
                 run_count: i.run_count.max(0),
@@ -348,6 +352,7 @@ impl Storage {
                     arguments: i.arguments.clone(),
                     working_dir: i.working_dir.clone(),
                     icon_path: i.icon_path.clone(),
+                    cached_icon: i.cached_icon.clone(),
                     icon_index: i.icon_index,
                     run_as_admin: i.run_as_admin,
                     run_count: i.run_count,
@@ -684,6 +689,55 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(v["config"]["windowWidth"], "800");
         assert_eq!(v["config"]["language"], "en-US");
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_cached_icon_roundtrip() {
+        // P0：自动提取的图标缓存路径必须落盘（cachedIcon），否则重启后图标丢失
+        let path = std::env::temp_dir().join(format!(
+            "gorun_cached_icon_{}.json",
+            std::process::id()
+        ));
+        let path_str = path.to_str().unwrap().to_string();
+        let mut config = AppConfig::default();
+        config.data.items.push(Item {
+            id: "item_a".into(),
+            name: "A".into(),
+            target: "C:\\a.exe".into(),
+            cached_icon: "C:\\GoRun\\icons\\deadbeef.png".into(),
+            ..Default::default()
+        });
+
+        let storage = Storage::new(path_str.clone());
+        assert!(storage.save(&config));
+
+        let content = fs::read_to_string(&path).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(
+            v["items"][0]["cachedIcon"], "C:\\GoRun\\icons\\deadbeef.png",
+            "cachedIcon 应写入 JSON"
+        );
+
+        let loaded = storage.load().unwrap();
+        assert_eq!(loaded.data.items[0].cached_icon, "C:\\GoRun\\icons\\deadbeef.png");
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_missing_cached_icon_defaults_empty() {
+        // 旧配置（无 cachedIcon）应能加载，字段回落为空串
+        let path = std::env::temp_dir().join(format!(
+            "gorun_legacy_no_cached_{}.json",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            r#"{"version":"1.0.0","categories":[],"items":[{"id":"i","name":"n","target":"t"}],"config":{}}"#,
+        )
+        .unwrap();
+        let loaded = Storage::new(path.to_str().unwrap().to_string()).load().unwrap();
+        assert!(loaded.data.items[0].cached_icon.is_empty());
         let _ = fs::remove_file(&path);
     }
 }

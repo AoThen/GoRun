@@ -65,6 +65,7 @@ mod tests {
             arguments: "--bar".to_string(),
             working_dir: "C:\\".to_string(),
             icon_path: "C:\\icon.ico".to_string(),
+            cached_icon: String::new(),
             icon_index: 2,
             run_as_admin: true,
             run_count: 7,

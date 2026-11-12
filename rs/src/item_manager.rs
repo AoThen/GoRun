@@ -336,6 +336,24 @@ impl ItemManager {
         }
     }
 
+    /// 记录自动提取图标的缓存路径（P0：跨进程恢复图标的唯一依据）。
+    /// 返回值表示是否变化，避免无谓置位 modified / 重复落盘。
+    pub fn set_cached_icon(&mut self, item_id: &str, path: &str) -> bool {
+        if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item_id) {
+            if i.cached_icon != path {
+                i.cached_icon = path.to_string();
+                self.modified = true;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 清空缓存路径（图标源变更/缓存失效时调用），返回是否变化。
+    pub fn clear_cached_icon(&mut self, item_id: &str) -> bool {
+        self.set_cached_icon(item_id, "")
+    }
+
     pub fn is_modified(&self) -> bool {
         self.modified
     }
@@ -770,5 +788,33 @@ mod tests {
         // 非汉字原样
         assert_eq!(pinyin_initial("Abc"), "abc");
         assert_eq!(pinyin_full("Abc"), "abc");
+    }
+
+    #[test]
+    fn test_set_cached_icon_persists_state() {
+        // P0：自动提取的图标缓存路径必须写回项目并置位 modified（触发落盘）
+        let mut m = make_manager(vec![make_item("a", "Alpha", "c1")]);
+        assert!(m.config.data.items[0].cached_icon.is_empty());
+        m.reset_modified();
+
+        assert!(m.set_cached_icon("a", "/icons/abc.png"));
+        assert_eq!(m.config.data.items[0].cached_icon, "/icons/abc.png");
+        assert!(m.is_modified());
+
+        // 同值重复设置不置位 modified（避免无谓落盘）
+        m.reset_modified();
+        assert!(!m.set_cached_icon("a", "/icons/abc.png"));
+        assert!(!m.is_modified());
+
+        // 未知 id 不产生变化
+        assert!(!m.set_cached_icon("nope", "/x.png"));
+    }
+
+    #[test]
+    fn test_clear_cached_icon() {
+        let mut m = make_manager(vec![make_item("a", "Alpha", "c1")]);
+        m.set_cached_icon("a", "/icons/abc.png");
+        assert!(m.clear_cached_icon("a"));
+        assert!(m.config.data.items[0].cached_icon.is_empty());
     }
 }

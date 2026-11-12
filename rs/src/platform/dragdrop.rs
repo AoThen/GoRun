@@ -9,7 +9,7 @@ use super::DropMessage;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
-    DefSubclassProc, DragAcceptFiles, DragFinish, DragQueryFileW, HDROP,
+    DefSubclassProc, DragAcceptFiles, DragFinish, DragQueryFileW, HDROP, RemoveWindowSubclass,
 };
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{WM_DROPFILES};
@@ -59,6 +59,8 @@ pub fn setup_dragdrop(hwnd: isize, sender_ptr: usize) {
 
     unsafe {
         let hwnd = HWND(hwnd);
+        // 已装过则先摘除，避免重复子类化叠加（幂等）。
+        let _ = RemoveWindowSubclass(hwnd, Some(subclass_proc), 0);
         DragAcceptFiles(hwnd, true);
         let ok = SetWindowSubclass(hwnd, Some(subclass_proc), 0, sender_ptr);
         if ok.as_bool() {

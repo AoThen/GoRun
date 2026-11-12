@@ -268,6 +268,7 @@ cargo test
 **缓存策略**（Rust 主线）：
 - 添加项目时自动提取图标并缓存
 - 文件命名格式：FNV-1a64 哈希十六进制 `.png`（键 = item id + iconPath + iconIndex + target，编辑图标/目标自动失效）
+- **缓存路径持久化**：提取成功后写入 `item.cachedIcon` 并落盘；启动时据此恢复图标（`item_keys` 仅为内存映射，进程重启即失效）
 - 删除项目/删除分类时同步删除缓存图标
 - C++ 冻结版命名为 `<item_id>.png`
 
@@ -293,6 +294,7 @@ cargo test
             "arguments": "",
             "workingDir": "",
             "iconPath": "",
+            "cachedIcon": "",
             "iconIndex": 0,
             "runAsAdmin": false,
             "runCount": 0,

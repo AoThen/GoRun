@@ -49,6 +49,20 @@ impl IconCache {
         self.cache_dir.join(format!("{:x}.png", hash))
     }
 
+    /// 由已落盘的 `item.cached_icon` 恢复图标（进程重启后 item_keys 为空，
+    /// 无法靠内存映射清理旧文件，故只校验文件存在）。
+    pub fn restored_icon_path(&self, item: &Item) -> Option<PathBuf> {
+        if item.cached_icon.is_empty() {
+            return None;
+        }
+        let path = PathBuf::from(&item.cached_icon);
+        if path.is_file() {
+            Some(path)
+        } else {
+            None
+        }
+    }
+
     pub fn get_icon_path(&self, item: &Item) -> Option<PathBuf> {
         let path = self.cache_path(item);
         if path.exists() {

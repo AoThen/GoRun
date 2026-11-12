@@ -8,6 +8,23 @@ use crate::MainWindow;
 use slint::ComponentHandle;
 
 pub fn save_window_geometry(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
+    save_window_geometry_with(ui, state, false)
+}
+
+/// 立即落盘窗口几何（close/退出路径用，跳过去抖）。
+pub fn flush_window_geometry(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
+    save_window_geometry_with(ui, state, true)
+}
+
+/// 去抖窗口（几何变化后多久才写盘）。拖动/缩放期间每 500ms 只更新内存，
+/// 停下超过该时长才落盘，避免高频 I/O 冲掉备份链里的数据快照。
+pub const GEOMETRY_SAVE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(2000);
+
+fn save_window_geometry_with(
+    ui: &MainWindow,
+    state: &Rc<RefCell<AppState>>,
+    force: bool,
+) {
     // 必须在事件循环内/窗口销毁前调用；position()/size() 返回物理像素（与 C++ GetWindowRect 一致）
     let pos = ui.window().position();
     // P2-04：最小化时 GetWindowRect 返回约 (-32000,-32000)，直接落盘会污染配置。
@@ -34,10 +51,10 @@ pub fn save_window_geometry(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
     cfg.window_y = pos.y;
     cfg.window_width = w;
     cfg.window_height = h;
-    if state.storage.save(state.manager.config()) {
-        state.manager.reset_modified();
-    } else {
-        log::warn!("Failed to save window geometry (will retry on next change)");
+    state.geometry_dirty = true;
+    state.last_geometry_change = Some(std::time::Instant::now());
+    if force {
+        state.flush_geometry();
     }
 }
 

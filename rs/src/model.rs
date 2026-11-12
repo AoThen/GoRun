@@ -41,6 +41,11 @@ pub struct Item {
     pub working_dir: String,
     #[serde(default)]
     pub icon_path: String,
+    /// 自动提取图标的缓存 PNG 绝对路径。与 `icon_path`（用户自定义图标源）区分：
+    /// `icon_path` 为空时图标由 target 提取，缓存路径必须落盘才能跨进程恢复，
+    /// 否则重启后自动提取的图标全部空白。
+    #[serde(default)]
+    pub cached_icon: String,
     #[serde(default)]
     pub icon_index: i32,
     #[serde(default)]

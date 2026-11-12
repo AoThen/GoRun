@@ -41,6 +41,11 @@ impl Localization {
         }
     }
 
+    /// 取键对应文案；缺失时回退为键本身（便于发现漏翻译）。
+    ///
+    /// 注意：返回值同时借用 `self` 与 `key`，因此 `key` 为临时值时需先绑定局部变量
+    /// 或直接 `.to_string()`。若要放开该限制，应改为返回 `Cow<'a, str>`，
+    /// 但那会波及全部调用点，暂不采用。
     pub fn tr<'a>(&'a self, key: &'a str) -> &'a str {
         self.strings.get(key).map(|s| s.as_str()).unwrap_or(key)
     }

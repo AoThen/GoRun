@@ -12,7 +12,12 @@ use crate::util;
 use crate::{CategoryModel, EditDialog, ItemModel, MainWindow};
 use slint::ComponentHandle;
 
-pub fn spawn_icon_refresh(ui: &MainWindow, icon_cache: IconCache, items: Vec<Item>) {
+pub fn spawn_icon_refresh(
+    ui: &MainWindow,
+    icon_cache: IconCache,
+    items: Vec<Item>,
+    pending_icon_paths: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+) {
     if items.is_empty() {
         return;
     }
@@ -32,6 +37,13 @@ pub fn spawn_icon_refresh(ui: &MainWindow, icon_cache: IconCache, items: Vec<Ite
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(ui) = weak.upgrade() {
                 use slint::Model;
+                // P0：先在事件循环线程登记缓存路径（供 Timer 回写并落盘），
+                // 否则进程重启后图标无从恢复（item_keys 只是内存映射）。
+                if let Ok(mut queue) = pending_icon_paths.lock() {
+                    for (id, path) in &updates {
+                        queue.insert(id.clone(), path.clone());
+                    }
+                }
                 let model = ui.get_items();
                 // 构建 id -> path 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新。
                 let id_to_path: std::collections::HashMap<&str, &str> = updates
@@ -53,6 +65,34 @@ pub fn spawn_icon_refresh(ui: &MainWindow, icon_cache: IconCache, items: Vec<Ite
         })
         .ok();
     });
+}
+
+/// 把后台提取出的图标缓存路径回写到项目模型并落盘（P0）。
+/// 必须调用方持有主线程状态；提取线程只负责产出路径，写模型留在事件循环内。
+pub fn persist_cached_icons(
+    slot: &std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+    state: &Rc<RefCell<AppState>>,
+) {
+    let updates: Vec<(String, String)> = {
+        let mut map = match slot.lock() {
+            Ok(m) => m,
+            Err(e) => e.into_inner(),
+        };
+        if map.is_empty() {
+            return;
+        }
+        map.drain().collect()
+    };
+    let mut st = state.borrow_mut();
+    let mut changed = false;
+    for (item_id, path) in updates {
+        if st.manager.set_cached_icon(&item_id, &path) {
+            changed = true;
+        }
+    }
+    if changed {
+        st.save_if_modified();
+    }
 }
 
 /// 将 RunError 映射为本地化错误文案（P1-4：显示处本地化，替代 runner 内硬编码中文）
@@ -124,8 +164,11 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
     let ui_items: Vec<ItemModel> = items
         .iter()
         .map(|item| {
+            // P0：优先用户自定义图标源 → 已落盘的提取缓存 → 异步提取（并回写缓存路径）
             let icon_path = if !item.icon_path.is_empty() {
                 item.icon_path.clone()
+            } else if let Some(p) = state.icon_cache.restored_icon_path(item) {
+                p.to_string_lossy().to_string()
             } else if let Some(p) = state.icon_cache.get_icon_path(item) {
                 p.to_string_lossy().to_string()
             } else {
@@ -151,7 +194,12 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
     ui.set_items(model.into());
 
     if !pending.is_empty() {
-        spawn_icon_refresh(ui, state.icon_cache.clone(), pending);
+        spawn_icon_refresh(
+            ui,
+            state.icon_cache.clone(),
+            pending,
+            state.pending_icon_paths.clone(),
+        );
     }
 
     let status = util::tr_fill(&state.loc, "Status_Items", &items.len().to_string());

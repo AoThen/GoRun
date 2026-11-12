@@ -79,7 +79,6 @@ pub fn wire_handler(
         log::debug!("Search changed: {}", text);
         let mut state = state_search.borrow_mut();
         state.search_query = text.clone();
-        let cat_id = state.current_category_id.clone();
         drop(state);
         let timer = search_timer.clone();
         let weak = weak_ui_search.clone();
@@ -89,7 +88,17 @@ pub fn wire_handler(
             std::time::Duration::from_millis(300),
             move || {
                 if let Some(ui) = weak.upgrade() {
-                    ui_sync::refresh_items_ui(&ui, &state_cb.borrow(), &cat_id, &text);
+                    // P1-2：回调内重新读取当前分类。若在 300ms 窗口内切换了分类，
+                    // 捕获的旧 cat_id 会把界面刷回旧分类内容。
+                    let (cat_id, query) = {
+                        let st = state_cb.borrow();
+                        (st.current_category_id.clone(), st.search_query.clone())
+                    };
+                    if query != text {
+                        // 期间又输入了新内容，交给更新的一次 Timer 处理
+                        return;
+                    }
+                    ui_sync::refresh_items_ui(&ui, &state_cb.borrow(), &cat_id, &query);
                 }
             },
         );
@@ -234,24 +243,39 @@ pub fn wire_handler(
         let state = state_refresh.borrow();
         let items = state.manager.items(&state.current_category_id);
         let icon_cache = state.icon_cache.clone();
+        let pending = state.pending_icon_paths.clone();
         drop(state);
         if let Some(ui) = weak_ui_refresh.upgrade() {
-            ui_sync::spawn_icon_refresh(&ui, icon_cache, items);
+            ui_sync::spawn_icon_refresh(&ui, icon_cache, items, pending);
         }
     });
 
     // 双击 / 回车（键盘导航）运行指定索引项目
     let state_dbl = state.clone();
     let weak_ui_dbl = ui.as_weak();
-    let last_click: Rc<std::cell::Cell<Option<(i32, std::time::Instant)>>> =
+    // P1-3：以项目 id（而非下标）判定双击 —— 切换分类/搜索后同一下标指向不同项目，
+    // 用下标会把"切分类后点第一项"误判为双击并启动错误程序。
+    let last_click: Rc<std::cell::Cell<Option<(String, std::time::Instant)>>> =
         Rc::new(std::cell::Cell::new(None));
     let weak_ui_sel = weak_ui_dbl.clone();
     let state_sel = state_dbl.clone();
     ui.on_item_tile_clicked(move |index| {
         let now = std::time::Instant::now();
-        let is_double = match last_click.get() {
-            Some((last_idx, last_time))
-                if last_idx == index
+        let clicked_id = {
+            let st = state_dbl.borrow();
+            let items = if st.search_query.is_empty() {
+                st.manager.items(&st.current_category_id)
+            } else {
+                st.manager.search_items(&st.search_query)
+            };
+            match items.get(index as usize) {
+                Some(it) => it.id.clone(),
+                None => return,
+            }
+        };
+        let is_double = match last_click.take() {
+            Some((last_id, last_time))
+                if last_id == clicked_id
                     && now.duration_since(last_time).as_millis() < 500 =>
             {
                 true
@@ -259,11 +283,10 @@ pub fn wire_handler(
             _ => false,
         };
         if is_double {
-            last_click.set(None);
             log::debug!("Item double-clicked: index={}", index);
             ui_sync::run_item_at_index(&weak_ui_dbl, &state_dbl, index);
         } else {
-            last_click.set(Some((index, now)));
+            last_click.set(Some((clicked_id, now)));
         }
     });
 
@@ -296,7 +319,7 @@ pub fn wire_handler(
             slint::SharedString::from(lb.tr("Menu_RunAsAdmin")),
             slint::SharedString::from(lb.tr("Menu_DelItem")),
             slint::SharedString::from(lb.tr("Menu_CopyPath")),
-            slint::SharedString::from(lb.tr("Menu_OpenLocation")),
+            slint::SharedString::from(lb.tr("Menu_OpenLocationFile")),
         ];
         if !searching {
             menu_vec.push(slint::SharedString::from(lb.tr("Menu_MoveUp")));
@@ -694,6 +717,10 @@ pub fn wire_handler(
                                     updated_item.icon_path =
                                         dlg.get_item_icon_path().to_string();
                                     updated_item.icon_index = dlg.get_item_icon_index();
+                                    // P0：图标源（icon_path/icon_index/target）可能已变，
+                                    // 清空旧缓存路径，交由 refresh_items_ui 重新提取并回写，
+                                    // 否则会继续显示编辑前的旧图标。
+                                    updated_item.cached_icon = String::new();
                                     updated_item.keywords = dlg.get_item_keywords().to_string();
                                     updated_item.remark = dlg.get_item_remark().to_string();
                                     updated_item.run_as_admin = dlg.get_run_as_admin();
@@ -855,9 +882,10 @@ pub fn wire_handler(
                     x if x == refresh_idx => {
                         log::info!("Refresh icon: {} ({})", item.name, item.id);
                         let icon_cache = state.icon_cache.clone();
+                        let pending = state.pending_icon_paths.clone();
                         drop(state);
                         if let Some(ui) = weak_ui_menu.upgrade() {
-                            ui_sync::spawn_icon_refresh(&ui, icon_cache, vec![item.clone()]);
+                            ui_sync::spawn_icon_refresh(&ui, icon_cache, vec![item.clone()], pending);
                         }
                     }
                     x if x == props_idx => {
@@ -1225,6 +1253,8 @@ pub fn wire_handler(
             let cat = state.current_category_id.clone();
             drop(state);
             ui_sync::refresh_items_ui(&ui, &state_esc.borrow(), &cat, "");
+            // 隐藏前强制落盘几何：托盘退出等路径不会走 on_close_requested
+            geometry::flush_window_geometry(&ui, &state_esc);
             let _ = ui.hide();
         }
     });

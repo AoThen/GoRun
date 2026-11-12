@@ -1,36 +1,25 @@
-#![allow(non_snake_case)]
 
-mod clipboard;
-mod config;
-mod fileops;
-mod hotkey;
-mod icon_cache;
-mod item_manager;
-mod localization;
-mod logger;
-mod model;
-mod platform;
-mod runner;
-mod storage;
-mod tray;
-mod util;
-mod app_state;
-mod drop_handler;
-mod geometry;
-mod tray_ui;
-mod ui_sync;
-mod handlers;
+//! GoRun 可执行入口。
+//!
+//! 所有实现都在 lib（`GoRun` crate）内，这里只做模块转导出 + `main`。
+//! 这样集成测试（`tests/`）测的就是真实运行的那一份代码，
+//! 避免 bin/lib 各自 `include!` Slint 生成代码导致 MainWindow 变成两个不同类型。
+
+pub use GoRun::{
+    app_state, clipboard, config, drop_handler, fileops, geometry, handlers, hotkey, icon_cache,
+    item_manager, localization, logger, model, platform, runner, storage, tray, tray_ui, ui_sync,
+    util, CategoryModel, EditDialog, ItemModel, MainWindow,
+};
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use app_state::AppState;
-use item_manager::ItemManager;
-use localization::Localization;
-use model::{AppConfig, Category, ViewType};
-use storage::Storage;
 
-include!(env!("SLINT_INCLUDE_GENERATED"));
-include!(env!("SLINT_INCLUDE_GENERATED_EDIT_DIALOG"));
+use slint::ComponentHandle;
+
+use GoRun::app_state::AppState;
+use GoRun::item_manager::ItemManager;
+use GoRun::model::{AppConfig, Category, ViewType};
+use GoRun::storage::Storage;
 
 fn main() {
     let debug_to_console = std::env::args_os().any(|arg| arg == "--debug");
@@ -213,6 +202,10 @@ fn main() {
         edit_dialog: None,
         loc: loc.clone(),
         save_fail_notified: false,
+        pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        drop_handler: None,
+        geometry_dirty: false,
+        last_geometry_change: None,
     }));
 
     let ui = match MainWindow::new() {
@@ -250,9 +243,9 @@ fn main() {
         let state_close = state.clone();
         let weak_close = ui.as_weak();
         ui.window().on_close_requested(move || {
-            // 关闭=隐藏，隐藏前保存几何
+            // 关闭=隐藏，隐藏前强制落盘几何（去抖不适用于退出路径）
             if let Some(ui) = weak_close.upgrade() {
-                geometry::save_window_geometry(&ui, &state_close);
+                geometry::flush_window_geometry(&ui, &state_close);
             }
             slint::CloseRequestResponse::HideWindow
         });
@@ -273,6 +266,12 @@ fn main() {
             move || {
                 if let Some(ui) = weak_geo.upgrade() {
                     geometry::save_window_geometry(&ui, &state_geo);
+                    // P0：把后台提取到的图标缓存路径回写模型并落盘，
+                    // 否则重启后自动提取的图标全部丢失。
+                    let pending_icons = state_geo.borrow().pending_icon_paths.clone();
+                    ui_sync::persist_cached_icons(&pending_icons, &state_geo);
+                    // P1-5：几何去抖窗口到期才真正写盘
+                    state_geo.borrow_mut().flush_geometry_if_due(false);
                     // P2-05：保存失败一次性状态栏提示（避免静默丢数据）；显示后复位，
                     // 下次新的保存失败会再次置位并提示，不长期覆盖其他状态信息。
                     let notify_fail = state_geo.borrow().save_fail_notified;
@@ -389,7 +388,12 @@ fn main() {
         external_backup_path,
     );
 
-    drop_handler::setup_drop_handler(&ui);
+    // P0：拖放守卫必须存入 AppState 存活到进程结束；
+    // 只把消息接收端交给消费线程。
+    if let Some((guard, rx)) = drop_handler::setup_drop_handler(&ui) {
+        drop_handler::spawn_drop_consumer(ui.as_weak(), rx);
+        state.borrow_mut().drop_handler = Some(guard);
+    }
 
     log::info!("Entering main event loop");
     if let Err(e) = ui.run() {
@@ -398,6 +402,10 @@ fn main() {
     log::info!("Main event loop ended");
 
     let mut state = state.borrow_mut();
+    // 退出前强制落盘几何（去抖窗口可能还没到）
+    state.flush_geometry_if_due(true);
     state.save_if_modified();
+    // 清空拖放子类化（窗口仍在时按序移除，避免回调读到已释放 refdata）
+    state.drop_handler = None;
 }
 
