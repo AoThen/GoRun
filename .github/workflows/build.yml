@@ -20,6 +20,10 @@ on:
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -29,6 +33,13 @@ jobs:
         build_type: [Release, Debug]
         
     steps:
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7
+          keep_minimum_runs: 3
       - name: Checkout repository
         uses: actions/checkout@v4
         
@@ -46,7 +57,7 @@ jobs:
         with:
           name: GoRun-${{ matrix.build_type }}
           path: build/${{ matrix.build_type }}/GoRun.exe
-          retention-days: 30
+          retention-days: 7
 
   run-tests:
     runs-on: windows-latest
