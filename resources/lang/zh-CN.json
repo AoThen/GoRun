@@ -658,6 +658,7 @@
     "Err_Unknown": "未知错误",
 
     "Tray_AutoStart": "开机自启",
+    "Tray_LowResident": "低驻留模式",
     "Tip_InvalidHotkey": "快捷键格式无效，示例：Ctrl+Alt+M",
     "Tip_ItemNotFound": "该项目已不存在，操作已取消",
     "Tip_HotkeyRegisterFail": "快捷键注册失败，可能已被其他程序占用",

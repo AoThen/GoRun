@@ -12,6 +12,7 @@ use slint::ComponentHandle;
 /// 需要主线程访问 AppState 的托盘动作（经 Arc<Mutex> 队列 + 500ms Timer 消费）。
 pub enum TrayUiAction {
     ToggleFollowMouse,
+    ToggleLowResident,
     SetLanguage(String),
 }
 
@@ -74,6 +75,11 @@ pub fn start_tray_handler(
                         q.push(TrayUiAction::ToggleFollowMouse);
                     }
                 }
+                TrayMessage::ToggleLowResident => {
+                    if let Ok(mut q) = tray_ui.lock() {
+                        q.push(TrayUiAction::ToggleLowResident);
+                    }
+                }
                 TrayMessage::SetLanguage(lang) => {
                     if let Ok(mut q) = tray_ui.lock() {
                         q.push(TrayUiAction::SetLanguage(lang));
@@ -118,8 +124,35 @@ pub fn handle_tray_ui_action(
                 .get("language")
                 .cloned()
                 .unwrap_or_else(|| "zh-CN".into());
-            crate::tray::set_ui_state(new, &lang);
+            let low_res = s.low_resident.get();
+            crate::tray::set_ui_state(new, low_res, &lang);
             log::info!("Follow mouse toggled: {}", new);
+        }
+        TrayUiAction::ToggleLowResident => {
+            let mut s = state.borrow_mut();
+            let new = !s.low_resident.get();
+            s.low_resident.set(new);
+            s.manager
+                .config_mut()
+                .extra_config
+                .insert("low_resident".into(), if new { "1".into() } else { "0".into() });
+            s.save_if_modified();
+            let follow = s
+                .manager
+                .config()
+                .extra_config
+                .get("follow_mouse")
+                .map(|v| v == "1")
+                .unwrap_or(false);
+            let lang = s
+                .manager
+                .config()
+                .extra_config
+                .get("language")
+                .cloned()
+                .unwrap_or_else(|| "zh-CN".into());
+            crate::tray::set_ui_state(follow, new, &lang);
+            log::info!("Low resident toggled: {}", new);
         }
         TrayUiAction::SetLanguage(lang) => {
             let mut s = state.borrow_mut();
@@ -135,6 +168,7 @@ pub fn handle_tray_ui_action(
                 .get("follow_mouse")
                 .map(|v| v == "1")
                 .unwrap_or(false);
+            let low_res = s.low_resident.get();
             drop(s);
             // P2：先更新菜单文本（tray().texts）再写 checkmark（tray().lang）。
             // 竞态窗口下用户看到"旧 checkmark + 新文本"，比"新 checkmark + 旧文本"更不易察觉。
@@ -144,7 +178,7 @@ pub fn handle_tray_ui_action(
                 st.loc.clone()
             };
             apply_localized_texts(ui, &new_loc, ui.get_is_dark_theme());
-            crate::tray::set_ui_state(follow, &lang);
+            crate::tray::set_ui_state(follow, low_res, &lang);
             log::info!("Language set to {}", lang);
         }
     }
@@ -182,6 +216,7 @@ pub fn apply_localized_texts(
         show: lb.tr("Tray_ShowHide").to_string(),
         autostart: lb.tr("Tray_AutoStart").to_string(),
         follow_mouse: lb.tr("Menu_FollowMouse").to_string(),
+        low_resident: lb.tr("Tray_LowResident").to_string(),
         exit: lb.tr("Tray_Exit").to_string(),
     });
 }

@@ -654,6 +654,7 @@
     "Err_Unknown": "未知錯誤",
 
     "Tray_AutoStart": "開機自啟",
+    "Tray_LowResident": "低駐留模式",
     "Tip_InvalidHotkey": "快速鍵格式無效，範例：Ctrl+Alt+M",
     "Tip_ItemNotFound": "該項目已不存在，操作已取消",
     "Tip_HotkeyRegisterFail": "快速鍵註冊失敗，可能已被其他程式佔用",

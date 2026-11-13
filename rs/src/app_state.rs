@@ -32,6 +32,8 @@ pub struct AppState {
     pub item_hotkey_mgr: Rc<RefCell<crate::hotkey::ItemHotkeyManager>>,
     /// 条目热键触发通道发送端（item_id），由消费线程收。
     pub item_hotkey_tx: std::sync::mpsc::Sender<String>,
+    /// P3/P5 后台低驻留：true 时窗口隐藏暂停 500ms Timer 非必要工作（可运行时经托盘切换）。
+    pub low_resident: Rc<std::cell::Cell<bool>>,
 }
 
 impl AppState {
@@ -117,6 +119,7 @@ mod tests {
             last_geometry_change: None,
             item_hotkey_mgr: Rc::new(RefCell::new(crate::hotkey::ItemHotkeyManager::new())),
             item_hotkey_tx: ihk_tx,
+            low_resident: Rc::new(std::cell::Cell::new(false)),
         }
     }
 

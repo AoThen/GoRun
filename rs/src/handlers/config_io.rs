@@ -60,7 +60,7 @@ pub fn import_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
             .filter(|(k, _)| {
                 matches!(
                     k.as_str(),
-                    "language" | "follow_mouse" | "auto_hide" | "generated_by"
+                    "language" | "follow_mouse" | "auto_hide" | "generated_by" | "low_resident"
                 )
             })
             .map(|(k, v)| (k.clone(), v.clone()))

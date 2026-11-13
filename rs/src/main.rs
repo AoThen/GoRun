@@ -163,6 +163,12 @@ fn main() {
         .get("auto_hide")
         .map(|v| v == "1")
         .unwrap_or(false);
+    // P3/P5 后台低驻留：窗口隐藏时暂停 500ms 周期 Timer 的非必要工作（仅保留托盘动作消费）
+    let low_resident = app_config
+        .extra_config
+        .get("low_resident")
+        .map(|v| v == "1")
+        .unwrap_or(false);
     // P2-3：提前创建 loc，以便用当前语言重命名首启默认分类
     let loc = Rc::new(RefCell::new(localization::Localization::new(&lang_code)));
     if created_default_cat {
@@ -191,7 +197,7 @@ fn main() {
     let manager = ItemManager::new(app_config);
     let icon_cache = icon_cache::IconCache::new();
     let (tray_icon, rx) = tray::TrayIcon::create(0, "GoRun");
-    tray::set_ui_state(follow_mouse, &lang_code);
+    tray::set_ui_state(follow_mouse, low_resident, &lang_code);
     // 托盘菜单文本由 apply_localized_texts（窗口初始化后、事件循环前）统一设置，
     // 避免重复设置；见 main.rs 的 tray_ui::apply_localized_texts 调用。
     let tray_ui: std::sync::Arc<std::sync::Mutex<Vec<tray_ui::TrayUiAction>>> =
@@ -207,6 +213,8 @@ fn main() {
     // F8/4.1：条目级全局热键管理器 + 触发通道（消费线程在事件循环前启动）
     let item_hotkey_mgr = Rc::new(RefCell::new(hotkey::ItemHotkeyManager::new()));
     let (ihk_tx, ihk_rx) = std::sync::mpsc::channel::<String>();
+    // P3/P5 低驻留：可运行时经托盘切换（Cell 供 Timer 闭包与托盘动作共享）
+    let low_resident_cell = Rc::new(std::cell::Cell::new(low_resident));
 
     let state = Rc::new(RefCell::new(AppState {
         manager,
@@ -223,6 +231,7 @@ fn main() {
         last_geometry_change: None,
         item_hotkey_mgr: item_hotkey_mgr.clone(),
         item_hotkey_tx: ihk_tx,
+        low_resident: low_resident_cell.clone(),
     }));
 
     let ui = match MainWindow::new() {
@@ -282,23 +291,30 @@ fn main() {
             std::time::Duration::from_millis(500),
             move || {
                 if let Some(ui) = weak_geo.upgrade() {
-                    geometry::save_window_geometry(&ui, &state_geo);
-                    // P0：把后台提取到的图标缓存路径回写模型并落盘，
-                    // 否则重启后自动提取的图标全部丢失。
-                    let pending_icons = state_geo.borrow().pending_icon_paths.clone();
-                    ui_sync::persist_cached_icons(&pending_icons, &state_geo);
-                    // P1-5：几何去抖窗口到期才真正写盘
-                    state_geo.borrow_mut().flush_geometry_if_due(false);
-                    // P2-05：保存失败一次性状态栏提示（避免静默丢数据）；显示后复位，
-                    // 下次新的保存失败会再次置位并提示，不长期覆盖其他状态信息。
-                    let notify_fail = state_geo.borrow().save_fail_notified;
-                    if notify_fail {
-                        // 先克隆 loc 再取文案，避免 Ref 临时值在尾表达式处被借用检查器
-                        // 认为与外层 borrow 重叠（E0597）
-                        let loc_ref = state_geo.borrow().loc.clone();
-                        let msg = loc_ref.borrow().tr("Status_SaveFailed").to_string();
-                        ui.set_status_text(msg.into());
-                        state_geo.borrow_mut().save_fail_notified = false;
+                    // P3/P5 低驻留：窗口隐藏时跳过几何/图标/保存（省 CPU），
+                    // 仅保留托盘动作消费（托盘 SetLanguage/FollowMouse 依赖本 Timer）。
+                    // 运行时读 state.low_resident（托盘开关可实时切换）。
+                    let resident_active =
+                        state_geo.borrow().low_resident.get() && !ui.window().is_visible();
+                    if !resident_active {
+                        geometry::save_window_geometry(&ui, &state_geo);
+                        // P0：把后台提取到的图标缓存路径回写模型并落盘，
+                        // 否则重启后自动提取的图标全部丢失。
+                        let pending_icons = state_geo.borrow().pending_icon_paths.clone();
+                        ui_sync::persist_cached_icons(&pending_icons, &state_geo);
+                        // P1-5：几何去抖窗口到期才真正写盘
+                        state_geo.borrow_mut().flush_geometry_if_due(false);
+                        // P2-05：保存失败一次性状态栏提示（避免静默丢数据）；显示后复位，
+                        // 下次新的保存失败会再次置位并提示，不长期覆盖其他状态信息。
+                        let notify_fail = state_geo.borrow().save_fail_notified;
+                        if notify_fail {
+                            // 先克隆 loc 再取文案，避免 Ref 临时值在尾表达式处被借用检查器
+                            // 认为与外层 borrow 重叠（E0597）
+                            let loc_ref = state_geo.borrow().loc.clone();
+                            let msg = loc_ref.borrow().tr("Status_SaveFailed").to_string();
+                            ui.set_status_text(msg.into());
+                            state_geo.borrow_mut().save_fail_notified = false;
+                        }
                     }
                     let actions: Vec<tray_ui::TrayUiAction> = tray_ui
                         .lock()
