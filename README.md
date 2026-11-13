@@ -12,25 +12,30 @@
 
 ## 已实现功能
 
+> 主线为 `rs/`（Rust + Slint）；`src/`（C++ + ImGui）冻结为维护模式。
+
 ### 核心功能
-- 窗口框架（DirectX 11 + ImGui）
+- 窗口框架（Slint 原生渲染，无 WebView/Electron）
 - 拖放添加文件/快捷方式
-- 分类管理（创建、编辑、删除）
-- 项目管理（添加、编辑、删除、拖拽排序）
+- 分类管理（创建、编辑、删除；右键上移/下移排序）
+- 项目管理（添加、编辑、删除；右键上移/下移排序、移动到分类）
 - 双击运行 / 管理员运行
-- 全局快捷键唤醒/隐藏主窗口
-- 托盘图标
+- 全局快捷键唤醒/隐藏主窗口（默认 Ctrl+Alt+M）
+- 托盘图标（显示/隐藏、开机自启、跟随鼠标、语言切换）
 
 ### 数据管理
-- JSON 格式存储配置和数据
-- 图标缓存系统
-- 配置持久化（窗口位置、大小等）
+- JSON 格式存储配置和数据（便携优先，回退系统数据目录）
+- 图标缓存系统（FNV-1a64 哈希命名，编辑自动失效）
+- 配置持久化（窗口位置、大小、主题、语言、跟随鼠标等）
+- 完整性校验（HMAC-SHA256，隔离外部/被篡改配置）
 
 ### UI 组件
-- 分类标签栏
-- 项目网格视图
+- 分类侧边栏
+- 项目网格/列表视图切换
 - 编辑对话框
-- 主题系统基础框架
+- 主题系统（深色/浅色）
+- 搜索（子串 + 拼音首字母/全拼，按使用次数排序）
+- 多语言（简体中文 / 繁体中文 / 英文）
 
 ## 技术栈
 
@@ -57,29 +62,42 @@
 
 ## 构建
 
+> 主线构建（`rs/`，Rust）。C++ 冻结版构建详见 `CMakeLists.txt` 与 `AGENTS.md`。
+
 ### 环境要求
 
-- Visual Studio 2019+ 或 MSVC Build Tools
-- CMake 3.16+
+- Rust 1.92+（MSRV 由依赖链决定：slint 1.17 及 backend 依赖要求 rustc 1.92）
+- Cargo
+- Windows SDK（for windows crate）
 
 ### 构建步骤
 
 ```bash
-# 生成项目文件
-cmake -B build -A x64
+cd rs
 
-# 编译
-cmake --build build --config Release
+# Debug 构建
+cargo build
+
+# Release 构建
+cargo build --release
+
+# 运行单元测试
+cargo test --lib
+
+# 运行 GUI 集成测试（需要 xvfb 或显示服务器）
+cargo test
 ```
 
 ### 依赖项
 
-项目使用 CMake FetchContent 自动下载以下依赖：
-
 | 依赖 | 版本 | 用途 |
 |-----|------|------|
-| ImGui | docking 分支 | UI 框架 |
-| nlohmann/json | v3.11.2 | JSON 解析 |
+| slint | 1.7+ | UI 框架 |
+| serde / serde_json | 1.x | JSON 序列化 |
+| dirs | 5.x | 系统目录 |
+| image | 0.25 | 图标处理 |
+| pinyin | 0.10 | 中文拼音搜索 |
+| windows | 0.57 | Windows API（仅 Windows 目标） |
 
 ## 项目结构
 
