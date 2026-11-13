@@ -623,6 +623,8 @@
     "Tip_TargetEmpty": "目標路徑不能為空",
     "Menu_Language": "語言",
     "Menu_FollowMouse": "視窗跟隨滑鼠彈出",
+    "Menu_ExportConfig": "匯出設定",
+    "Menu_ImportConfig": "匯入設定",
     "Menu_CopyPath": "複製路徑",
     "Menu_MoveToCategory": "移動到分類",
     "Menu_Properties": "屬性",

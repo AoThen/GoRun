@@ -319,88 +319,93 @@ impl Storage {
         })
     }
 
+/// 把内存配置序列化为导出/落盘用的 RawFile（重编号 sortOrder，写完整性值）。
+fn build_raw(app_config: &AppConfig) -> RawFile {
+    let raw_categories: Vec<RawCategory> = app_config
+        .data
+        .categories
+        .iter()
+        .enumerate()
+        .map(|(idx, c)| RawCategory {
+            id: c.id.clone(),
+            name: c.name.clone(),
+            sort_order: idx as i32,
+            view_type: c.view_type.clone() as i32,
+            icon_size: c.icon_size,
+        })
+        .collect();
+
+    let mut cat_counters: HashMap<&str, i32> = HashMap::new();
+    let raw_items: Vec<RawItem> = app_config
+        .data
+        .items
+        .iter()
+        .map(|i| {
+            let so = cat_counters.entry(i.category_id.as_str()).or_insert(0);
+            let cur = *so;
+            *so += 1;
+            RawItem {
+                id: i.id.clone(),
+                name: i.name.clone(),
+                target: i.target.clone(),
+                arguments: i.arguments.clone(),
+                working_dir: i.working_dir.clone(),
+                icon_path: i.icon_path.clone(),
+                cached_icon: i.cached_icon.clone(),
+                icon_index: i.icon_index,
+                run_as_admin: i.run_as_admin,
+                run_count: i.run_count,
+                keywords: i.keywords.clone(),
+                remark: i.remark.clone(),
+                category_id: i.category_id.clone(),
+                sort_order: cur,
+            }
+        })
+        .collect();
+
+    let mut extra = HashMap::new();
+    // 此剔除列表必须与 RawConfig 显式字段集合保持同步，否则 serde flatten 会输出重复键
+    for (k, v) in &app_config.extra_config {
+        if matches!(
+            k.as_str(),
+            "globalHotkey"
+                | "windowX"
+                | "windowY"
+                | "windowWidth"
+                | "windowHeight"
+                | "config_integrity"
+        ) {
+            continue;
+        }
+        extra.insert(k.clone(), serde_json::Value::String(v.clone()));
+    }
+    // P0-2：落盘前写入当前配置内容的完整性值，旧值/外部篡改在启动校验时被发现
+    extra.insert(
+        "config_integrity".to_string(),
+        serde_json::Value::String(compute_integrity(app_config)),
+    );
+
+    let raw_config = RawConfig {
+        global_hotkey: app_config.config.global_hotkey.clone(),
+        window_x: app_config.config.window_x,
+        window_y: app_config.config.window_y,
+        window_width: app_config.config.window_width,
+        window_height: app_config.config.window_height,
+        extra,
+    };
+
+    RawFile {
+        version: app_config.version.clone(),
+        categories: raw_categories,
+        items: raw_items,
+        config: raw_config,
+    }
+}
+
     pub fn save(&self, app_config: &AppConfig) -> bool {
         // P2-03：保存前按数组顺序重编号 sortOrder（0..n-1 / 分类内 0..m-1），
         // 保证写回的 JSON 数组序 ≡ sortOrder 序，与 C++ 渲染端排序语义恒一致。
-        let raw_categories: Vec<RawCategory> = app_config
-            .data
-            .categories
-            .iter()
-            .enumerate()
-            .map(|(idx, c)| RawCategory {
-                id: c.id.clone(),
-                name: c.name.clone(),
-                sort_order: idx as i32,
-                view_type: c.view_type.clone() as i32,
-                icon_size: c.icon_size,
-            })
-            .collect();
-
-        let mut cat_counters: HashMap<&str, i32> = HashMap::new();
-        let raw_items: Vec<RawItem> = app_config
-            .data
-            .items
-            .iter()
-            .map(|i| {
-                let so = cat_counters.entry(i.category_id.as_str()).or_insert(0);
-                let cur = *so;
-                *so += 1;
-                RawItem {
-                    id: i.id.clone(),
-                    name: i.name.clone(),
-                    target: i.target.clone(),
-                    arguments: i.arguments.clone(),
-                    working_dir: i.working_dir.clone(),
-                    icon_path: i.icon_path.clone(),
-                    cached_icon: i.cached_icon.clone(),
-                    icon_index: i.icon_index,
-                    run_as_admin: i.run_as_admin,
-                    run_count: i.run_count,
-                    keywords: i.keywords.clone(),
-                    remark: i.remark.clone(),
-                    category_id: i.category_id.clone(),
-                    sort_order: cur,
-                }
-            })
-            .collect();
-
-        let mut extra = HashMap::new();
-        // 此剔除列表必须与 RawConfig 显式字段集合保持同步，否则 serde flatten 会输出重复键
-        for (k, v) in &app_config.extra_config {
-            if matches!(
-                k.as_str(),
-                "globalHotkey"
-                    | "windowX"
-                    | "windowY"
-                    | "windowWidth"
-                    | "windowHeight"
-                    | "config_integrity"
-            ) {
-                continue;
-            }
-            extra.insert(k.clone(), serde_json::Value::String(v.clone()));
-        }
-        // P0-2：落盘前写入当前配置内容的完整性值，旧值/外部篡改在启动校验时被发现
-        extra.insert(
-            "config_integrity".to_string(),
-            serde_json::Value::String(compute_integrity(app_config)),
-        );
-
-        let raw_config = RawConfig {
-            global_hotkey: app_config.config.global_hotkey.clone(),
-            window_x: app_config.config.window_x,
-            window_y: app_config.config.window_y,
-            window_width: app_config.config.window_width,
-            window_height: app_config.config.window_height,
-            extra,
-        };
-
-        let raw = RawFile {
-            version: app_config.version.clone(),
-            categories: raw_categories,
-            items: raw_items,
-            config: raw_config,
-        };
+        let raw = build_raw(app_config);
 
         let json = match serde_json::to_string(&raw) {
             Ok(s) => s,
@@ -433,6 +438,28 @@ impl Storage {
             return false;
         }
         log::info!("Config saved to: {}", self.path);
+        true
+    }
+
+    /// F8：导出当前配置为 JSON 到指定路径（不自持 self.path，供用户选目标文件）。
+    pub fn export_to(&self, path: &str, app_config: &AppConfig) -> bool {
+        let raw = build_raw(app_config);
+        let json = match serde_json::to_string_pretty(&raw) {
+            Ok(s) => s,
+            Err(_) => {
+                log::error!("Failed to serialize config for export");
+                return false;
+            }
+        };
+        let target = Path::new(path);
+        if let Some(parent) = target.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if fs::write(target, json.as_bytes()).is_err() {
+            log::error!("Failed to write export file: {}", path);
+            return false;
+        }
+        log::info!("Config exported to: {}", path);
         true
     }
 

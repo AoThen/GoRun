@@ -44,6 +44,49 @@ pub fn browse_file_dialog(_title: &str, _filter: &str) -> Option<String> {
     None
 }
 
+/// 系统保存文件对话框。取消或非 Windows 平台返回 None。
+#[cfg(windows)]
+pub fn save_file_dialog(title: &str, filter: &str) -> Option<String> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Controls::Dialogs::{
+        GetSaveFileNameW, OPENFILENAMEW, OFN_EXPLORER, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST,
+    };
+    use windows::core::{PCWSTR, PWSTR};
+
+    let title_w: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    let filter_w: Vec<u16> = filter.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut file_buf = vec![0u16; 32768];
+    let mut ofn = OPENFILENAMEW {
+        lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
+        hwndOwner: HWND::default(),
+        lpstrFilter: PCWSTR(filter_w.as_ptr()),
+        lpstrFile: PWSTR(file_buf.as_mut_ptr()),
+        nMaxFile: file_buf.len() as u32,
+        lpstrTitle: PCWSTR(title_w.as_ptr()),
+        Flags: OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_EXPLORER,
+        ..Default::default()
+    };
+    if unsafe { GetSaveFileNameW(&mut ofn).as_bool() } {
+        let len = file_buf
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(file_buf.len());
+        let path = String::from_utf16_lossy(&file_buf[..len]);
+        if path.is_empty() {
+            None
+        } else {
+            Some(path)
+        }
+    } else {
+        None
+    }
+}
+
+#[cfg(not(windows))]
+pub fn save_file_dialog(_title: &str, _filter: &str) -> Option<String> {
+    None
+}
+
 /// 显示文件属性页（ShellExecuteExW "properties" verb）。
 #[cfg(windows)]
 pub fn show_properties(path: &str) {

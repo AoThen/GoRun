@@ -7,6 +7,7 @@
 
 pub mod dialogs;
 pub mod edit_dialog;
+pub mod config_io;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -548,6 +549,8 @@ pub fn wire_handler(
                     v.push("简体中文".into());
                     v.push("繁體中文".into());
                     v.push("English".into());
+                    v.push(lb.tr("Menu_ExportConfig").into());
+                    v.push(lb.tr("Menu_ImportConfig").into());
                 }
                 4 => {
                     v.push(lb.tr("Menu_About").into());
@@ -673,6 +676,8 @@ pub fn wire_handler(
                     &ui,
                     &state_mbs,
                 ),
+                5 => crate::handlers::config_io::export_config(&ui, &state_mbs),
+                6 => crate::handlers::config_io::import_config(&ui, &state_mbs),
                 _ => {}
             },
             4 => match index {

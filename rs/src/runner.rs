@@ -167,6 +167,46 @@ pub fn resolve_bare_name(target: &str) -> Option<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+/// F8：相对路径 → 绝对路径（基于配置基准目录）。
+/// 仅处理含目录分隔符的相对路径（`.\x`、`bin\x`、`../x`）；纯文件名交给 PATH 解析，
+/// URL 与已绝对路径不处理。解析后需存在才返回（否则 None，保持原样走存在性检查）。
+pub fn resolve_relative(target: &str) -> Option<String> {
+    use std::path::Path;
+    if target.is_empty() || target.contains('%') {
+        return None;
+    }
+    let p = Path::new(target);
+    if p.is_absolute() {
+        return None;
+    }
+    if !target.contains('\\') && !target.contains('/') {
+        return None;
+    }
+    let base = crate::config::base_dir();
+    let joined = normalize_path(&base.join(target));
+    if joined.exists() {
+        Some(joined.to_string_lossy().into_owned())
+    } else {
+        None
+    }
+}
+
+/// 路径规范化：消解 `.` 与 `..`（Windows/Unix 通用，不触碰前缀/根）。
+fn normalize_path(p: &std::path::Path) -> std::path::PathBuf {
+    use std::path::Component;
+    let mut out = std::path::PathBuf::new();
+    for comp in p.components() {
+        match comp {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
 fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
     let base_target = item.target.clone();
     let mut target = expand_search(&expand_pre(&item.target, &base_target), search_param);
@@ -174,6 +214,9 @@ fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
     // P1-7：裸文件名（如 notepad）按 PATH 解析为完整路径，解析失败保持原样走存在性检查
     if !is_url(&target) {
         if let Some(resolved) = resolve_bare_name(&target) {
+            target = resolved;
+        } else if let Some(resolved) = resolve_relative(&target) {
+            // F8：相对路径（含分隔符）基于配置基准目录解析为绝对路径
             target = resolved;
         }
     }

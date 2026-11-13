@@ -627,6 +627,8 @@
     "Tip_TargetEmpty": "目标路径不能为空",
     "Menu_Language": "语言",
     "Menu_FollowMouse": "窗口跟随鼠标弹出",
+    "Menu_ExportConfig": "导出配置",
+    "Menu_ImportConfig": "导入配置",
     "Menu_CopyPath": "复制路径",
     "Menu_MoveToCategory": "移动到分类",
     "Menu_Properties": "属性",

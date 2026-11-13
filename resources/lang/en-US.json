@@ -629,6 +629,8 @@
     "Tip_TargetEmpty": "Target cannot be empty",
     "Menu_Language": "Language",
     "Menu_FollowMouse": "Follow Mouse",
+    "Menu_ExportConfig": "Export Config",
+    "Menu_ImportConfig": "Import Config",
     "Menu_CopyPath": "Copy Path",
     "Menu_MoveToCategory": "Move to Category",
     "Menu_Properties": "Properties",
