@@ -221,6 +221,21 @@ impl ItemManager {
         true
     }
 
+    /// 分类拖拽排序（F2-1）：把 categories 向量中 `from` 位分类移到 `to` 位。
+    pub fn move_category_to_index(&mut self, from: usize, to: usize) -> bool {
+        let cats = &mut self.config.data.categories;
+        let n = cats.len();
+        if from >= n || to >= n || from == to {
+            log::debug!("Category reorder skipped: from={} to={} n={}", from, to, n);
+            return false;
+        }
+        let moved = cats.remove(from);
+        cats.insert(to, moved);
+        self.modified = true;
+        log::info!("Category reordered: from={} to={}", from, to);
+        true
+    }
+
     pub fn add_item(&mut self, mut item: Item) -> bool {
         if item.category_id.is_empty() {
             log::warn!("Item add failed: empty category_id");
@@ -241,6 +256,23 @@ impl ItemManager {
         }
         if item.id.is_empty() {
             item.id = crate::model::generate_id("item");
+        }
+        // 拖放注册幂等（F2-1）：同分类下 target 已存在则跳过，重复拖入同一文件不重复注册。
+        // 仅对非空 target 查重（URL/命令行等 target 为空或重复合法场景不受限）。
+        if !item.target.is_empty()
+            && self
+                .config
+                .data
+                .items
+                .iter()
+                .any(|i| i.category_id == item.category_id && i.target == item.target)
+        {
+            log::info!(
+                "Item add skipped (duplicate target): category={}, target={}",
+                item.category_id,
+                item.target
+            );
+            return false;
         }
         log::info!("Item added: id={}, name={}", item.id, item.name);
         self.config.data.items.push(item);
@@ -302,6 +334,33 @@ impl ItemManager {
     /// 在同一分类内下移一位（与相邻兄弟交换，替代拖拽排序，决策①）。
     pub fn move_item_down(&mut self, item_id: &str) -> bool {
         self.swap_with_sibling(item_id, false)
+    }
+
+    /// 拖拽排序（F2-1）：把分类内显示序列中 `from` 位的项移动到 `to` 位。
+    /// `from`/`to` 均为分类内索引（0..分类项数-1），等价于 UI 网格/列表显示序。
+    /// 仅重排该分类子集，不影响其他分类相对顺序；写回数组槽位（save 时按序重编号 sort_order）。
+    pub fn move_item_to_index(&mut self, category_id: &str, from: usize, to: usize) -> bool {
+        let items = &mut self.config.data.items;
+        let mut positions: Vec<usize> = items
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| i.category_id == category_id)
+            .map(|(idx, _)| idx)
+            .collect();
+        let n = positions.len();
+        if from >= n || to >= n || from == to {
+            log::debug!("Item reorder skipped: from={} to={} n={}", from, to, n);
+            return false;
+        }
+        let mut subset: Vec<Item> = positions.iter().map(|&p| items[p].clone()).collect();
+        let moved = subset.remove(from);
+        subset.insert(to, moved);
+        for (slot, item) in positions.drain(..).zip(subset) {
+            items[slot] = item;
+        }
+        self.modified = true;
+        log::info!("Item reordered in category {}: from={} to={}", category_id, from, to);
+        true
     }
 
     fn swap_with_sibling(&mut self, item_id: &str, up: bool) -> bool {
@@ -569,6 +628,128 @@ mod tests {
         assert!(m.delete_item("i1"));
         assert!(m.config.data.items.is_empty());
         assert!(!m.delete_item("nope"));
+    }
+
+    #[test]
+    fn test_add_item_duplicate_target_same_category_rejected() {
+        // F2-1：同分类同 target 重复注册被拒绝（拖放幂等）
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        assert!(m.add_item(make_item("i1", "One", "c1")));
+        // 同分类同 target → 拒绝，条目数不变
+        assert!(!m.add_item(make_item("i2", "One", "c1")));
+        assert_eq!(m.config.data.items.len(), 1);
+    }
+
+    #[test]
+    fn test_add_item_duplicate_target_different_category_allowed() {
+        // 不同分类同 target → 允许（各分类独立注册）
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
+        assert!(m.add_item(make_item("i1", "One", "c1")));
+        assert!(m.add_item(make_item("i2", "One", "c2")));
+        assert_eq!(m.config.data.items.len(), 2);
+    }
+
+    #[test]
+    fn test_add_item_empty_target_not_deduped() {
+        // 空 target（如纯命令行/URL 占位）不参与查重
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        let mut a = make_item("i1", "A", "c1");
+        a.target = "".into();
+        let mut b = make_item("i2", "B", "c1");
+        b.target = "".into();
+        assert!(m.add_item(a));
+        assert!(m.add_item(b));
+        assert_eq!(m.config.data.items.len(), 2);
+    }
+
+    #[test]
+    fn test_move_item_to_index_reorders_within_category() {
+        // F2-1：分类内拖拽排序——把 0 位移到 2 位，重排该分类子集
+        let mut m = make_manager(vec![
+            make_item("i1", "A", "c1"),
+            make_item("i2", "B", "c1"),
+            make_item("i3", "C", "c1"),
+        ]);
+        assert!(m.move_item_to_index("c1", 0, 2));
+        let ids: Vec<String> = m.config.data.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(ids, vec!["i2", "i3", "i1"]);
+    }
+
+    #[test]
+    fn test_move_item_to_index_reverse() {
+        // 反向：把 2 位移到 0 位
+        let mut m = make_manager(vec![
+            make_item("i1", "A", "c1"),
+            make_item("i2", "B", "c1"),
+            make_item("i3", "C", "c1"),
+        ]);
+        assert!(m.move_item_to_index("c1", 2, 0));
+        let ids: Vec<String> = m.config.data.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(ids, vec!["i3", "i1", "i2"]);
+    }
+
+    #[test]
+    fn test_move_item_to_index_bounds_rejected() {
+        let mut m = make_manager(vec![make_item("i1", "A", "c1")]);
+        // 越界 / 同位 → false 且不变
+        assert!(!m.move_item_to_index("c1", 0, 1));
+        assert!(!m.move_item_to_index("c1", 0, 0));
+        assert!(!m.move_item_to_index("c1", 5, 0));
+        assert_eq!(m.config.data.items.len(), 1);
+    }
+
+    #[test]
+    fn test_move_item_to_index_preserves_other_categories() {
+        // 重排 c1 不影响 c2 的顺序与位置
+        let mut m = make_manager(vec![
+            make_item("a1", "A1", "c1"),
+            make_item("b1", "B1", "c2"),
+            make_item("a2", "A2", "c1"),
+            make_item("b2", "B2", "c2"),
+        ]);
+        assert!(m.move_item_to_index("c1", 0, 1));
+        let ids: Vec<String> = m.config.data.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(ids, vec!["a2", "b1", "a1", "b2"]);
+    }
+
+    #[test]
+    fn test_move_category_to_index_reorders() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category { id: "c1".into(), name: "C1".into(), ..Default::default() });
+        m.add_category(Category { id: "c2".into(), name: "C2".into(), ..Default::default() });
+        m.add_category(Category { id: "c3".into(), name: "C3".into(), ..Default::default() });
+        assert!(m.move_category_to_index(0, 2));
+        let ids: Vec<String> = m.categories().iter().map(|c| c.id.clone()).collect();
+        assert_eq!(ids, vec!["c2", "c3", "c1"]);
+    }
+
+    #[test]
+    fn test_move_category_to_index_bounds_rejected() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category { id: "c1".into(), name: "C1".into(), ..Default::default() });
+        assert!(!m.move_category_to_index(0, 0));
+        assert!(!m.move_category_to_index(0, 1));
+        assert_eq!(m.categories().len(), 1);
     }
 
     #[test]

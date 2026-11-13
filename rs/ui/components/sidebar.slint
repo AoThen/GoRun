@@ -14,6 +14,11 @@ export component Sidebar {
     callback category-selected(index: int);
     callback category-right-clicked(index: int, x: length, y: length);
     callback new-category();
+    // 分类拖拽排序（F2-1，DragArea/DropArea）：down 请求设源载荷；被拖入时上报 (target, data)。
+    callback category-payload-requested(index: int);
+    callback category-dropped-on(index: int, data: data-transfer);
+    in-out property <data-transfer> drag-payload;
+    in property <bool> drag-enabled: true;
 
     width: 160px;
 
@@ -34,34 +39,53 @@ export component Sidebar {
                 background: index == root.selected-index ? Theme.menu-hover : transparent;
                 border-radius: Theme.radius-sm;
 
-                TouchArea {
-                    clicked => {
-                        root.selected-index = index;
-                        root.category-selected(index);
-                    }
-                    pointer-event(PointerEvent) => {
-                        if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
-                            root.selected-index = index;
-                            root.category-right-clicked(index, self.pressed-x, self.pressed-y);
+                DragArea {
+                    enabled: root.drag-enabled;
+                    data: root.drag-payload;
+                    allow-move: true;
+
+                    DropArea {
+                        can-drop(event) => {
+                            return DragAction.move;
                         }
-                    }
-
-                    HorizontalBox {
-                        spacing: 0;
-                        padding: 0;
-
-                        Rectangle {
-                            width: Theme.spacing-md;
-                            height: 100%;
+                        dropped(event) => {
+                            root.category-dropped-on(index, event.data);
+                            return DragAction.move;
                         }
 
-                        Text {
-                            text: cat.name;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            overflow: elide;
-                            horizontal-stretch: 1;
+                        cat-touch := TouchArea {
+                            clicked => {
+                                root.selected-index = index;
+                                root.category-selected(index);
+                            }
+                            pointer-event(PointerEvent) => {
+                                if (PointerEvent.button == PointerEventButton.left && PointerEvent.kind == PointerEventKind.down) {
+                                    root.category-payload-requested(index);
+                                }
+                                if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                                    root.selected-index = index;
+                                    root.category-right-clicked(index, self.pressed-x, self.pressed-y);
+                                }
+                            }
+
+                            HorizontalBox {
+                                spacing: 0;
+                                padding: 0;
+
+                                Rectangle {
+                                    width: Theme.spacing-md;
+                                    height: 100%;
+                                }
+
+                                Text {
+                                    text: cat.name;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                }
+                            }
                         }
                     }
                 }

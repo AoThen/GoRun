@@ -78,6 +78,10 @@ export component MainWindow inherits Window {
     callback item-selected();
     callback menu-bar-group-clicked(group: int);
     callback menu-bar-item-selected(index: int);
+    callback payload-requested(index: int);
+    callback dropped-on(index: int, data: data-transfer);
+    callback category-payload-requested(index: int);
+    callback category-dropped-on(index: int, data: data-transfer);
 
     in-out property <[CategoryModel]> categories;
     in-out property <[ItemModel]> items;
@@ -86,6 +90,10 @@ export component MainWindow inherits Window {
     changed is-dark-theme => { Theme.set-dark(root.is-dark-theme); }
     in-out property <bool> is-icon-view: true;
     in-out property <string> status-text: "Ready";
+
+    // 拖拽排序（F2-1）：drag-payload 由 Rust 设源索引；搜索态禁拖拽（索引语义错位）。
+    in-out property <data-transfer> drag-payload;
+    in property <bool> drag-enabled: root.search-text == "";
 
     in-out property <bool> context-menu-visible: false;
 
@@ -247,6 +255,14 @@ toggle-theme => {
                         root.context-menu-visible = false;
                         root.new-category();
                     }
+                    drag-payload: root.drag-payload;
+                    drag-enabled: root.drag-enabled;
+                    category-payload-requested(index) => {
+                        root.category-payload-requested(index);
+                    }
+                    category-dropped-on(index, data) => {
+                        root.category-dropped-on(index, data);
+                    }
                 }
 
                 VerticalBox {
@@ -286,6 +302,8 @@ toggle-theme => {
                         is-icon-view: root.is-icon-view;
                         empty-text: root.empty-text;
                         selected-index: root.selected-item-index;
+                        drag-payload: root.drag-payload;
+                        drag-enabled: root.drag-enabled;
                         item-tile-clicked(index) => {
                             root.context-menu-visible = false;
                             root.selected-item-index = index;
@@ -296,6 +314,12 @@ toggle-theme => {
                             root.context-menu-y = y;
                             root.context-menu-visible = true;
                             root.item-right-clicked(index, x, y);
+                        }
+                        payload-requested(index) => {
+                            root.payload-requested(index);
+                        }
+                        dropped-on(index, data) => {
+                            root.dropped-on(index, data);
                         }
                     }
 

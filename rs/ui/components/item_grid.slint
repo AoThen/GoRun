@@ -13,10 +13,18 @@ struct ItemModel {
 export component ItemGrid {
     callback item-tile-clicked(index: int);
     callback item-right-clicked(index: int, x: length, y: length);
+    // 拖拽排序（F2-1，DragArea/DropArea）：down 请求设置源载荷；被拖入时上报 (target, data)。
+    callback payload-requested(index: int);
+    callback dropped-on(index: int, data: data-transfer);
 
     in property <[ItemModel]> items;
     in property <bool> is-icon-view: true;
     in property <int> selected-index: 0;
+
+    // 拖拽排序状态（F2-1）：drag-payload 由 Rust 在 tile down 时设为源索引字符串；
+    // drag-enabled 搜索态为 false（禁拖拽）。
+    in-out property <data-transfer> drag-payload;
+    in property <bool> drag-enabled: true;
 
     // 图标视图：响应式网格（对齐原版 95px 单元格，columns = max(1, width/95)）
     in property <length> cell-width: 95px;
@@ -41,8 +49,13 @@ export component ItemGrid {
             item: item;
             is-icon-view: false;
             selected: index == root.selected-index;
+            item-index: index;
+            drag-payload: root.drag-payload;
+            drag-enabled: root.drag-enabled;
             clicked => { root.item-tile-clicked(index); }
             right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+            drag-payload-requested(index) => { root.payload-requested(index); }
+            dropped-on(index, data) => { root.dropped-on(index, data); }
         }
     }
 
@@ -68,8 +81,13 @@ export component ItemGrid {
                 icon-cell-height: root.cell-height;
                 is-icon-view: true;
                 selected: index == root.selected-index;
+                item-index: index;
+                drag-payload: root.drag-payload;
+                drag-enabled: root.drag-enabled;
                 clicked => { root.item-tile-clicked(index); }
                 right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+                drag-payload-requested(index) => { root.payload-requested(index); }
+                dropped-on(index, data) => { root.dropped-on(index, data); }
             }
         }
     }

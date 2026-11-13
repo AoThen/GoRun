@@ -280,6 +280,88 @@ pub fn wire_handler(
         }
     });
 
+    // 项目拖拽排序（F2-1，DragArea/DropArea）：
+    // 1) tile down → payload-requested(index) → Rust 设 drag-payload = 源索引字符串。
+    // 2) 拖到目标 tile → dropped-on(target, data) → Rust 读 data 得源索引 → 重排。
+    let weak_ui_payload = ui.as_weak();
+    ui.on_payload_requested(move |index| {
+        log::debug!("Drag payload requested: index={}", index);
+        if let Some(ui) = weak_ui_payload.upgrade() {
+            use slint::private_unstable_api::re_exports::DataTransfer;
+            let dt = DataTransfer::from(slint::SharedString::from(index.to_string()));
+            ui.set_drag_payload(dt);
+        }
+    });
+
+    let state_drop = state.clone();
+    let weak_ui_drop = ui.as_weak();
+    ui.on_dropped_on(move |target, data| {
+        // data 载荷 = 源索引字符串（payload-requested 时写入）
+        let source: usize = data
+            .plain_text()
+            .ok()
+            .and_then(|s| s.to_string().parse().ok())
+            .unwrap_or(usize::MAX);
+        let target = target.max(0) as usize;
+        log::debug!("Item dropped: source={}, target={}", source, target);
+        if source == usize::MAX || source == target {
+            return;
+        }
+        let mut state = state_drop.borrow_mut();
+        if !state.search_query.is_empty() {
+            log::debug!("Drop ignored during search");
+            return;
+        }
+        let cat_id = state.current_category_id.clone();
+        if cat_id.is_empty() {
+            return;
+        }
+        if !state.manager.move_item_to_index(&cat_id, source, target) {
+            return;
+        }
+        state.save_if_modified();
+        drop(state);
+        if let Some(ui) = weak_ui_drop.upgrade() {
+            ui_sync::refresh_items_ui(&ui, &state_drop.borrow(), &cat_id, "");
+        }
+    });
+
+    // 分类拖拽排序（F2-1，DragArea/DropArea）：down 设载荷 = 分类索引；拖入目标分类
+    // → category-dropped-on(target, data) → 读 data 得源索引 → 重排 + 落盘 + 刷新侧栏。
+    let weak_ui_cat_payload = ui.as_weak();
+    ui.on_category_payload_requested(move |index| {
+        log::debug!("Category drag payload requested: index={}", index);
+        if let Some(ui) = weak_ui_cat_payload.upgrade() {
+            use slint::private_unstable_api::re_exports::DataTransfer;
+            let dt = DataTransfer::from(slint::SharedString::from(index.to_string()));
+            ui.set_drag_payload(dt);
+        }
+    });
+
+    let state_cdrop = state.clone();
+    let weak_ui_cdrop = ui.as_weak();
+    ui.on_category_dropped_on(move |target, data| {
+        let source: usize = data
+            .plain_text()
+            .ok()
+            .and_then(|s| s.to_string().parse().ok())
+            .unwrap_or(usize::MAX);
+        let target = target.max(0) as usize;
+        log::debug!("Category dropped: source={}, target={}", source, target);
+        if source == usize::MAX || source == target {
+            return;
+        }
+        let mut state = state_cdrop.borrow_mut();
+        if !state.manager.move_category_to_index(source, target) {
+            return;
+        }
+        state.save_if_modified();
+        drop(state);
+        if let Some(ui) = weak_ui_cdrop.upgrade() {
+            ui_sync::refresh_categories_ui(&ui, &state_cdrop.borrow());
+        }
+    });
+
     ui.on_item_selected(move || {
         let ui = match weak_ui_sel.upgrade() {
             Some(u) => u,

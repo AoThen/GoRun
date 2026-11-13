@@ -12,90 +12,117 @@ struct ItemModel {
 export component ItemTile {
     callback clicked();
     callback right-clicked(x: length, y: length);
+    // 拖拽排序（F2-1，DragArea/DropArea）：down 时请求设置源载荷（索引字符串），
+    // 被拖入时上报 dropped-on(target_index, data)，Rust 读 data 得源索引后重排。
+    callback drag-payload-requested(index: int);
+    callback dropped-on(index: int, data: data-transfer);
 
     in property <ItemModel> item;
     in property <bool> is-icon-view: true;
     in property <bool> selected: false;
     // 图标视图单元高度（网格传入 cell-height；默认 90px 保持原行为）
     in property <length> icon-cell-height: 90px;
+    // 拖拽排序状态（由 ItemGrid 注入）
+    in property <int> item-index: -1;
+    in property <data-transfer> drag-payload;
+    in property <bool> drag-enabled: true;
 
     height: root.is-icon-view ? root.icon-cell-height : 36px;
 
-    TouchArea {
-        clicked => { root.clicked(); }
-        pointer-event(PointerEvent) => {
-            if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
-                root.right-clicked(self.pressed-x, self.pressed-y);
+    DragArea {
+        enabled: root.drag-enabled;
+        data: root.drag-payload;
+        allow-move: true;
+
+        DropArea {
+            can-drop(event) => {
+                return DragAction.move;
             }
-        }
+            dropped(event) => {
+                root.dropped-on(root.item-index, event.data);
+                return DragAction.move;
+            }
 
-        // hover 反馈背景（P3；声明在前置于内容下层）
-        Rectangle {
-            width: 100%;
-            height: 100%;
-            background: self.has-hover ? Theme.menu-hover : transparent;
-            border-radius: Theme.radius-md;
-        }
-
-        // 图标视图（大图标水平居中）
-        VerticalBox {
-            visible: root.is-icon-view;
-            padding: Theme.spacing-sm;
-            spacing: Theme.spacing-sm;
-            alignment: center;
-
-            HorizontalBox {
-                alignment: center;
-
-                Rectangle {
-                    width: Theme.icon-size;
-                    height: Theme.icon-size;
-                    background: Theme.bg-card;
-                    border-radius: Theme.radius-md;
-
-                    Image {
-                        width: parent.width;
-                        height: parent.height;
-                        source: root.item.icon-path;
+            ta := TouchArea {
+                clicked => { root.clicked(); }
+                pointer-event(PointerEvent) => {
+                    if (PointerEvent.button == PointerEventButton.left && PointerEvent.kind == PointerEventKind.down) {
+                        root.drag-payload-requested(root.item-index);
+                    }
+                    if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                        root.right-clicked(self.pressed-x, self.pressed-y);
                     }
                 }
-            }
 
-            Text {
-                text: root.item.name;
-                font-size: Theme.font-size-sm;
-                color: root.item.search-active ? Theme.accent : Theme.text-primary;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
-        }
-
-        // 列表视图（小图标 + 名称行）
-        HorizontalBox {
-            visible: !root.is-icon-view;
-            padding: Theme.spacing-sm;
-            spacing: Theme.spacing-sm;
-
-            Rectangle {
-                width: 24px;
-                height: 24px;
-                background: Theme.bg-card;
-                border-radius: Theme.radius-sm;
-
-                Image {
-                    width: parent.width;
-                    height: parent.height;
-                    source: root.item.icon-path;
+                // hover 反馈背景（P3；声明在前置于内容下层）
+                Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: self.has-hover ? Theme.menu-hover : transparent;
+                    border-radius: Theme.radius-md;
                 }
-            }
 
-            Text {
-                text: root.item.name;
-                font-size: Theme.font-size-sm;
-                color: root.item.search-active ? Theme.accent : Theme.text-primary;
-                vertical-alignment: center;
-                overflow: elide;
-                horizontal-stretch: 1;
+                // 图标视图（大图标水平居中）
+                VerticalBox {
+                    visible: root.is-icon-view;
+                    padding: Theme.spacing-sm;
+                    spacing: Theme.spacing-sm;
+                    alignment: center;
+
+                    HorizontalBox {
+                        alignment: center;
+
+                        Rectangle {
+                            width: Theme.icon-size;
+                            height: Theme.icon-size;
+                            background: Theme.bg-card;
+                            border-radius: Theme.radius-md;
+
+                            Image {
+                                width: parent.width;
+                                height: parent.height;
+                                source: root.item.icon-path;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: root.item.name;
+                        font-size: Theme.font-size-sm;
+                        color: root.item.search-active ? Theme.accent : Theme.text-primary;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                // 列表视图（小图标 + 名称行）
+                HorizontalBox {
+                    visible: !root.is-icon-view;
+                    padding: Theme.spacing-sm;
+                    spacing: Theme.spacing-sm;
+
+                    Rectangle {
+                        width: 24px;
+                        height: 24px;
+                        background: Theme.bg-card;
+                        border-radius: Theme.radius-sm;
+
+                        Image {
+                            width: parent.width;
+                            height: parent.height;
+                            source: root.item.icon-path;
+                        }
+                    }
+
+                    Text {
+                        text: root.item.name;
+                        font-size: Theme.font-size-sm;
+                        color: root.item.search-active ? Theme.accent : Theme.text-primary;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                }
             }
         }
     }
