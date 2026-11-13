@@ -576,6 +576,21 @@ mod tests {
     }
 
     #[test]
+    fn test_expand_pre_mp_with_directory() {
+        // 跨平台：%mp% 展开为 target 的父目录（Linux 路径格式）
+        let out = expand_pre("%mp%", "/home/user/tools/app");
+        assert_eq!(out, "/home/user/tools");
+    }
+
+    #[test]
+    fn test_expand_pre_mp_no_parent_keeps_empty() {
+        // 边界：相对文件名无父目录时 Path::parent() 返回 Some("")，%mp% 展开为空串
+        // （特征化：无目录即空，不抛错、不崩溃）
+        let out = expand_pre("run %mp%", "app");
+        assert_eq!(out, "run ");
+    }
+
+    #[test]
     fn test_expand_variables_so() {
         let out = expand_variables("run %so%", "C:\\app.exe", "query");
         assert_eq!(out, "run query");
