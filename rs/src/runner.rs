@@ -452,7 +452,10 @@ fn shell_execute(
 
         if success.is_ok() {
             if !sei.hProcess.is_invalid() {
-                unsafe { CloseHandle(sei.hProcess) };
+                // SEE_MASK_NOCLOSEPROCESS 下由调用方关闭进程句柄；失败仅记录，不阻断成功路径
+                if let Err(e) = unsafe { CloseHandle(sei.hProcess) } {
+                    log::warn!("CloseHandle on launched process failed: {:?}", e);
+                }
             }
             RunResult {
                 success: true,

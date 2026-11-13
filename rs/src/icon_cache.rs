@@ -200,7 +200,6 @@ fn extract_hicon_from_target(
 ) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::UI::Shell::{SHGetFileInfoW, SHGFI_ICON, SHGFI_LARGEICON};
-    use windows::Win32::UI::WindowsAndMessaging::HICON;
 
     let wide: Vec<u16> = std::ffi::OsStr::new(target)
         .encode_wide()
@@ -238,7 +237,6 @@ fn get_default_icon() -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> 
     use windows::Win32::UI::Shell::{
         SHGetFileInfoW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_USEFILEATTRIBUTES,
     };
-    use windows::Win32::UI::WindowsAndMessaging::HICON;
 
     let wide: Vec<u16> = std::ffi::OsStr::new(".txt")
         .encode_wide()
@@ -366,8 +364,8 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
             }
         }
 
-        DeleteDC(hdc_mem);
-        ReleaseDC(HWND(0), hdc_screen);
+        let _ = DeleteDC(hdc_mem);
+        let _ = ReleaseDC(HWND(0), hdc_screen);
         let _ = DeleteObject(icon_info.hbmColor);
         let _ = DeleteObject(icon_info.hbmMask);
 

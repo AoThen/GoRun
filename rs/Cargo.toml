@@ -5,7 +5,9 @@ version = "1.0.0"
 edition = "2021"
 rust-version = "1.75"
 build = "build.rs"
-windows_subsystem = "windows"
+# 注：Windows GUI 子系统由 src/main.rs 的 #![windows_subsystem = "windows"] 指定。
+# rustc 1.100 移除了 -C windows-subsystem，Cargo.toml 的 package.windows_subsystem 键
+# 已失效（cargo 报 unused manifest key），故不在此设置。
 
 [build-dependencies]
 slint-build = "1.7"

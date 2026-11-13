@@ -4,6 +4,10 @@
 //! 所有实现都在 lib（`GoRun` crate）内，这里只做模块转导出 + `main`。
 //! 这样集成测试（`tests/`）测的就是真实运行的那一份代码，
 //! 避免 bin/lib 各自 `include!` Slint 生成代码导致 MainWindow 变成两个不同类型。
+//! rustc 1.100 起用 crate 属性指定 Windows GUI 子系统（旧 `-C windows-subsystem` 已移除，
+//! Cargo.toml 的 `windows_subsystem` 键因此失效并报 unused）。无控制台窗口。
+
+#![windows_subsystem = "windows"]
 
 pub use GoRun::{
     app_state, clipboard, config, drop_handler, fileops, geometry, handlers, hotkey, icon_cache,
@@ -48,7 +52,8 @@ fn main() {
             log::info!("Another GoRun instance is already running, exiting");
             return;
         }
-        std::mem::forget(handle);
+        // HANDLE 是 Copy 且无 Drop，无需 forget；保持变量存活即可，进程退出时内核释放。
+        let _ = handle;
     }
 
     let config_path = config::config_path();

@@ -108,7 +108,8 @@ pub fn init(debug_to_console: bool) -> Result<(), Box<dyn std::error::Error>> {
     if debug_to_console {
         unsafe {
             use windows::Win32::System::Console::AllocConsole;
-            AllocConsole();
+            // --debug 时分配控制台用于输出日志；失败不影响主流程（继续写文件日志）
+            let _ = AllocConsole();
         }
     }
 

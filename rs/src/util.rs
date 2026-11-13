@@ -18,7 +18,25 @@ pub fn sanitize_for_log(s: &str) -> String {
     s.replace('\n', "\\n").replace('\r', "\\r")
 }
 
-/// 窗口矩形是否落在屏幕内（P2 #12：离屏窗口不恢复，避免不可见）。
+/// 纯几何判断：窗口矩形（x,y,w,h）是否完全落在虚拟屏（vx,vy,vw,vh）内。
+/// 抽出为纯函数以便跨平台单测；Windows 分支读取 metrics 后调用。
+/// 非 Windows 下仅被单测引用（window_on_screen 恒 true），故允许 dead_code。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn rect_fully_inside_virtual_screen(
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    vx: i32,
+    vy: i32,
+    vw: i32,
+    vh: i32,
+) -> bool {
+    vw > 0 && vh > 0 && w > 0 && h > 0 && x >= vx && y >= vy && x + w <= vx + vw && y + h <= vy + vh
+}
+
+/// 窗口矩形是否完全落在屏幕内（P2 #12：离屏窗口不恢复，避免不可见）。
+/// 同时校验左上角与右下角，防止窗口大部分在屏幕外仍被恢复。
 pub fn window_on_screen(x: i32, y: i32, w: i32, h: i32) -> bool {
     #[cfg(windows)]
     {
@@ -31,7 +49,7 @@ pub fn window_on_screen(x: i32, y: i32, w: i32, h: i32) -> bool {
         let vy = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
         let vw = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
         let vh = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
-        vw > 0 && vh > 0 && x >= vx && y >= vy && x < vx + vw && y < vy + vh
+        rect_fully_inside_virtual_screen(x, y, w, h, vx, vy, vw, vh)
     }
     #[cfg(not(windows))]
     {
@@ -96,5 +114,98 @@ mod tests {
         // 与 logger::sanitize 区别：util 版本仅折叠 \n \r，不动制表符/其他控制字符
         assert_eq!(sanitize_for_log("tab\there"), "tab\there");
         assert_eq!(sanitize_for_log("a\tb"), "a\tb");
+    }
+
+    // 虚拟屏几何判断（P2 #12 边界）：虚拟屏 (0,0)-(1920,1080)
+    const VX: i32 = 0;
+    const VY: i32 = 0;
+    const VW: i32 = 1920;
+    const VH: i32 = 1080;
+
+    #[test]
+    fn test_rect_fully_inside_normal() {
+        assert!(rect_fully_inside_virtual_screen(100, 100, 800, 600, VX, VY, VW, VH));
+    }
+
+    #[test]
+    fn test_rect_fully_inside_right_bottom_boundary() {
+        // 右下角恰好贴虚拟屏右下边界 → 允许（含边界）
+        assert!(rect_fully_inside_virtual_screen(
+            1920 - 800,
+            1080 - 600,
+            800,
+            600,
+            VX,
+            VY,
+            VW,
+            VH
+        ));
+    }
+
+    #[test]
+    fn test_rect_partially_offscreen_rejected() {
+        // 窗口右边超出屏幕 → 拒绝（原实现只查左上角会误恢复）
+        assert!(!rect_fully_inside_virtual_screen(
+            1500,
+            100,
+            800,
+            600,
+            VX,
+            VY,
+            VW,
+            VH
+        ));
+    }
+
+    #[test]
+    fn test_rect_fully_offscreen_rejected() {
+        assert!(!rect_fully_inside_virtual_screen(
+            3000,
+            3000,
+            800,
+            600,
+            VX,
+            VY,
+            VW,
+            VH
+        ));
+    }
+
+    #[test]
+    fn test_rect_negative_left_offscreen_rejected() {
+        // 左上角在虚拟屏左边之外
+        assert!(!rect_fully_inside_virtual_screen(-50, 100, 800, 600, VX, VY, VW, VH));
+    }
+
+    #[test]
+    fn test_rect_zero_size_rejected() {
+        // 零/负尺寸不恢复（防御）
+        assert!(!rect_fully_inside_virtual_screen(100, 100, 0, 600, VX, VY, VW, VH));
+        assert!(!rect_fully_inside_virtual_screen(100, 100, 800, -1, VX, VY, VW, VH));
+    }
+
+    #[test]
+    fn test_rect_secondary_monitor_negative_coords() {
+        // 副屏在左侧（虚拟屏起点为负）：如主屏 (0,0)-(1920,1080)，副屏 (-1280,0)-(0,1080)
+        assert!(rect_fully_inside_virtual_screen(
+            -1000,
+            100,
+            800,
+            600,
+            -1280,
+            0,
+            3200,
+            1080
+        ));
+        assert!(!rect_fully_inside_virtual_screen(
+            -1000,
+            100,
+            800,
+            600,
+            0,
+            0,
+            1920,
+            1080
+        ));
     }
 }
