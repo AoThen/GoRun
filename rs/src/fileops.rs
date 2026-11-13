@@ -197,3 +197,60 @@ pub fn open_file_location(path: &str) {
         path
     );
 }
+
+/// F8/文件夹条目展开：目标为目录时直接打开该目录；否则打开其父目录。
+/// 非 Windows 平台空操作。URL 跳过。
+#[cfg(windows)]
+pub fn open_folder(path: &str) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
+
+    if crate::runner::is_url(path) {
+        log::debug!("Skip open folder for URL target: {}", path);
+        return;
+    }
+
+    let target = if Path::new(path).is_dir() {
+        path.to_string()
+    } else {
+        match Path::new(path).parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => {
+                parent.to_string_lossy().into_owned()
+            }
+            _ => {
+                log::warn!("Open folder: no parent for path: {}", path);
+                return;
+            }
+        }
+    };
+    let escaped = target.replace('"', "\"\"");
+    let params = OsStr::new(&format!("\"{}\"", escaped))
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<u16>>();
+
+    unsafe {
+        let result = ShellExecuteW(
+            HWND::default(),
+            windows::core::w!("open"),
+            windows::core::w!("explorer"),
+            windows::core::PCWSTR(params.as_ptr()),
+            windows::core::PCWSTR(std::ptr::null()),
+            SW_SHOW,
+        );
+        if result.0 <= 32 {
+            log::error!("Failed to open folder, error code: {}", result.0);
+        } else {
+            log::info!("Opened folder: {}", target);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn open_folder(_path: &str) {
+    log::warn!("Open folder not supported on non-Windows platform");
+}

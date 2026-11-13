@@ -430,7 +430,17 @@ impl ItemManager {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| "Unknown".to_string());
 
-            let target = path.to_string_lossy().to_string();
+            // F8/URL 拖入：.url 快捷方式文件 → 读 [InternetShortcut] 的 URL= 行作为真实 target
+            let target = if path
+                .extension()
+                .map(|e| e.eq_ignore_ascii_case("url"))
+                .unwrap_or(false)
+            {
+                read_url_from_internet_shortcut(path)
+                    .unwrap_or_else(|| path.to_string_lossy().to_string())
+            } else {
+                path.to_string_lossy().to_string()
+            };
             let working_dir = path
                 .parent()
                 .map(|p| p.to_string_lossy().to_string())
@@ -551,6 +561,24 @@ fn pinyin_full(text: &str) -> String {
         }
     }
     out
+}
+
+/// F8/URL 拖入：读取 .url 快捷方式文件（[InternetShortcut]）中的 URL= 行。
+/// 找不到 URL= 或读失败返回 None（调用方回退为原路径）。
+fn read_url_from_internet_shortcut(path: &std::path::Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some((key, value)) = line.split_once('=') {
+            if key.trim().eq_ignore_ascii_case("url") {
+                let url = value.trim();
+                if !url.is_empty() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]

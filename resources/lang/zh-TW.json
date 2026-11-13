@@ -162,6 +162,7 @@
     "Menu_RunAsMin": "最小化執行",
     "Menu_RunAsWay": "打開方式",
     "Menu_OpenLocationFile": "開啟檔案所在位置",
+    "Menu_OpenFolder": "開啟資料夾",
     "Menu_OpenLocation": "開啟所在位置",
     "Menu_Explorer": "資源管理器選單",
     "Menu_DownIco": "下載連結圖示",

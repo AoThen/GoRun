@@ -430,10 +430,12 @@ pub fn wire_handler(
         menu_vec.push(slint::SharedString::from(lb.tr("Menu_RefreshIcon")));
         menu_vec.push(slint::SharedString::from(lb.tr("Menu_Properties")));
         let move_to = lb.tr("Menu_MoveTo").to_string();
+        let open_folder = lb.tr("Menu_OpenFolder").to_string();
         drop(lb);
         for name in &cat_names {
             menu_vec.push(slint::SharedString::from(format!("{} {}", move_to, name)));
         }
+        menu_vec.push(slint::SharedString::from(open_folder));
         let item_count = menu_vec.len();
         let menu_items = Rc::new(slint::VecModel::from(menu_vec));
         if let Some(ui) = weak_ui_right.upgrade() {
@@ -886,6 +888,9 @@ pub fn wire_handler(
                 let refresh_idx = move_offset + 6;
                 let props_idx = move_offset + 7;
                 let moveto_base = move_offset + 8;
+                // 菜单末尾"打开文件夹"（F8/文件夹展开）：索引 = MoveTo 起点 + 分类数
+                let cat_count = state.manager.categories().len();
+                let open_folder_idx = moveto_base + cat_count;
                 // collapsible_match 建议把 move_item_down/up 调用移入 match 守卫，
                 // 但二者是带副作用的修改（置位 modified、落盘配置），放进守卫会
                 // 让"是否执行移动"的判断与执行耦合，且与另一分支不一致，可读性差；
@@ -1175,7 +1180,7 @@ pub fn wire_handler(
                         log::info!("Properties: {} ({})", item.target, item.id);
                         fileops::show_properties(&item.target);
                     }
-                    x if x >= moveto_base => {
+                    x if x >= moveto_base && x < moveto_base + cat_count => {
                         let cat_pos = (x - moveto_base) as usize;
                         let target_cat = {
                             let cats = state.manager.categories();
@@ -1216,6 +1221,9 @@ pub fn wire_handler(
                                 ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                             }
                         }
+                    }
+                    x if x == open_folder_idx => {
+                        crate::fileops::open_folder(&item.target);
                     }
                     _ => {}
                 }
