@@ -13,6 +13,12 @@ pub struct IconCache {
     item_keys: Arc<Mutex<HashMap<String, String>>>,
 }
 
+impl Default for IconCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IconCache {
     pub fn new() -> Self {
         let dir = config::icons_dir();

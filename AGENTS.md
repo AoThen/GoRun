@@ -213,7 +213,7 @@ cmake --build build --config Debug
 
 ### 环境要求
 
-- Rust 1.70+ (2021 edition)
+- Rust 1.92+ (MSRV 由依赖链决定：slint 1.17 及 backend 依赖要求 rustc 1.92)
 - Cargo
 - Windows SDK (for windows crate)
 

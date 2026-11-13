@@ -3,7 +3,9 @@
 name = "GoRun"
 version = "1.0.0"
 edition = "2021"
-rust-version = "1.75"
+# MSRV 由依赖链决定：slint 1.17 及其 build/backend 依赖均要求 rustc 1.92。
+# 项目自身 edition 2021 无更高要求；1.75 声明与实际不符（无法构建），已修正。
+rust-version = "1.92"
 build = "build.rs"
 # 注：Windows GUI 子系统由 src/main.rs 的 #![windows_subsystem = "windows"] 指定。
 # rustc 1.100 移除了 -C windows-subsystem，Cargo.toml 的 package.windows_subsystem 键
@@ -27,10 +29,15 @@ image = "0.25"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
 chrono = "0.4"
 pinyin = "0.10"
+raw-window-handle = "0.6"
+hmac = "0.12"
+sha2 = "0.10"
+
+# Windows 平台专属依赖：仅 Windows 目标声明，避免 Linux 构建报 unused dependency。
+# features 虽未被 rs/ 源码直接引用，但 windows-rs 内部 item（如 ShellExecuteExW/
+# SHELLEXECUTEINFOW）被其 cfg 依赖，删除会导致 unresolved import，故保留。
+[target.'cfg(windows)'.dependencies]
 windows = { version = "0.57", features = [
-    # 以下 feature 虽未被 rs/ 源码直接引用，但 windows-rs 内部 item
-    # （如 ShellExecuteExW/SHELLEXECUTEINFOW）被其 cfg 依赖，删除会导致
-    # unresolved import，故保留（批次4 清理时验证过必须保留）
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Registry",
@@ -52,9 +59,6 @@ windows = { version = "0.57", features = [
     "Win32_System_Threading",
     "Win32_Security",
 ] }
-raw-window-handle = "0.6"
-hmac = "0.12"
-sha2 = "0.10"
 
 [profile.release]
 opt-level = 3
