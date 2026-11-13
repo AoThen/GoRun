@@ -1,0 +1,60 @@
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 顶部菜单栏下拉弹层（P1：菜单栏改五组下拉）。
+// 视觉复用 ContextMenu；定位与 items 由 main_window 注入，保证 z-order 高于内容区。
+export component MenuPopup {
+    in property <[string]> items;
+    callback selected(index: int);
+
+    width: 200px;
+
+    Rectangle {
+        background: Theme.menu-bg;
+        border-width: 1px;
+        border-color: Theme.menu-border;
+        border-radius: Theme.radius-sm;
+        width: 100%;
+        height: 100%;
+
+        VerticalBox {
+            spacing: 0px;
+            padding: 2px;
+            width: 100%;
+
+            for item[index] in root.items: Rectangle {
+                height: 24px;
+                width: 100%;
+
+                menu-touch := TouchArea {
+                    clicked => { root.selected(index); }
+
+                    Rectangle {
+                        width: 100%;
+                        height: 100%;
+                        background: menu-touch.has-hover ? Theme.menu-hover : transparent;
+
+                        HorizontalBox {
+                            spacing: 0;
+                            padding: 0;
+
+                            Rectangle {
+                                width: 8px;
+                                height: 100%;
+                            }
+
+                            Text {
+                                text: item;
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text-primary;
+                                overflow: elide;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

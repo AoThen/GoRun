@@ -18,13 +18,59 @@ export component ItemGrid {
     in property <bool> is-icon-view: true;
     in property <int> selected-index: 0;
 
+    // 图标视图：响应式网格（对齐原版 95px 单元格，columns = max(1, width/95)）
+    in property <length> cell-width: 95px;
+    in property <length> cell-height: 95px;
+
+    // 可用宽度内能容纳的列数（至少 1 列）；int() 截断偏保守（宁可少一列不溢出）
+    property <int> column-count:
+        max(1, int((self.width - 2 * Theme.spacing-md) / (root.cell-width + Theme.spacing-sm)));
+
+    // 内容总高 = 行数 * 单元高 - 末行间距 + 上下 padding
+    property <length> grid-content-height:
+        ((root.items.length + root.column-count - 1) / root.column-count)
+            * (root.cell-height + Theme.spacing-sm)
+            - Theme.spacing-sm + 2 * Theme.spacing-md;
+
+    // ---- 列表视图（保持单列，P0 不变） ----
     ListView {
+        width: 100%;
+        height: 100%;
+        visible: !root.is-icon-view;
         for item[index] in items: ItemTile {
             item: item;
-            is-icon-view: root.is-icon-view;
+            is-icon-view: false;
             selected: index == root.selected-index;
             clicked => { root.item-tile-clicked(index); }
             right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+        }
+    }
+
+    // ---- 图标视图：响应式网格（Flickable + 绝对定位，P0） ----
+    Flickable {
+        width: 100%;
+        height: 100%;
+        visible: root.is-icon-view;
+        viewport-width: self.width;
+        viewport-height: root.grid-content-height;
+
+        Rectangle {
+            width: 100%;
+            height: root.grid-content-height;
+            x: 0;
+            y: 0;
+
+            for item[index] in items: ItemTile {
+                x: (index % root.column-count) * (root.cell-width + Theme.spacing-sm) + Theme.spacing-md;
+                y: (index / root.column-count) * (root.cell-height + Theme.spacing-sm) + Theme.spacing-md;
+                width: root.cell-width;
+                height: root.cell-height;
+                icon-cell-height: root.cell-height;
+                is-icon-view: true;
+                selected: index == root.selected-index;
+                clicked => { root.item-tile-clicked(index); }
+                right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+            }
         }
     }
 

@@ -151,19 +151,17 @@ pub fn handle_tray_ui_action(
 }
 
 /// 写入全部本地化 UI 文本（启动初始化与语言切换共用）。
-pub fn apply_localized_texts(ui: &MainWindow, loc: &Rc<RefCell<Localization>>, dark_theme: bool) {
-    let menu_theme_key = if dark_theme {
-        "Menu_SwitchLight"
-    } else {
-        "Menu_SwitchDark"
-    };
+pub fn apply_localized_texts(
+    ui: &MainWindow,
+    loc: &Rc<RefCell<Localization>>,
+    _dark_theme: bool,
+) {
     let lb = loc.borrow();
-    ui.set_menu_text_new_item(lb.tr("Menu_NewItem").into());
-    ui.set_menu_text_new_category(lb.tr("Menu_NewC").into());
-    ui.set_menu_text_toggle_view(lb.tr("Menu_View").into());
-    ui.set_menu_text_toggle_theme(lb.tr(menu_theme_key).into());
-    ui.set_menu_text_about(lb.tr("Menu_About").into());
-    ui.set_menu_text_hotkey(lb.tr("Menu_ViewHotKey").into());
+    ui.set_menu_title_file(lb.tr("Menu_File").into());
+    ui.set_menu_title_edit(lb.tr("Menu_Edit").into());
+    ui.set_menu_title_view(lb.tr("Menu_View").into());
+    ui.set_menu_title_settings(lb.tr("Menu_Set").into());
+    ui.set_menu_title_help(lb.tr("Menu_Help").into());
     ui.set_about_version_text(lb.tr("About_Version").into());
     ui.set_about_desc_text(lb.tr("About_Desc").into());
     ui.set_about_ok_text(lb.tr("Btn_OK").into());

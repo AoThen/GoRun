@@ -185,7 +185,6 @@ pub fn wire_handler(
     });
 
     let state_theme = state.clone();
-    let loc_theme = loc.clone();
     let weak_ui_theme = ui.as_weak();
     ui.on_toggle_theme(move || {
         // Rust 的 on_ 回调覆盖 slint 层 `toggle-theme => { is-dark-theme = !is-dark-theme;
@@ -205,12 +204,6 @@ pub fn wire_handler(
             .extra_config
             .insert("theme".into(), if dark { "1".into() } else { "0".into() });
         state.save_if_modified();
-        drop(state);
-        // 主题切换后刷新菜单主题键（本地化最小版）
-        if let Some(ui) = weak_ui_theme.upgrade() {
-            let key = if dark { "Menu_SwitchLight" } else { "Menu_SwitchDark" };
-            ui.set_menu_text_toggle_theme(loc_theme.borrow().tr(key).into());
-        }
     });
 
     // 菜单"快捷键"入口：打开 InputDialog 预填当前快捷键（S4）
@@ -404,6 +397,182 @@ pub fn wire_handler(
     let pra_menu = pending_run_all.clone();
     let pra_admin_menu = pending_run_admin.clone();
     let im_menu = input_mode.clone();
+
+    // 顶部菜单栏（P1：五组下拉）。group 状态由 Rust 记录，供 item_selected 分发。
+    let menu_bar_group: Rc<std::cell::Cell<u8>> = Rc::new(std::cell::Cell::new(0));
+    let mbg_click = menu_bar_group.clone();
+    let state_mbg = state.clone();
+    let weak_ui_mbg = ui.as_weak();
+    ui.on_menu_bar_group_clicked(move |group| {
+        log::debug!("Menu bar group clicked: {}", group);
+        mbg_click.set(group as u8);
+        // 主题键需在构造 items 前读取（UI 线程属性）
+        let dark = weak_ui_mbg
+            .upgrade()
+            .map(|ui| ui.get_is_dark_theme())
+            .unwrap_or(false);
+        let items: Vec<slint::SharedString> = {
+            let st = state_mbg.borrow();
+            let lb = st.loc.borrow();
+            let mut v = Vec::new();
+            match group {
+                0 => {
+                    v.push(lb.tr("Menu_NewItem").into());
+                    v.push(lb.tr("Menu_NewC").into());
+                    v.push(lb.tr("Menu_DelCurrentC").into());
+                    v.push(lb.tr("Menu_Exit").into());
+                }
+                1 => {
+                    v.push(lb.tr("Menu_RenameCurrentC").into());
+                    v.push(lb.tr("Menu_ViewHotKey").into());
+                }
+                2 => {
+                    v.push(lb.tr("Menu_ViewIcon0").into());
+                    v.push(lb.tr("Menu_ViewIcon1").into());
+                    let key = if dark { "Menu_SwitchLight" } else { "Menu_SwitchDark" };
+                    v.push(lb.tr(key).into());
+                }
+                3 => {
+                    v.push(lb.tr("Menu_FollowMouse").into());
+                    v.push(lb.tr("Tray_AutoStart").into());
+                    v.push("简体中文".into());
+                    v.push("繁體中文".into());
+                    v.push("English".into());
+                }
+                4 => {
+                    v.push(lb.tr("Menu_About").into());
+                }
+                _ => {}
+            }
+            v
+        };
+        if let Some(ui) = weak_ui_mbg.upgrade() {
+            ui.set_menu_popup_items(Rc::new(slint::VecModel::from(items)).into());
+        }
+    });
+
+    let mbg_sel = menu_bar_group.clone();
+    let state_mbs = state.clone();
+    let weak_ui_mbs = ui.as_weak();
+    let pcd_mbs = pending_category_delete.clone();
+    let pcr_mbs = pending_category_rename.clone();
+    let im_mbs = input_mode.clone();
+    ui.on_menu_bar_item_selected(move |index| {
+        log::debug!("Menu bar item selected: index={}, group={}", index, mbg_sel.get());
+        let ui = match weak_ui_mbs.upgrade() {
+            Some(u) => u,
+            None => return,
+        };
+        match mbg_sel.get() {
+            0 => match index {
+                0 => ui.invoke_new_item_clicked(),
+                1 => ui.invoke_new_category(),
+                2 => {
+                    // 删除当前分类：复用分类右键删除流程（确认后级联删除）
+                    let mut state = state_mbs.borrow_mut();
+                    let cat_id = state.current_category_id.clone();
+                    if cat_id.is_empty() {
+                        return;
+                    }
+                    let loc_m = state.loc.clone();
+                    let cat_name = state
+                        .manager
+                        .categories()
+                        .iter()
+                        .find(|c| c.id == cat_id)
+                        .map(|c| c.name.clone())
+                        .unwrap_or_default();
+                    *pcd_mbs.borrow_mut() = Some(cat_id);
+                    drop(state);
+                    ui.set_confirm_dialog_title(loc_m.borrow().tr("Title_ConfirmDelete").into());
+                    ui.set_confirm_dialog_message(
+                        util::tr_fill(&loc_m, "Tip_DelCate", &cat_name).into(),
+                    );
+                    ui.set_confirm_confirm_text(loc_m.borrow().tr("Btn_Del").to_string().into());
+                    ui.set_confirm_dialog_visible(true);
+                }
+                3 => {
+                    // 退出：隐藏到托盘（快速启动器惯例，与托盘"显示/隐藏"一致）
+                    let _ = ui.hide();
+                }
+                _ => {}
+            },
+            1 => match index {
+                0 => {
+                    // 重命名当前分类：复用分类右键重命名流程（InputDialog）
+                    let mut state = state_mbs.borrow_mut();
+                    let cat_id = state.current_category_id.clone();
+                    if cat_id.is_empty() {
+                        return;
+                    }
+                    let loc_m = state.loc.clone();
+                    let cat_name = state
+                        .manager
+                        .categories()
+                        .iter()
+                        .find(|c| c.id == cat_id)
+                        .map(|c| c.name.clone())
+                        .unwrap_or_default();
+                    *pcr_mbs.borrow_mut() = Some(cat_id);
+                    im_mbs.set(1);
+                    drop(state);
+                    ui.set_input_dialog_title(loc_m.borrow().tr("Title_RenameCategory").into());
+                    ui.set_input_dialog_text(cat_name.into());
+                    ui.set_input_dialog_error("".into());
+                    ui.set_input_dialog_visible(true);
+                }
+                1 => ui.invoke_hotkey(),
+                _ => {}
+            },
+            2 => match index {
+                // 图标/列表视图：复用 on_toggle_view（会更新分类 view_type 并保存）
+                0 => {
+                    if !ui.get_is_icon_view() {
+                        ui.invoke_toggle_view();
+                    }
+                }
+                1 => {
+                    if ui.get_is_icon_view() {
+                        ui.invoke_toggle_view();
+                    }
+                }
+                2 => ui.invoke_toggle_theme(),
+                _ => {}
+            },
+            3 => match index {
+                0 => crate::tray_ui::handle_tray_ui_action(
+                    crate::tray_ui::TrayUiAction::ToggleFollowMouse,
+                    &ui,
+                    &state_mbs,
+                ),
+                1 => {
+                    let _ = crate::tray::toggle_autostart();
+                }
+                2 => crate::tray_ui::handle_tray_ui_action(
+                    crate::tray_ui::TrayUiAction::SetLanguage("zh-CN".into()),
+                    &ui,
+                    &state_mbs,
+                ),
+                3 => crate::tray_ui::handle_tray_ui_action(
+                    crate::tray_ui::TrayUiAction::SetLanguage("zh-TW".into()),
+                    &ui,
+                    &state_mbs,
+                ),
+                4 => crate::tray_ui::handle_tray_ui_action(
+                    crate::tray_ui::TrayUiAction::SetLanguage("en-US".into()),
+                    &ui,
+                    &state_mbs,
+                ),
+                _ => {}
+            },
+            4 => match index {
+                0 => ui.set_about_dialog_visible(true),
+                _ => {}
+            },
+            _ => {}
+        }
+    });
+
     ui.on_menu_item_selected(move |index| {
         log::debug!("Menu item selected: index={}, kind={}", index, mk_menu.get());
 

@@ -16,8 +16,10 @@ export component ItemTile {
     in property <ItemModel> item;
     in property <bool> is-icon-view: true;
     in property <bool> selected: false;
+    // 图标视图单元高度（网格传入 cell-height；默认 90px 保持原行为）
+    in property <length> icon-cell-height: 90px;
 
-    height: root.is-icon-view ? 90px : 36px;
+    height: root.is-icon-view ? root.icon-cell-height : 36px;
 
     TouchArea {
         clicked => { root.clicked(); }
@@ -27,22 +29,35 @@ export component ItemTile {
             }
         }
 
-        // 图标视图（大图标居中）
+        // hover 反馈背景（P3；声明在前置于内容下层）
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            background: self.has-hover ? Theme.menu-hover : transparent;
+            border-radius: Theme.radius-md;
+        }
+
+        // 图标视图（大图标水平居中）
         VerticalBox {
             visible: root.is-icon-view;
             padding: Theme.spacing-sm;
             spacing: Theme.spacing-sm;
+            alignment: center;
 
-            Rectangle {
-                width: Theme.icon-size;
-                height: Theme.icon-size;
-                background: Theme.bg-card;
-                border-radius: Theme.radius-md;
+            HorizontalBox {
+                alignment: center;
 
-                Image {
-                    width: parent.width;
-                    height: parent.height;
-                    source: root.item.icon-path;
+                Rectangle {
+                    width: Theme.icon-size;
+                    height: Theme.icon-size;
+                    background: Theme.bg-card;
+                    border-radius: Theme.radius-md;
+
+                    Image {
+                        width: parent.width;
+                        height: parent.height;
+                        source: root.item.icon-path;
+                    }
                 }
             }
 
