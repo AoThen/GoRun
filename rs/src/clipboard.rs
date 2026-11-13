@@ -56,7 +56,13 @@ pub fn clipboard_files() -> Vec<std::path::PathBuf> {
             if !locked.is_null() {
                 let count = DragQueryFileW(HDROP(locked as isize), u32::MAX, None);
                 for i in 0..count {
-                    let mut buf = [0u16; 1024];
+                    // P4-02：先用 NULL 查询所需长度（含终止 NUL），再按精确长度分配。
+                    // 固定 1024 缓冲会静默截断超长路径（Windows 上限 32767 UTF-16）。
+                    let needed = DragQueryFileW(HDROP(locked as isize), i, None);
+                    if needed == 0 {
+                        continue;
+                    }
+                    let mut buf = vec![0u16; needed as usize];
                     let len = DragQueryFileW(HDROP(locked as isize), i, Some(&mut buf));
                     if len > 0 && (len as usize) < buf.len() {
                         let p = String::from_utf16_lossy(&buf[..len as usize]);
