@@ -7,6 +7,10 @@ mod dragdrop;
 
 pub enum DropMessage {
     Drop(Vec<PathBuf>),
+    /// 光标离开窗口（F7 自动隐藏）：WM_MOUSELEAVE。
+    MouseLeft,
+    /// 光标回到窗口（F7 自动隐藏）：WM_MOUSEMOVE（发过 MouseLeft 之后）。
+    MouseEnter,
 }
 
 /// 拖放子类化的生命周期守卫。

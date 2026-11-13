@@ -3,6 +3,8 @@ use std::path::PathBuf;
 #[cfg(windows)]
 use std::sync::mpsc::Sender;
 #[cfg(windows)]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(windows)]
 use super::DropMessage;
 
 #[cfg(windows)]
@@ -12,7 +14,18 @@ use windows::Win32::UI::Shell::{
     DefSubclassProc, DragAcceptFiles, DragFinish, DragQueryFileW, HDROP, RemoveWindowSubclass,
 };
 #[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::{WM_DROPFILES};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    TrackMouseEvent, TRACKMOUSEEVENT, TME_LEAVE,
+};
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{WM_DROPFILES, WM_MOUSEMOVE};
+#[cfg(windows)]
+use windows::Win32::UI::Controls::WM_MOUSELEAVE;
+
+/// 鼠标离开状态（F7 自动隐藏）：置位表示已发过 MouseLeft（光标在窗口外），
+/// 下次 WM_MOUSEMOVE（回到窗口）时发 MouseEnter 取消隐藏。单窗口单实例。
+#[cfg(windows)]
+static LEFT_SENT: AtomicBool = AtomicBool::new(false);
 
 /// 子类化回调：处理 WM_DROPFILES 并把拖放文件路径转发给接收端。
 /// 模块级定义（非嵌套），供 setup/remove 成对引用（RemoveWindowSubclass 需同函数指针）。
@@ -47,6 +60,27 @@ unsafe extern "system" fn subclass_proc(
 
         sender.send(DropMessage::Drop(paths)).ok();
         DragFinish(hdrop);
+        LRESULT(0)
+    } else if umsg == WM_MOUSEMOVE {
+        // F7 自动隐藏：光标在窗口内移动时注册 leave 跟踪（每次 move 重置）
+        let mut tme = TRACKMOUSEEVENT {
+            cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+            dwFlags: TME_LEAVE,
+            hwndTrack: hwnd,
+            dwHoverTime: 0,
+        };
+        let _ = TrackMouseEvent(&mut tme);
+        // 之前发过 MouseLeft（光标在窗口外）且现在又 move → 回到窗口，通知取消隐藏
+        if LEFT_SENT.swap(false, Ordering::SeqCst) {
+            let sender = &*(_dwrefdata as *const Sender<DropMessage>);
+            sender.send(DropMessage::MouseEnter).ok();
+        }
+        DefSubclassProc(hwnd, umsg, wparam, lparam)
+    } else if umsg == WM_MOUSELEAVE {
+        // F7 自动隐藏：光标离开窗口 → 置位并通知（消费线程延迟后隐藏）
+        LEFT_SENT.store(true, Ordering::SeqCst);
+        let sender = &*(_dwrefdata as *const Sender<DropMessage>);
+        sender.send(DropMessage::MouseLeft).ok();
         LRESULT(0)
     } else {
         DefSubclassProc(hwnd, umsg, wparam, lparam)

@@ -157,6 +157,12 @@ fn main() {
         .get("follow_mouse")
         .map(|v| v == "1")
         .unwrap_or(false);
+    // F7 自动隐藏（光标离开 1s 后隐藏）：默认关闭（避免误遮挡工作窗口）
+    let auto_hide = app_config
+        .extra_config
+        .get("auto_hide")
+        .map(|v| v == "1")
+        .unwrap_or(false);
     // P2-3：提前创建 loc，以便用当前语言重命名首启默认分类
     let loc = Rc::new(RefCell::new(localization::Localization::new(&lang_code)));
     if created_default_cat {
@@ -396,7 +402,7 @@ fn main() {
     // P0：拖放守卫必须存入 AppState 存活到进程结束；
     // 只把消息接收端交给消费线程。
     if let Some((guard, rx)) = drop_handler::setup_drop_handler(&ui) {
-        drop_handler::spawn_drop_consumer(ui.as_weak(), rx);
+        drop_handler::spawn_drop_consumer(ui.as_weak(), rx, auto_hide);
         state.borrow_mut().drop_handler = Some(guard);
     }
 
