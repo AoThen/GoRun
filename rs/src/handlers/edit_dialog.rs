@@ -54,6 +54,7 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
         };
 
         dialog.set_item_name(default_name.into());
+        dialog.set_item_hotkey("".into());
         dialog.set_category_names(Rc::new(slint::VecModel::from(categories)).into());
         dialog.set_selected_category_index(selected_cat_idx as i32);
         let loc_new = state.borrow().loc.clone();
@@ -135,6 +136,7 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
                     icon_index: dlg.get_item_icon_index(),
                     keywords: dlg.get_item_keywords().to_string(),
                     remark: dlg.get_item_remark().to_string(),
+                    hotkey: dlg.get_item_hotkey().to_string(),
                     run_as_admin: dlg.get_run_as_admin(),
                     category_id,
                     ..Default::default()
@@ -147,6 +149,8 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
                     if let Some(ui) = weak_ui_save.upgrade() {
                         ui_sync::refresh_items_ui(&ui, &state_save.borrow(), &cat_id, &query);
                     }
+                    // F8/4.1：新增条目后重注册条目热键
+                    ui_sync::sync_item_hotkeys(&state_save.borrow());
                 } else {
                     drop(state);
                 }

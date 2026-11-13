@@ -928,6 +928,7 @@ pub fn wire_handler(
                             dialog.set_item_icon_index(item.icon_index);
                             dialog.set_item_keywords(item.keywords.clone().into());
                             dialog.set_item_remark(item.remark.clone().into());
+                            dialog.set_item_hotkey(item.hotkey.clone().into());
                             dialog.set_run_as_admin(item.run_as_admin);
                             dialog.set_category_names(
                                 Rc::new(slint::VecModel::from(categories)).into(),
@@ -1014,6 +1015,7 @@ pub fn wire_handler(
                                     updated_item.cached_icon = String::new();
                                     updated_item.keywords = dlg.get_item_keywords().to_string();
                                     updated_item.remark = dlg.get_item_remark().to_string();
+                                    updated_item.hotkey = dlg.get_item_hotkey().to_string();
                                     updated_item.run_as_admin = dlg.get_run_as_admin();
                                     let cat_idx = dlg.get_selected_category_index() as usize;
                                     if let Some(cat) = state.manager.categories().get(cat_idx) {
@@ -1033,6 +1035,8 @@ pub fn wire_handler(
                                                 &query,
                                             );
                                         }
+                                        // F8/4.1：编辑条目后重注册条目热键
+                                        ui_sync::sync_item_hotkeys(&state_edit.borrow());
                                     } else {
                                         drop(state);
                                     }
@@ -1306,6 +1310,8 @@ pub fn wire_handler(
                 if let Some(ui) = weak_ui_confirm.upgrade() {
                     ui_sync::refresh_items_ui(&ui, &state_confirm.borrow(), &cat_id, &query);
                 }
+                // F8/4.1：删除条目后重注册条目热键
+                ui_sync::sync_item_hotkeys(&state_confirm.borrow());
             }
             // 删除项处理完毕后必须返回，避免与后续提权/运行全部 pending 级联执行
             return;

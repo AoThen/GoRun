@@ -28,6 +28,10 @@ pub struct AppState {
     pub geometry_dirty: bool,
     /// 最近一次几何变化时刻，用于判断去抖窗口是否已过。
     pub last_geometry_change: Option<std::time::Instant>,
+    /// 条目级全局热键管理器（F8/4.1）：多热键注册/分发。
+    pub item_hotkey_mgr: Rc<RefCell<crate::hotkey::ItemHotkeyManager>>,
+    /// 条目热键触发通道发送端（item_id），由消费线程收。
+    pub item_hotkey_tx: std::sync::mpsc::Sender<String>,
 }
 
 impl AppState {
@@ -97,6 +101,7 @@ mod tests {
     use crate::model::AppConfig;
 
     fn make_state(path: &str) -> AppState {
+        let (ihk_tx, _ihk_rx) = std::sync::mpsc::channel::<String>();
         AppState {
             manager: ItemManager::new(AppConfig::default()),
             storage: Storage::new(path.to_string()),
@@ -110,6 +115,8 @@ mod tests {
             drop_handler: None,
             geometry_dirty: false,
             last_geometry_change: None,
+            item_hotkey_mgr: Rc::new(RefCell::new(crate::hotkey::ItemHotkeyManager::new())),
+            item_hotkey_tx: ihk_tx,
         }
     }
 

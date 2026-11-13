@@ -204,6 +204,10 @@ fn main() {
         .map(|c| c.id.clone())
         .unwrap_or_default();
 
+    // F8/4.1：条目级全局热键管理器 + 触发通道（消费线程在事件循环前启动）
+    let item_hotkey_mgr = Rc::new(RefCell::new(hotkey::ItemHotkeyManager::new()));
+    let (ihk_tx, ihk_rx) = std::sync::mpsc::channel::<String>();
+
     let state = Rc::new(RefCell::new(AppState {
         manager,
         storage,
@@ -217,6 +221,8 @@ fn main() {
         drop_handler: None,
         geometry_dirty: false,
         last_geometry_change: None,
+        item_hotkey_mgr: item_hotkey_mgr.clone(),
+        item_hotkey_tx: ihk_tx,
     }));
 
     let ui = match MainWindow::new() {
@@ -334,6 +340,20 @@ fn main() {
         });
     }
     let _hotkey_mgr = hotkey_mgr.clone();
+
+    // F8/4.1：条目级全局热键——消费线程收 item_id 后运行；首次注册所有非空条目热键
+    {
+        let ihk_state = state.clone();
+        std::thread::spawn(move || {
+            while let Ok(item_id) = ihk_rx.recv() {
+                let st = ihk_state.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    crate::ui_sync::run_item_by_id(&st, &item_id);
+                });
+            }
+        });
+        ui_sync::sync_item_hotkeys(&state.borrow());
+    }
 
     let categories: Vec<CategoryModel> = state
         .borrow()

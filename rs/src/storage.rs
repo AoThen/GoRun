@@ -161,6 +161,8 @@ struct RawItem {
     category_id: String,
     #[serde(rename = "sortOrder", default)]
     sort_order: i32,
+    #[serde(default)]
+    hotkey: String,
 }
 
 /// P0-2 完整性值：对配置内容（version/categories/items/config/排序后的 extra）做
@@ -296,6 +298,7 @@ impl Storage {
                 remark: i.remark,
                 category_id: i.category_id,
                 sort_order: i.sort_order,
+                hotkey: i.hotkey,
             })
             .collect();
 
@@ -359,6 +362,7 @@ fn build_raw(app_config: &AppConfig) -> RawFile {
                 remark: i.remark.clone(),
                 category_id: i.category_id.clone(),
                 sort_order: cur,
+                hotkey: i.hotkey.clone(),
             }
         })
         .collect();

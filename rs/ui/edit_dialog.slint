@@ -3,7 +3,7 @@ import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox, SpinB
 export component EditDialog inherits Window {
     title: root.title-text;
     width: 500px;
-    height: 450px;
+    height: 500px;
 
     callback save();
     callback cancel();
@@ -20,6 +20,7 @@ export component EditDialog inherits Window {
     in property <string> label-icon-index: "Icon Index:";
     in property <string> label-keywords: "Keywords:";
     in property <string> label-remark: "Remark:";
+    in property <string> label-hotkey: "Hotkey:";
     in property <string> label-category: "Category:";
     in property <string> browse-text: "Browse...";
     in property <string> run-as-admin-text: "Run as administrator";
@@ -34,6 +35,7 @@ export component EditDialog inherits Window {
     in-out property <int> item-icon-index: 0;
     in-out property <string> item-keywords;
     in-out property <string> item-remark;
+    in-out property <string> item-hotkey;
     in-out property <bool> run-as-admin;
     in-out property <[string]> category-names;
     in-out property <int> selected-category-index: 0;
@@ -124,6 +126,15 @@ export component EditDialog inherits Window {
             LineEdit {
                 text: root.item-remark;
                 edited => { root.item-remark = self.text; }
+            }
+        }
+
+        HorizontalBox {
+            alignment: center;
+            Text { text: root.label-hotkey; width: 80px; }
+            LineEdit {
+                text: root.item-hotkey;
+                edited => { root.item-hotkey = self.text; }
             }
         }
 

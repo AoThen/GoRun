@@ -55,6 +55,9 @@ pub struct Item {
     pub category_id: String,
     #[serde(default)]
     pub sort_order: i32,
+    /// 条目级全局热键（F8/4.1）：如 "Ctrl+Shift+F1"；空=未设置。
+    #[serde(default)]
+    pub hotkey: String,
 }
 
 pub const DEFAULT_VERSION: &str = "1.0.0";

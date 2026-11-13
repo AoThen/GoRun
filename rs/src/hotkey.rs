@@ -341,6 +341,197 @@ impl Drop for HotkeyManager {
     }
 }
 
+/// 条目级全局热键（F8/4.1）：一个 pump 线程注册多个条目热键（各配唯一 id），
+/// 触发时按 `WM_HOTKEY.wParam`（id）查回 item_id，经 `Sender<String>` 分发给主线程。
+pub struct ItemHotkeyManager {
+    registered: bool,
+    pump_active: bool,
+    thread_handle: Option<thread::JoinHandle<()>>,
+    kill_sender: Option<Sender<()>>,
+}
+
+impl ItemHotkeyManager {
+    pub fn new() -> Self {
+        ItemHotkeyManager {
+            registered: false,
+            pump_active: false,
+            thread_handle: None,
+            kill_sender: None,
+        }
+    }
+
+    /// 注册全部条目热键（`(item_id, hotkey_str)`）。空列表视为成功（无条目热键）。
+    /// 触发时向 `sender` 发送被按下的条目 `item_id`。失败（解析/注册错误）不阻断其他项。
+    pub fn register_all(
+        &mut self,
+        hotkeys: &[(String, String)],
+        sender: Sender<String>,
+    ) -> bool {
+        self.unregister();
+        if hotkeys.is_empty() {
+            self.registered = true;
+            return true;
+        }
+
+        let (kill_tx, kill_rx) = channel::<()>();
+        self.kill_sender = Some(kill_tx);
+        let (result_tx, result_rx) = channel::<bool>();
+        let hotkeys_owned: Vec<(String, String)> = hotkeys.to_vec();
+
+        let handle = thread::Builder::new()
+            .name("item-hotkey-pump".to_string())
+            .spawn(move || {
+                #[cfg(windows)]
+                unsafe {
+                    use std::collections::HashMap;
+                    use windows::Win32::Foundation::{FALSE, TRUE};
+                    use windows::Win32::UI::Input::KeyboardAndMouse::{
+                        RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS,
+                    };
+                    use windows::Win32::UI::WindowsAndMessaging::{
+                        DispatchMessageW, MsgWaitForMultipleObjects, PeekMessageW, QS_ALLINPUT,
+                        MSG, PM_NOREMOVE, PM_REMOVE, WM_HOTKEY,
+                    };
+
+                    let mut msg: MSG = std::mem::zeroed();
+                    // 确保注册线程拥有消息队列（P0 防御：RegisterHotKey 要求线程有消息队列）
+                    let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
+
+                    // id 从 0xC100 起，避免与全局热键 HOTKEY_ID(0xC001) 冲突
+                    let mut id_map: HashMap<u32, String> = HashMap::new();
+                    let mut any_ok = false;
+                    for (i, (item_id, hk_str)) in hotkeys_owned.iter().enumerate() {
+                        let hkid = 0xC100 + i as u32;
+                        match parse_hotkey_string(hk_str) {
+                            Some(hk) => {
+                                let r = RegisterHotKey(
+                                    None,
+                                    hkid as i32,
+                                    HOT_KEY_MODIFIERS(hk.modifiers),
+                                    hk.vk,
+                                );
+                                if r.is_ok() {
+                                    id_map.insert(hkid, item_id.clone());
+                                    any_ok = true;
+                                } else {
+                                    log::error!(
+                                        "ItemHotkeyManager: RegisterHotKey failed for '{}' (id=0x{:X}): {:?}",
+                                        hk_str, hkid, r.err()
+                                    );
+                                }
+                            }
+                            None => {
+                                log::error!(
+                                    "ItemHotkeyManager: invalid hotkey string: '{}'",
+                                    hk_str
+                                );
+                            }
+                        }
+                    }
+                    let _ = result_tx.send(any_ok);
+                    if !any_ok {
+                        log::warn!(
+                            "ItemHotkeyManager: no item hotkey registered, pump exiting"
+                        );
+                        return;
+                    }
+
+                    loop {
+                        if kill_rx.try_recv().is_ok() {
+                            log::info!("ItemHotkeyManager: pump thread received kill signal");
+                            break;
+                        }
+                        let waited = MsgWaitForMultipleObjects(None, FALSE, 500, QS_ALLINPUT);
+                        match waited.0 {
+                            258 => {}
+                            0xFFFF_FFFF => {
+                                log::error!("ItemHotkeyManager: MsgWaitForMultipleObjects failed");
+                                break;
+                            }
+                            _ => {
+                                while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE) == TRUE {
+                                    if msg.message == WM_HOTKEY {
+                                        if let Some(item_id) = id_map.get(&(msg.wParam.0 as u32)) {
+                                            let _ = sender.send(item_id.clone());
+                                        }
+                                    }
+                                    let _ = DispatchMessageW(&msg);
+                                }
+                            }
+                        }
+                    }
+
+                    for hkid in id_map.keys() {
+                        let _ = UnregisterHotKey(None, *hkid as i32);
+                    }
+                }
+
+                #[cfg(not(windows))]
+                {
+                    let _ = &sender;
+                    let _ = &kill_rx;
+                    let _ = &hotkeys_owned;
+                    let _ = result_tx.send(false);
+                    log::warn!(
+                        "ItemHotkeyManager: item hotkeys not supported on this platform"
+                    );
+                }
+            });
+
+        match handle {
+            Ok(h) => {
+                self.thread_handle = Some(h);
+                let ok = result_rx
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap_or(false);
+                self.registered = ok;
+                self.pump_active = ok;
+                ok
+            }
+            Err(e) => {
+                log::error!(
+                    "ItemHotkeyManager: failed to start pump thread: {}",
+                    e
+                );
+                false
+            }
+        }
+    }
+
+    pub fn unregister(&mut self) -> bool {
+        self.kill_pump_thread();
+        self.pump_active = false;
+        self.registered = false;
+        true
+    }
+
+    pub fn is_registered(&self) -> bool {
+        self.registered
+    }
+
+    fn kill_pump_thread(&mut self) {
+        if let Some(kill_tx) = self.kill_sender.take() {
+            let _ = kill_tx.send(());
+        }
+        if let Some(handle) = self.thread_handle.take() {
+            let _ = handle.join();
+            log::info!("ItemHotkeyManager: pump thread joined");
+        }
+    }
+}
+
+impl Default for ItemHotkeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for ItemHotkeyManager {
+    fn drop(&mut self) {
+        self.unregister();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

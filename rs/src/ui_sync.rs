@@ -153,6 +153,42 @@ pub fn run_item_at_index(
     }
 }
 
+/// F8/4.1：按 item_id 运行条目（条目级全局热键触发）。搜索参数为空（热键无搜索语境）。
+pub fn run_item_by_id(state: &Rc<RefCell<AppState>>, item_id: &str) {
+    let item = {
+        let st = state.borrow();
+        st.manager
+            .all_items()
+            .iter()
+            .find(|i| i.id == item_id)
+            .cloned()
+    };
+    let item = match item {
+        Some(i) => i,
+        None => {
+            log::warn!("Item hotkey: item {} not found", item_id);
+            return;
+        }
+    };
+    let result = if item.run_as_admin {
+        crate::runner::run_as_admin(&item, "")
+    } else {
+        crate::runner::run(&item, "")
+    };
+    if result.success {
+        log::info!("Item hotkey launched: {}", item.name);
+        let mut s = state.borrow_mut();
+        s.manager.increment_run_count(&item.id);
+        s.save_if_modified();
+    } else {
+        log::error!(
+            "Item hotkey run failed for {}: {}",
+            item.name,
+            result.error_message
+        );
+    }
+}
+
 pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, query: &str) {
     let items = if query.is_empty() {
         state.manager.items(category_id)
@@ -217,6 +253,7 @@ pub fn set_edit_dialog_texts(dlg: &EditDialog, loc: &Rc<RefCell<Localization>>) 
     dlg.set_label_icon_index(format!("{}:", lb.tr("STR_IconIndex")).into());
     dlg.set_label_keywords(format!("{}:", lb.tr("STR_Keywords")).into());
     dlg.set_label_remark(format!("{}:", lb.tr("STR_Remark")).into());
+    dlg.set_label_hotkey(format!("{}:", lb.tr("STR_HotKey")).into());
     dlg.set_label_category(format!("{}:", lb.tr("STR_Category")).into());
     dlg.set_browse_text(format!("{}...", lb.tr("Btn_Browse")).into());
     dlg.set_run_as_admin_text(lb.tr("STR_RunAsAdmin").into());
@@ -264,6 +301,23 @@ pub fn refresh_categories_ui(ui: &MainWindow, state: &AppState) {
         .position(|c| c.id == state.current_category_id)
     {
         ui.set_sidebar_selected_index(idx as i32);
+    }
+}
+
+/// F8/4.1：同步条目级全局热键——收集所有非空 item.hotkey，重注册到 ItemHotkeyManager。
+/// 条目增删改/导入后调用；空列表时注销全部（无条目热键）。
+pub fn sync_item_hotkeys(state: &AppState) {
+    let hotkeys: Vec<(String, String)> = state
+        .manager
+        .all_items()
+        .iter()
+        .filter(|i| !i.hotkey.trim().is_empty())
+        .map(|i| (i.id.clone(), i.hotkey.clone()))
+        .collect();
+    let tx = state.item_hotkey_tx.clone();
+    let ok = state.item_hotkey_mgr.borrow_mut().register_all(&hotkeys, tx);
+    if !ok {
+        log::warn!("Item hotkey registration reported failure (partial)");
     }
 }
 

@@ -82,6 +82,8 @@ pub fn import_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
     }
     crate::ui_sync::refresh_categories_ui(ui, &state.borrow());
     crate::ui_sync::refresh_items_ui(ui, &state.borrow(), &cur, "");
+    // F8/4.1：导入后重注册条目热键（条目集整体变化）
+    crate::ui_sync::sync_item_hotkeys(&state.borrow());
     ui.set_status_text("Imported config".into());
     log::info!("Imported config from {}", path);
 }
