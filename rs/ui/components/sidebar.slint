@@ -17,6 +17,8 @@ export component Sidebar {
     // 分类拖拽排序（F2-1，DragArea/DropArea）：down 请求设源载荷；被拖入时上报 (target, data)。
     callback category-payload-requested(index: int);
     callback category-dropped-on(index: int, data: data-transfer);
+    // 滚轮切页（F7/参考特性）：分类项滚轮 → 上/下一分类
+    callback wheel-switch(delta: int);
     in-out property <data-transfer> drag-payload;
     in property <bool> drag-enabled: true;
 
@@ -57,6 +59,14 @@ export component Sidebar {
                             clicked => {
                                 root.selected-index = index;
                                 root.category-selected(index);
+                            }
+                            scroll-event(event) => {
+                                if (event.delta-y != 0) {
+                                    root.wheel-switch(event.delta-y > 0 ? 1 : -1);
+                                    accept
+                                } else {
+                                    reject
+                                }
                             }
                             pointer-event(PointerEvent) => {
                                 if (PointerEvent.button == PointerEventButton.left && PointerEvent.kind == PointerEventKind.down) {

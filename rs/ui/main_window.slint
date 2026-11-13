@@ -82,6 +82,7 @@ export component MainWindow inherits Window {
     callback dropped-on(index: int, data: data-transfer);
     callback category-payload-requested(index: int);
     callback category-dropped-on(index: int, data: data-transfer);
+    callback wheel-switch(delta: int);
 
     in-out property <[CategoryModel]> categories;
     in-out property <[ItemModel]> items;
@@ -262,6 +263,10 @@ toggle-theme => {
                     }
                     category-dropped-on(index, data) => {
                         root.category-dropped-on(index, data);
+                    }
+                    wheel-switch(delta) => {
+                        root.context-menu-visible = false;
+                        root.wheel-switch(delta);
                     }
                 }
 

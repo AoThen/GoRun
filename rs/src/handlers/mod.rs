@@ -362,6 +362,34 @@ pub fn wire_handler(
         }
     });
 
+    // 滚轮切页（F7/参考特性）：当前分类 ± delta，首尾循环回绕。
+    let state_ws = state.clone();
+    let weak_ui_ws = ui.as_weak();
+    ui.on_wheel_switch(move |delta| {
+        log::debug!("Wheel switch: delta={}", delta);
+        let mut state = state_ws.borrow_mut();
+        let n = state.manager.categories().len();
+        if n == 0 {
+            return;
+        }
+        let cur_idx = state
+            .manager
+            .categories()
+            .iter()
+            .position(|c| c.id == state.current_category_id)
+            .unwrap_or(0);
+        let new_idx = ((cur_idx as i32 + delta).rem_euclid(n as i32)) as usize;
+        let cat = state.manager.categories()[new_idx].clone();
+        state.current_category_id = cat.id.clone();
+        let is_icon = matches!(cat.view_type, ViewType::Icon);
+        drop(state);
+        if let Some(ui) = weak_ui_ws.upgrade() {
+            ui.set_sidebar_selected_index(new_idx as i32);
+            ui.set_is_icon_view(is_icon);
+            ui_sync::refresh_items_ui(&ui, &state_ws.borrow(), &cat.id, "");
+        }
+    });
+
     ui.on_item_selected(move || {
         let ui = match weak_ui_sel.upgrade() {
             Some(u) => u,
