@@ -312,7 +312,7 @@ fn main() {
                             // 认为与外层 borrow 重叠（E0597）
                             let loc_ref = state_geo.borrow().loc.clone();
                             let msg = loc_ref.borrow().tr("Status_SaveFailed").to_string();
-                            ui.set_status_text(msg.into());
+                            ui_sync::show_toast(&ui, msg, true);
                             state_geo.borrow_mut().save_fail_notified = false;
                         }
                     }
@@ -371,16 +371,18 @@ fn main() {
         ui_sync::sync_item_hotkeys(&state.borrow());
     }
 
-    let categories: Vec<CategoryModel> = state
-        .borrow()
+    let st_cats = state.borrow();
+    let categories: Vec<CategoryModel> = st_cats
         .manager
         .categories()
         .iter()
         .map(|c| CategoryModel {
             id: c.id.clone().into(),
             name: c.name.clone().into(),
+            count: st_cats.manager.items(&c.id).len() as i32,
         })
         .collect();
+    drop(st_cats);
     let category_model = Rc::new(slint::VecModel::from(categories));
     ui.set_categories(category_model.into());
 
@@ -416,14 +418,14 @@ fn main() {
             loc.borrow().tr("Tip_ExternalBackup"),
             config_path.display()
         );
-        ui.set_status_text(msg.into());
+        ui_sync::show_toast(&ui, msg, true);
     }
     if let Some(corrupt_path) = &corrupt_quarantined {
         let msg = loc
             .borrow()
             .tr("Status_CorruptQuarantined")
             .replace("{0}", corrupt_path);
-        ui.set_status_text(msg.into());
+        ui_sync::show_toast(&ui, msg, true);
     }
 
     handlers::wire_handler(

@@ -27,8 +27,8 @@ export component ItemGrid {
     in property <bool> drag-enabled: true;
 
     // 图标视图：响应式网格（对齐原版 95px 单元格，columns = max(1, width/95)）
-    in property <length> cell-width: 95px;
-    in property <length> cell-height: 95px;
+    in property <length> cell-width: 96px;
+    in property <length> cell-height: 88px;
 
     // 可用宽度内能容纳的列数（至少 1 列）；int() 截断偏保守（宁可少一列不溢出）
     property <int> column-count:
@@ -93,16 +93,40 @@ export component ItemGrid {
     }
 
     in property <string> empty-text: "No items here yet";
+    in property <string> empty-hint-text: "";
 
-    // 空状态提示（P2 #13）
-    Text {
+    // 空状态引导（v2：48px 虚线圆角框 + 主文案 + 副文案；虚线 Slint 不支持，以 1px stroke 描边近似）
+    Rectangle {
         visible: items.length == 0;
-        text: root.empty-text;
-        color: Theme.text-secondary;
-        font-size: Theme.font-size-md;
-        horizontal-alignment: center;
-        vertical-alignment: center;
         width: 100%;
         height: 100%;
+
+        VerticalBox {
+            alignment: center;
+            spacing: Theme.spacing-md;
+
+            Rectangle {
+                width: 48px;
+                height: 48px;
+                border-width: 1px;
+                border-color: Theme.stroke-1;
+                border-radius: Theme.radius-md;
+            }
+
+            Text {
+                text: root.empty-text;
+                color: Theme.text-2;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: root.empty-hint-text;
+                color: Theme.text-2;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                visible: root.empty-hint-text != "";
+            }
+        }
     }
 }

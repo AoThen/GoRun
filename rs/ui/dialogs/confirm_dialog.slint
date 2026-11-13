@@ -24,10 +24,10 @@ export component ConfirmDialog {
         Rectangle {
             width: 340px;
             min-height: 160px;
-            background: Theme.bg-secondary;
-            border-radius: 12px;
+            background: Theme.bg-2;
+            border-radius: Theme.radius-lg;
             border-width: 1px;
-            border-color: Theme.menu-border;
+            border-color: Theme.stroke-1;
 
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
@@ -38,14 +38,14 @@ export component ConfirmDialog {
 
                 Text {
                     text: root.dialog-title;
-                    color: Theme.text-primary;
-                    font-size: 16px;
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-lg;
                     font-weight: 700;
                 }
 
                 Text {
                     text: root.message;
-                    color: Theme.text-secondary;
+                    color: Theme.text-2;
                     font-size: 13px;
                     wrap: word-wrap;
                 }
@@ -59,12 +59,12 @@ export component ConfirmDialog {
                         height: 32px;
                         clicked => { root.cancel(); }
                         Rectangle {
-                            background: cancel-ta.has-hover ? Theme.menu-hover : transparent;
-                            border-radius: 6px;
+                            background: cancel-ta.has-hover ? Theme.hover : transparent;
+                            border-radius: Theme.radius-xs;
                             border-width: 1px;
-                            border-color: Theme.menu-border;
+                            border-color: Theme.stroke-2;
                             HorizontalBox { alignment: center;
-                                Text { text: root.cancel-text; color: Theme.text-primary; font-size: 13px; }
+                                Text { text: root.cancel-text; color: Theme.text-1; font-size: 13px; }
                             }
                         }
                     }
@@ -74,10 +74,10 @@ export component ConfirmDialog {
                         height: 32px;
                         clicked => { root.confirm(); }
                         Rectangle {
-                            background: Theme.accent;
-                            border-radius: 6px;
+                            background: root.danger ? Theme.danger : Theme.accent;
+                            border-radius: Theme.radius-xs;
                             HorizontalBox { alignment: center;
-                                Text { text: root.confirm-text; color: #ffffff; font-size: 13px; }
+                                Text { text: root.confirm-text; color: root.danger ? Theme.danger-fg : Theme.accent-fg; font-size: 13px; }
                             }
                         }
                     }

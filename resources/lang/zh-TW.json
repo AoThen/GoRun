@@ -611,6 +611,7 @@
     "Tip_UndoNotPossible": "此操作不可復原。",
     "Btn_ConfirmDelete": "確定刪除",
     "Tip_NoItems": "暫無項目",
+    "Tip_DropToAdd": "拖入檔案或捷徑即可加入",
     "Menu_Run": "執行",
     "Menu_RefreshIcon": "重新整理圖示",
     "Title_EditItem": "編輯項目",

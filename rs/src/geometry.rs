@@ -97,7 +97,8 @@ pub fn position_menu_at_cursor(ui: &MainWindow, x: f32, y: f32, item_count: usiz
             let size = ui.window().size();
             let pos = ui.window().position();
             const MENU_W: f32 = 160.0;
-            let menu_h = item_count as f32 * 22.0 + 8.0;
+            // v2：菜单项高 22→28px（context_menu.slint），高度系数同步，否则底缘 clamp 失效弹层被裁切
+            let menu_h = item_count as f32 * 28.0 + 8.0;
             let win_w = size.width as f32 / sf;
             let win_h = size.height as f32 / sf;
             let lx = ((pt.x - pos.x) as f32 / sf).clamp(0.0, (win_w - MENU_W).max(0.0));

@@ -1,12 +1,11 @@
-import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Sidebar } from "components/sidebar.slint";
-import { SearchBar } from "components/search_bar.slint";
+import { Toolbar } from "components/toolbar.slint";
 import { ItemGrid } from "components/item_grid.slint";
-import { StatusBar } from "components/status_bar.slint";
 import { ContextMenu } from "components/context_menu.slint";
-import { MenuBar } from "components/menu_bar.slint";
 import { MenuPopup } from "components/menu_popup.slint";
+import { Toast } from "components/toast.slint";
 import { ConfirmDialog } from "dialogs/confirm_dialog.slint";
 import { InputDialog } from "dialogs/input_dialog.slint";
 import { AboutDialog } from "dialogs/about_dialog.slint";
@@ -14,6 +13,7 @@ import { AboutDialog } from "dialogs/about_dialog.slint";
 struct CategoryModel {
     id: string,
     name: string,
+    count: int,
 }
 
 struct ItemModel {
@@ -37,26 +37,20 @@ export component MainWindow inherits Window {
     callback new-item-clicked();
     callback refresh-icons();
 
-    in-out property <string> menu-title-file: "File";
-    in-out property <string> menu-title-edit: "Edit";
-    in-out property <string> menu-title-view: "View";
-    in-out property <string> menu-title-settings: "Settings";
-    in-out property <string> menu-title-help: "Help";
-    in-out property <int> open-menu-group: -1;
+    // v2：汉堡菜单入口与弹层选择（单一入口语义，替代原五组菜单栏）
     in-out property <bool> menu-popup-visible: false;
     in-out property <[string]> menu-popup-items: [];
-    in-out property <length> menu-popup-x: 0px;
-    in-out property <length> menu-popup-y: 0px;
+    in-out property <[bool]> menu-popup-danger: [];
+    callback hamburger-clicked();
+    callback menu-popup-selected(index: int);
+
     in-out property <string> about-version-text: "Version 1.0.0";
     in-out property <string> about-desc-text: "Windows 10+ desktop quick launcher. MIT License.";
     in-out property <string> about-ok-text: "OK";
     in-out property <string> sb-new-item-text: "New Item";
     in-out property <string> sb-search-hint-text: "Search";
-    in-out property <string> sb-switch-list-text: "List";
-    in-out property <string> sb-switch-icon-text: "Icon";
-    in-out property <string> sb-switch-light-text: "Light";
-    in-out property <string> sb-switch-dark-text: "Dark";
     in-out property <string> empty-text: "No items here yet";
+    in-out property <string> empty-hint-text: "";
     in-out property <string> confirm-confirm-text: "Delete";
     in-out property <string> confirm-cancel-text: "Cancel";
     in-out property <string> sidebar-title-text: "Categories";
@@ -76,8 +70,6 @@ export component MainWindow inherits Window {
     callback category-right-clicked(index: int, x: length, y: length);
     callback escape-pressed();
     callback item-selected();
-    callback menu-bar-group-clicked(group: int);
-    callback menu-bar-item-selected(index: int);
     callback payload-requested(index: int);
     callback dropped-on(index: int, data: data-transfer);
     callback category-payload-requested(index: int);
@@ -90,13 +82,20 @@ export component MainWindow inherits Window {
     in-out property <bool> is-dark-theme: false;
     changed is-dark-theme => { Theme.set-dark(root.is-dark-theme); }
     in-out property <bool> is-icon-view: true;
-    in-out property <string> status-text: "Ready";
+
+    // v2 Toast（替代 StatusBar）
+    in-out property <string> toast-message: "";
+    in-out property <bool> toast-error: false;
+    in-out property <bool> toast-visible: false;
 
     // 拖拽排序（F2-1）：drag-payload 由 Rust 设源索引；搜索态禁拖拽（索引语义错位）。
     in-out property <data-transfer> drag-payload;
     in property <bool> drag-enabled: root.search-text == "";
 
     in-out property <bool> context-menu-visible: false;
+    in-out property <[string]> context-menu-items: [];
+    // v2：右键菜单危险项标记（平行数组，与 context-menu-items 同长）
+    in-out property <[bool]> context-menu-danger: [];
 
     // 项目集合变化（搜索/换分类/删除）时重置键盘选中项
     changed items => {
@@ -106,7 +105,6 @@ export component MainWindow inherits Window {
     }
     in-out property <length> context-menu-x: 0px;
     in-out property <length> context-menu-y: 0px;
-    in-out property <[string]> context-menu-items: [];
 
     in-out property <bool> confirm-dialog-visible: false;
     in-out property <string> confirm-dialog-title: "Delete Item";
@@ -127,13 +125,13 @@ export component MainWindow inherits Window {
     in-out property <bool> about-dialog-visible: false;
 
     toggle-view => { is-icon-view = !is-icon-view; }
-toggle-theme => {
-    is-dark-theme = !is-dark-theme;
-    Theme.set-dark(is-dark-theme);
-}
+    toggle-theme => {
+        is-dark-theme = !is-dark-theme;
+        Theme.set-dark(is-dark-theme);
+    }
 
     Rectangle {
-        background: Theme.bg-primary;
+        background: Theme.bg-0;
 
         // Background click catcher (bottom layer)
         TouchArea {
@@ -143,7 +141,6 @@ toggle-theme => {
                 }
                 if (root.menu-popup-visible) {
                     root.menu-popup-visible = false;
-                    root.open-menu-group = -1;
                 }
             }
             pointer-event(PointerEvent) => {
@@ -172,7 +169,6 @@ toggle-theme => {
                         root.about-dialog-visible = false;
                     } else if (root.menu-popup-visible) {
                         root.menu-popup-visible = false;
-                        root.open-menu-group = -1;
                     } else if (root.context-menu-visible) {
                         root.context-menu-visible = false;
                     } else {
@@ -192,13 +188,28 @@ toggle-theme => {
                     }
                     return accept;
                 }
+                if (event.text == Key.Home) {
+                    root.selected-item-index = 0;
+                    return accept;
+                }
+                if (event.text == Key.End) {
+                    if (root.items.length > 0) {
+                        root.selected-item-index = root.items.length - 1;
+                    }
+                    return accept;
+                }
+                if (event.text == "f" && event.modifiers.control) {
+                    toolbar.focus-search();
+                    return accept;
+                }
                 if (event.text == Key.Return || event.text == "\u{0d}") {
                     if (root.items.length > 0
                         && !root.search-field-focused
                         && !root.confirm-dialog-visible
                         && !root.input-dialog-visible
                         && !root.about-dialog-visible
-                        && !root.context-menu-visible) {
+                        && !root.context-menu-visible
+                        && !root.menu-popup-visible) {
                         root.item-selected();
                     }
                     return accept;
@@ -210,25 +221,29 @@ toggle-theme => {
             spacing: Theme.spacing-sm;
             padding: Theme.spacing-md;
 
-            MenuBar {
-                title-file: root.menu-title-file;
-                title-edit: root.menu-title-edit;
-                title-view: root.menu-title-view;
-                title-settings: root.menu-title-settings;
-                title-help: root.menu-title-help;
-                active-group: root.open-menu-group;
-                group-clicked(group) => {
-                    if (root.open-menu-group == group) {
-                        root.open-menu-group = -1;
-                        root.menu-popup-visible = false;
-                    } else {
-                        root.open-menu-group = group;
-                        // 弹层定位：VerticalBox padding(8) + MenuBar HBox padding(2) + group*(按钮宽90+间距4)
-                        root.menu-popup-x = 10px + group * 94px;
-                        root.menu-popup-y = 36px;
-                        root.menu-popup-visible = true;
-                        root.menu-bar-group-clicked(group);
-                    }
+            // v2 工具行（搜索 + 3 图标按钮，替代 MenuBar + SearchBar）
+            toolbar := Toolbar {
+                text: root.search-text;
+                field-focused: root.search-field-focused;
+                search-hint: root.sb-search-hint-text;
+                is-icon-view: root.is-icon-view;
+                is-dark-theme: root.is-dark-theme;
+                search-changed(text) => {
+                    root.context-menu-visible = false;
+                    root.search-changed(text);
+                }
+                toggle-view() => {
+                    root.context-menu-visible = false;
+                    root.toggle-view();
+                }
+                toggle-theme() => {
+                    root.context-menu-visible = false;
+                    root.toggle-theme();
+                }
+                hamburger-clicked() => {
+                    root.context-menu-visible = false;
+                    root.menu-popup-visible = !root.menu-popup-visible;
+                    root.hamburger-clicked();
                 }
             }
 
@@ -270,67 +285,31 @@ toggle-theme => {
                     }
                 }
 
-                VerticalBox {
-                    spacing: Theme.spacing-sm;
-
-                    SearchBar {
-                        text: root.search-text;
-                        is-dark-theme: root.is-dark-theme;
-                        is-icon-view: root.is-icon-view;
-                        field-focused: root.search-field-focused;
-                        new-item-text: root.sb-new-item-text;
-                        search-hint: root.sb-search-hint-text;
-                        switch-list-text: root.sb-switch-list-text;
-                        switch-icon-text: root.sb-switch-icon-text;
-                        switch-light-text: root.sb-switch-light-text;
-                        switch-dark-text: root.sb-switch-dark-text;
-                        search-changed(text) => {
-                            root.context-menu-visible = false;
-                            root.search-changed(text);
-                        }
-                        toggle-view() => {
-                            root.context-menu-visible = false;
-                            root.toggle-view();
-                        }
-                        toggle-theme() => {
-                            root.context-menu-visible = false;
-                            root.toggle-theme();
-                        }
-                        new-item-clicked() => {
-                            root.context-menu-visible = false;
-                            root.new-item-clicked();
-                        }
+                ItemGrid {
+                    horizontal-stretch: 1;
+                    items: root.items;
+                    is-icon-view: root.is-icon-view;
+                    empty-text: root.empty-text;
+                    empty-hint-text: root.empty-hint-text;
+                    selected-index: root.selected-item-index;
+                    drag-payload: root.drag-payload;
+                    drag-enabled: root.drag-enabled;
+                    item-tile-clicked(index) => {
+                        root.context-menu-visible = false;
+                        root.selected-item-index = index;
+                        root.item-tile-clicked(index);
                     }
-
-                    ItemGrid {
-                        items: root.items;
-                        is-icon-view: root.is-icon-view;
-                        empty-text: root.empty-text;
-                        selected-index: root.selected-item-index;
-                        drag-payload: root.drag-payload;
-                        drag-enabled: root.drag-enabled;
-                        item-tile-clicked(index) => {
-                            root.context-menu-visible = false;
-                            root.selected-item-index = index;
-                            root.item-tile-clicked(index);
-                        }
-                        item-right-clicked(index, x, y) => {
-                            root.context-menu-x = x;
-                            root.context-menu-y = y;
-                            root.context-menu-visible = true;
-                            root.item-right-clicked(index, x, y);
-                        }
-                        payload-requested(index) => {
-                            root.payload-requested(index);
-                        }
-                        dropped-on(index, data) => {
-                            root.dropped-on(index, data);
-                        }
+                    item-right-clicked(index, x, y) => {
+                        root.context-menu-x = x;
+                        root.context-menu-y = y;
+                        root.context-menu-visible = true;
+                        root.item-right-clicked(index, x, y);
                     }
-
-                    StatusBar {
-                        text: root.status-text;
-                        is-dark-theme: root.is-dark-theme;
+                    payload-requested(index) => {
+                        root.payload-requested(index);
+                    }
+                    dropped-on(index, data) => {
+                        root.dropped-on(index, data);
                     }
                 }
             }
@@ -343,23 +322,31 @@ toggle-theme => {
             x: root.context-menu-x;
             y: root.context-menu-y;
             menu-items: root.context-menu-items;
+            menu-danger: root.context-menu-danger;
             selected(index) => {
                 root.context-menu-visible = false;
                 root.menu-item-selected(index);
             }
         }
 
-        // 顶部菜单栏下拉弹层（P1：五组下拉；z-order 高于内容区）
+        // 汉堡弹层（v2：右锚定，消除硬编码组定位）
         MenuPopup {
             visible: root.menu-popup-visible;
-            x: root.menu-popup-x;
-            y: root.menu-popup-y;
+            x: max(8px, root.width - self.width - 8px);
+            y: 80px;
             items: root.menu-popup-items;
+            menu-danger: root.menu-popup-danger;
             selected(index) => {
                 root.menu-popup-visible = false;
-                root.open-menu-group = -1;
-                root.menu-bar-item-selected(index);
+                root.menu-popup-selected(index);
             }
+        }
+
+        // v2 Toast（右下角浮出）
+        Toast {
+            toast-visible: root.toast-visible;
+            message: root.toast-message;
+            error: root.toast-error;
         }
 
         ConfirmDialog {

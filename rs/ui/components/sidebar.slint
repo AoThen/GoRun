@@ -4,6 +4,7 @@ import { Theme } from "../theme.slint";
 struct CategoryModel {
     id: string,
     name: string,
+    count: int,
 }
 
 export component Sidebar {
@@ -22,7 +23,7 @@ export component Sidebar {
     in-out property <data-transfer> drag-payload;
     in property <bool> drag-enabled: true;
 
-    width: 160px;
+    width: 180px;
 
     VerticalBox {
         spacing: Theme.spacing-sm;
@@ -32,14 +33,14 @@ export component Sidebar {
             text: root.title-text;
             font-size: Theme.font-size-md;
             font-weight: 700;
-            color: Theme.text-primary;
+            color: Theme.text-1;
         }
 
         ListView {
             for cat[index] in categories: Rectangle {
                 height: 32px;
-                background: index == root.selected-index ? Theme.menu-hover : transparent;
-                border-radius: Theme.radius-sm;
+                background: index == root.selected-index ? Theme.accent-subtle : transparent;
+                border-radius: Theme.radius-xs;
 
                 DragArea {
                     enabled: root.drag-enabled;
@@ -82,18 +83,34 @@ export component Sidebar {
                                 spacing: 0;
                                 padding: 0;
 
+                                // 选中指示条（v2：左缘 3px accent）
                                 Rectangle {
-                                    width: Theme.spacing-md;
+                                    width: 3px;
+                                    height: 100%;
+                                    background: index == root.selected-index ? Theme.accent : transparent;
+                                }
+
+                                Rectangle {
+                                    width: Theme.spacing-md - 3px;
                                     height: 100%;
                                 }
 
                                 Text {
                                     text: cat.name;
-                                    color: Theme.text-primary;
+                                    color: Theme.text-1;
                                     font-size: Theme.font-size-sm;
                                     vertical-alignment: center;
                                     overflow: elide;
                                     horizontal-stretch: 1;
+                                }
+
+                                // 计数徽章（v2：行尾右对齐 11px）
+                                Text {
+                                    text: cat.count;
+                                    color: Theme.text-2;
+                                    font-size: Theme.font-size-xs;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: right;
                                 }
                             }
                         }
@@ -104,18 +121,26 @@ export component Sidebar {
 
         Rectangle {
             height: 1px;
-            background: Theme.menu-border;
+            background: Theme.stroke-1;
         }
 
-        Text {
-            text: root.add-category-text;
-            font-size: Theme.font-size-sm;
-            color: Theme.accent;
-            horizontal-alignment: center;
+        // 新建分类行（v2：hover 显底）
+        Rectangle {
+            height: 32px;
+            background: add-cat-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
 
-            TouchArea {
+            add-cat-touch := TouchArea {
                 clicked => {
                     root.new-category();
+                }
+
+                Text {
+                    text: root.add-category-text;
+                    font-size: Theme.font-size-sm;
+                    color: Theme.accent;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
         }

@@ -1,9 +1,11 @@
 import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox, SpinBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 
 export component EditDialog inherits Window {
     title: root.title-text;
     width: 500px;
     height: 500px;
+    background: Theme.bg-2;
 
     callback save();
     callback cancel();
@@ -48,7 +50,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-name; width: 80px; }
+            Text { text: root.label-name; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-name;
                 edited => { root.item-name = self.text; }
@@ -57,7 +59,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-target; width: 80px; }
+            Text { text: root.label-target; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-target;
                 edited => { root.item-target = self.text; }
@@ -71,7 +73,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-arguments; width: 80px; }
+            Text { text: root.label-arguments; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-arguments;
                 edited => { root.item-arguments = self.text; }
@@ -80,7 +82,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-directory; width: 80px; }
+            Text { text: root.label-directory; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-working-dir;
                 edited => { root.item-working-dir = self.text; }
@@ -89,7 +91,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-icon-path; width: 80px; }
+            Text { text: root.label-icon-path; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-icon-path;
                 edited => { root.item-icon-path = self.text; }
@@ -103,7 +105,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-icon-index; width: 80px; }
+            Text { text: root.label-icon-index; width: 80px; color: Theme.text-1; }
             SpinBox {
                 value <=> root.item-icon-index;
                 minimum: 0;
@@ -113,7 +115,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-keywords; width: 80px; }
+            Text { text: root.label-keywords; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-keywords;
                 edited => { root.item-keywords = self.text; }
@@ -122,7 +124,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-remark; width: 80px; }
+            Text { text: root.label-remark; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-remark;
                 edited => { root.item-remark = self.text; }
@@ -131,7 +133,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-hotkey; width: 80px; }
+            Text { text: root.label-hotkey; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-hotkey;
                 edited => { root.item-hotkey = self.text; }
@@ -140,7 +142,7 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
-            Text { text: root.label-category; width: 80px; }
+            Text { text: root.label-category; width: 80px; color: Theme.text-1; }
             ComboBox {
                 model: root.category-names;
                 current-index: root.selected-category-index;
@@ -165,7 +167,7 @@ export component EditDialog inherits Window {
         if root.error-message != "": HorizontalBox {
             Text {
                 text: root.error-message;
-                color: #FF0000;
+                color: Theme.danger;
             }
         }
 

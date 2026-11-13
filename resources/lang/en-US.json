@@ -617,6 +617,7 @@
     "Tip_UndoNotPossible": "This action cannot be undone.",
     "Btn_ConfirmDelete": "Delete",
     "Tip_NoItems": "No items",
+    "Tip_DropToAdd": "Drop files or shortcuts here to add",
     "Menu_Run": "Run",
     "Menu_RefreshIcon": "Refresh Icon",
     "Title_EditItem": "Edit Item",

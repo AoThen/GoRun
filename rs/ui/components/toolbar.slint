@@ -1,0 +1,103 @@
+import { HorizontalBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 工具行（v2 §2.3）：搜索框（左弹性，高 30px）+ 视图切换/主题切换/汉堡 三个 32×32 图标按钮。
+// 保留 field-focused 回写链路（main_window 回车守卫与 Ctrl+F 依赖）。
+export component Toolbar {
+    in property <string> text;
+    in-out property <bool> field-focused: false;
+    in property <string> search-hint: "";
+    in property <bool> is-icon-view: true;
+    in property <bool> is-dark-theme: false;
+    callback search-changed(text: string);
+    callback toggle-view();
+    callback toggle-theme();
+    callback hamburger-clicked();
+    // Ctrl+F：聚焦搜索框（T4 交互补齐）
+    callback focus-search();
+    focus-search() => { search-edit.focus(); }
+
+    height: 44px;
+
+    HorizontalBox {
+        spacing: Theme.spacing-md;
+        padding: Theme.spacing-md;
+
+        // 搜索框（高 30px，bg-3 + stroke-2 描边）
+        Rectangle {
+            height: 30px;
+            background: Theme.bg-3;
+            border-width: 1px;
+            border-color: Theme.stroke-2;
+            border-radius: Theme.radius-xs;
+            horizontal-stretch: 1;
+
+            search-edit := LineEdit {
+                text: root.text;
+                placeholder-text: root.search-hint;
+                edited => { root.search-changed(self.text); }
+                font-size: Theme.font-size-sm;
+                changed has-focus => { root.field-focused = self.has-focus; }
+            }
+        }
+        // 视图切换（图标视图 ↔ 列表视图）
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: view-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
+
+            view-touch := TouchArea {
+                clicked => { root.toggle-view(); }
+
+                Text {
+                    text: root.is-icon-view ? "\u{25a6}" : "\u{25a4}";
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // 主题切换（双色半圆近似）
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: theme-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
+
+            theme-touch := TouchArea {
+                clicked => { root.toggle-theme(); }
+
+                Text {
+                    text: root.is-dark-theme ? "\u{263d}" : "\u{2600}";
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // 汉堡菜单（右锚定弹层入口）
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: burger-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
+
+            burger-touch := TouchArea {
+                clicked => { root.hamburger-clicked(); }
+
+                Text {
+                    text: "\u{2630}";
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

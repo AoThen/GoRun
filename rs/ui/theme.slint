@@ -1,49 +1,74 @@
+// GoRun UI v2 设计令牌（docs/ui-redesign-plan.md §2.1/§2.2）。
+// 深色为默认；set-dark(is-dark) 按色板切换，保留原机制（main_window 接线不变）。
 export global Theme {
-    in-out property <color> bg-primary: #1a1a2e;
-    in-out property <color> text-primary: #e0e0e0;
-    in-out property <color> text-secondary: #a0a0a0;
-    in-out property <color> bg-secondary: #16213e;
-    in-out property <color> bg-card: #0f3460;
-    in-out property <color> accent: #e94560;
-    in-out property <color> menu-bg: #2d2d2d;
-    in-out property <color> menu-hover: #3a3a5c;
-    in-out property <color> menu-border: #444444;
-    in-out property <color> error: #ff6b6b;
+    // ---- 色彩令牌（§2.1）----
+    in-out property <color> bg-0: #202020; // 主背景
+    in-out property <color> bg-1: #262626; // 侧边栏/标题栏
+    in-out property <color> bg-2: #2c2c2c; // 弹层/菜单/对话框/Toast
+    in-out property <color> bg-3: #323232; // 输入框
+    in-out property <color> stroke-1: #383838; // 分隔线
+    in-out property <color> stroke-2: #454545; // 控件描边
+    in-out property <color> text-1: #f5f5f5; // 主文本
+    in-out property <color> text-2: #a8a8a8; // 次要文本/占位
+    in-out property <color> hover: #2f2f2f; // 悬浮底
+    in-out property <color> accent: #4cc2ff; // 选中/主按钮/指示条
+    in-out property <color> accent-subtle: rgba(76, 194, 255, 0.12); // 选中底
+    in-out property <color> accent-fg: #101010; // accent 按钮上文字
+    in-out property <color> danger: #ff99a4; // 危险项/错误
+    in-out property <color> danger-subtle: rgba(255, 153, 164, 0.12); // 危险项 hover 底
+    in-out property <color> danger-fg: #2b0000; // danger 按钮上文字
 
+    // ---- 尺寸令牌（§2.2）----
     in-out property <length> spacing-sm: 4px;
     in-out property <length> spacing-md: 8px;
     in-out property <length> spacing-lg: 16px;
+    in-out property <length> spacing-panel: 12px;
 
-    in-out property <length> radius-sm: 0px;
+    in-out property <length> radius-xs: 4px;
     in-out property <length> radius-md: 6px;
+    in-out property <length> radius-lg: 10px;
 
-    in-out property <length> font-size-sm: 11px;
-    in-out property <length> font-size-md: 14px;
+    in-out property <length> font-size-xs: 11px;
+    in-out property <length> font-size-sm: 12px;
+    in-out property <length> font-size-md: 13px;
+    in-out property <length> font-size-lg: 16px;
 
-    in-out property <length> icon-size: 64px;
+    in-out property <length> icon-size: 48px;
 
     callback set-dark(is-dark: bool);
     set-dark(is-dark) => {
         if (is-dark) {
-            bg-primary = #1a1a2e;
-            bg-secondary = #16213e;
-            bg-card = #0f3460;
-            text-primary = #e0e0e0;
-            text-secondary = #a0a0a0;
-            menu-bg = #2d2d2d;
-            menu-hover = #3a3a5c;
-            menu-border = #444444;
-            error = #ff6b6b;
+            bg-0 = #202020;
+            bg-1 = #262626;
+            bg-2 = #2c2c2c;
+            bg-3 = #323232;
+            stroke-1 = #383838;
+            stroke-2 = #454545;
+            text-1 = #f5f5f5;
+            text-2 = #a8a8a8;
+            hover = #2f2f2f;
+            accent = #4cc2ff;
+            accent-subtle = rgba(76, 194, 255, 0.12);
+            accent-fg = #101010;
+            danger = #ff99a4;
+            danger-subtle = rgba(255, 153, 164, 0.12);
+            danger-fg = #2b0000;
         } else {
-            bg-primary = #f5f5f5;
-            bg-secondary = #ffffff;
-            bg-card = #e8e8e8;
-            text-primary = #1a1a1a;
-            text-secondary = #666666;
-            menu-bg = #ffffff;
-            menu-hover = #e5f0ff;
-            menu-border = #cccccc;
-            error = #cc0000;
+            bg-0 = #f3f3f3;
+            bg-1 = #fbfbfb;
+            bg-2 = #ffffff;
+            bg-3 = #ffffff;
+            stroke-1 = #e0e0e0;
+            stroke-2 = #d0d0d0;
+            text-1 = #1a1a1a;
+            text-2 = #5c5c5c;
+            hover = #ebebeb;
+            accent = #005fb8;
+            accent-subtle = rgba(0, 95, 184, 0.08);
+            accent-fg = #ffffff;
+            danger = #c50f1f;
+            danger-subtle = rgba(197, 15, 31, 0.08);
+            danger-fg = #ffffff;
         }
     }
 }

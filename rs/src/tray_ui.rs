@@ -191,21 +191,13 @@ pub fn apply_localized_texts(
     _dark_theme: bool,
 ) {
     let lb = loc.borrow();
-    ui.set_menu_title_file(lb.tr("Menu_File").into());
-    ui.set_menu_title_edit(lb.tr("Menu_Edit").into());
-    ui.set_menu_title_view(lb.tr("Menu_View").into());
-    ui.set_menu_title_settings(lb.tr("Menu_Set").into());
-    ui.set_menu_title_help(lb.tr("Menu_Help").into());
     ui.set_about_version_text(lb.tr("About_Version").into());
     ui.set_about_desc_text(lb.tr("About_Desc").into());
     ui.set_about_ok_text(lb.tr("Btn_OK").into());
     ui.set_sb_new_item_text(lb.tr("Menu_NewItem").into());
     ui.set_sb_search_hint_text(lb.tr("Tip_Search").into());
-    ui.set_sb_switch_list_text(lb.tr("SB_SwitchList").into());
-    ui.set_sb_switch_icon_text(lb.tr("SB_SwitchIcon").into());
-    ui.set_sb_switch_light_text(lb.tr("SB_SwitchLight").into());
-    ui.set_sb_switch_dark_text(lb.tr("SB_SwitchDark").into());
     ui.set_empty_text(lb.tr("Tip_NoItems").into());
+    ui.set_empty_hint_text(lb.tr("Tip_DropToAdd").into());
     ui.set_confirm_confirm_text(lb.tr("Btn_Del").into());
     ui.set_confirm_cancel_text(lb.tr("Btn_Cancel").into());
     ui.set_sidebar_title_text(lb.tr("STR_Category").into());

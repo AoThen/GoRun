@@ -27,7 +27,7 @@ export component ItemTile {
     in property <data-transfer> drag-payload;
     in property <bool> drag-enabled: true;
 
-    height: root.is-icon-view ? root.icon-cell-height : 36px;
+    height: root.is-icon-view ? root.icon-cell-height : 34px;
 
     DragArea {
         enabled: root.drag-enabled;
@@ -58,38 +58,27 @@ export component ItemTile {
                 Rectangle {
                     width: 100%;
                     height: 100%;
-                    background: self.has-hover ? Theme.menu-hover : transparent;
+                    background: self.has-hover ? Theme.hover : transparent;
                     border-radius: Theme.radius-md;
                 }
 
-                // 图标视图（大图标水平居中）
+                // 图标视图（大图标水平居中，无底板直接渲染）
                 VerticalBox {
                     visible: root.is-icon-view;
                     padding: Theme.spacing-sm;
                     spacing: Theme.spacing-sm;
                     alignment: center;
 
-                    HorizontalBox {
-                        alignment: center;
-
-                        Rectangle {
-                            width: Theme.icon-size;
-                            height: Theme.icon-size;
-                            background: Theme.bg-card;
-                            border-radius: Theme.radius-md;
-
-                            Image {
-                                width: parent.width;
-                                height: parent.height;
-                                source: root.item.icon-path;
-                            }
-                        }
+                    Image {
+                        width: Theme.icon-size;
+                        height: Theme.icon-size;
+                        source: root.item.icon-path;
                     }
 
                     Text {
                         text: root.item.name;
                         font-size: Theme.font-size-sm;
-                        color: root.item.search-active ? Theme.accent : Theme.text-primary;
+                        color: root.item.search-active ? Theme.accent : Theme.text-1;
                         horizontal-alignment: center;
                         overflow: elide;
                     }
@@ -101,23 +90,16 @@ export component ItemTile {
                     padding: Theme.spacing-sm;
                     spacing: Theme.spacing-sm;
 
-                    Rectangle {
-                        width: 24px;
-                        height: 24px;
-                        background: Theme.bg-card;
-                        border-radius: Theme.radius-sm;
-
-                        Image {
-                            width: parent.width;
-                            height: parent.height;
-                            source: root.item.icon-path;
-                        }
+                    Image {
+                        width: 22px;
+                        height: 22px;
+                        source: root.item.icon-path;
                     }
 
                     Text {
                         text: root.item.name;
                         font-size: Theme.font-size-sm;
-                        color: root.item.search-active ? Theme.accent : Theme.text-primary;
+                        color: root.item.search-active ? Theme.accent : Theme.text-1;
                         vertical-alignment: center;
                         overflow: elide;
                         horizontal-stretch: 1;
@@ -132,7 +114,7 @@ export component ItemTile {
         visible: root.selected;
         width: 100%;
         height: 100%;
-        border-width: 2px;
+        border-width: 1px;
         border-color: Theme.accent;
         border-radius: Theme.radius-md;
     }

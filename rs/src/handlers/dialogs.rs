@@ -103,7 +103,7 @@ pub fn import_external_config(
         if let Some(ui) = weak_ui.upgrade() {
             let loc = state.borrow().loc.clone();
             let msg = loc.borrow().tr("Status_SaveFailed").to_string();
-            ui.set_status_text(msg.into());
+            crate::ui_sync::show_toast(&ui, msg, true);
         }
         return false;
     }

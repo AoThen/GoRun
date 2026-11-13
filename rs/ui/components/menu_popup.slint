@@ -1,19 +1,20 @@
 import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
-// 顶部菜单栏下拉弹层（P1：菜单栏改五组下拉）。
-// 视觉复用 ContextMenu；定位与 items 由 main_window 注入，保证 z-order 高于内容区。
+// 汉堡弹层（v2）：项高 28px；items 中 "-" 渲染 1px 分隔线；
+// 视觉 bg-2 + stroke-1 + radius 6（阴影降级）；定位右锚定由 main_window 注入。
 export component MenuPopup {
     in property <[string]> items;
+    in property <[bool]> menu-danger: [];
     callback selected(index: int);
 
     width: 200px;
 
     Rectangle {
-        background: Theme.menu-bg;
+        background: Theme.bg-2;
         border-width: 1px;
-        border-color: Theme.menu-border;
-        border-radius: Theme.radius-sm;
+        border-color: Theme.stroke-1;
+        border-radius: Theme.radius-md;
         width: 100%;
         height: 100%;
 
@@ -22,39 +23,48 @@ export component MenuPopup {
             padding: 2px;
             width: 100%;
 
-            for item[index] in root.items: Rectangle {
-                height: 24px;
-                width: 100%;
-
-                menu-touch := TouchArea {
-                    clicked => { root.selected(index); }
-
+            for item[index] in root.items:
+                if (item == "-") {
                     Rectangle {
+                        height: 1px;
                         width: 100%;
-                        height: 100%;
-                        background: menu-touch.has-hover ? Theme.menu-hover : transparent;
+                        background: Theme.stroke-1;
+                    }
+                } else {
+                    Rectangle {
+                        height: 28px;
+                        width: 100%;
 
-                        HorizontalBox {
-                            spacing: 0;
-                            padding: 0;
+                        menu-touch := TouchArea {
+                            clicked => { root.selected(index); }
 
                             Rectangle {
-                                width: 8px;
+                                width: 100%;
                                 height: 100%;
-                            }
+                                background: menu-touch.has-hover ? Theme.hover : transparent;
 
-                            Text {
-                                text: item;
-                                font-size: Theme.font-size-sm;
-                                color: Theme.text-primary;
-                                overflow: elide;
-                                vertical-alignment: center;
-                                horizontal-stretch: 1;
+                                HorizontalBox {
+                                    spacing: 0;
+                                    padding: 0;
+
+                                    Rectangle {
+                                        width: 8px;
+                                        height: 100%;
+                                    }
+
+                                    Text {
+                                        text: item;
+                                        font-size: Theme.font-size-sm;
+                                        color: (index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger : Theme.text-1;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
         }
     }
 }

@@ -615,6 +615,7 @@
     "Tip_UndoNotPossible": "此操作不可撤销。",
     "Btn_ConfirmDelete": "确定删除",
     "Tip_NoItems": "暂无项目",
+    "Tip_DropToAdd": "拖入文件或快捷方式即可添加",
     "Menu_Run": "运行",
     "Menu_RefreshIcon": "刷新图标",
     "Title_EditItem": "编辑项目",

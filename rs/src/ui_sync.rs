@@ -12,6 +12,33 @@ use crate::util;
 use crate::{CategoryModel, EditDialog, ItemModel, MainWindow};
 use slint::ComponentHandle;
 
+// v2 Toast（替代 StatusBar）：右下角浮出，成功 2s / 错误 4s 自动隐藏。
+// Timer 单例存 UI 线程 thread_local（与现有 slint::Timer 使用模式一致）。
+thread_local! {
+    static TOAST_TIMER: Rc<RefCell<slint::Timer>> = Rc::new(RefCell::new(slint::Timer::default()));
+}
+
+pub fn show_toast(ui: &MainWindow, msg: impl Into<slint::SharedString>, error: bool) {
+    ui.set_toast_message(msg.into());
+    ui.set_toast_error(error);
+    ui.set_toast_visible(true);
+    let weak = ui.as_weak();
+    let dur = if error { 4000 } else { 2000 };
+    TOAST_TIMER.with(|t| {
+        let mut timer = t.borrow_mut();
+        timer.stop();
+        timer.start(
+            slint::TimerMode::SingleShot,
+            std::time::Duration::from_millis(dur),
+            move || {
+                if let Some(ui) = weak.upgrade() {
+                    ui.set_toast_visible(false);
+                }
+            },
+        );
+    });
+}
+
 pub fn spawn_icon_refresh(
     ui: &MainWindow,
     icon_cache: IconCache,
@@ -147,7 +174,7 @@ pub fn run_item_at_index(
         let weak2 = weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(ui) = weak2.upgrade() {
-                ui.set_status_text(msg.into());
+                show_toast(&ui, msg, true);
             }
         });
     }
@@ -237,9 +264,6 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
             state.pending_icon_paths.clone(),
         );
     }
-
-    let status = util::tr_fill(&state.loc, "Status_Items", &items.len().to_string());
-    ui.set_status_text(status.into());
 }
 
 pub fn set_edit_dialog_texts(dlg: &EditDialog, loc: &Rc<RefCell<Localization>>) {
@@ -290,6 +314,7 @@ pub fn refresh_categories_ui(ui: &MainWindow, state: &AppState) {
         .map(|c| CategoryModel {
             id: c.id.clone().into(),
             name: c.name.clone().into(),
+            count: state.manager.items(&c.id).len() as i32,
         })
         .collect();
     ui.set_categories(Rc::new(slint::VecModel::from(categories)).into());

@@ -438,8 +438,13 @@ pub fn wire_handler(
         menu_vec.push(slint::SharedString::from(open_folder));
         let item_count = menu_vec.len();
         let menu_items = Rc::new(slint::VecModel::from(menu_vec));
+        // v2 危险项标红：删除项(index 2)为 danger；其余 false
+        let mut danger: Vec<bool> = vec![false; item_count];
+        danger[2] = true;
+        let danger_model = Rc::new(slint::VecModel::from(danger));
         if let Some(ui) = weak_ui_right.upgrade() {
             ui.set_context_menu_items(menu_items.into());
+            ui.set_context_menu_danger(danger_model.into());
             geometry::position_menu_at_cursor(&ui, x, y, item_count);
         }
     });
@@ -471,6 +476,9 @@ pub fn wire_handler(
         ]));
         if let Some(ui) = weak_ui_bg.upgrade() {
             ui.set_context_menu_items(menu_items.into());
+            // v2：背景菜单无危险项
+            let danger: Vec<bool> = vec![false; 7];
+            ui.set_context_menu_danger(Rc::new(slint::VecModel::from(danger)).into());
             geometry::position_menu_at_cursor(&ui, x, y, 7);
         }
     });
@@ -496,6 +504,9 @@ pub fn wire_handler(
         ]));
         if let Some(ui) = weak_ui_cat_right.upgrade() {
             ui.set_context_menu_items(menu_items.into());
+            // v2 危险项标红：删除分类(index 1)
+            let danger: Vec<bool> = vec![false, true, false, false];
+            ui.set_context_menu_danger(Rc::new(slint::VecModel::from(danger)).into());
             geometry::position_menu_at_cursor(&ui, x, y, 4);
         }
     });
@@ -511,181 +522,159 @@ pub fn wire_handler(
     let pra_admin_menu = pending_run_admin.clone();
     let im_menu = input_mode.clone();
 
-    // 顶部菜单栏（P1：五组下拉）。group 状态由 Rust 记录，供 item_selected 分发。
-    let menu_bar_group: Rc<std::cell::Cell<u8>> = Rc::new(std::cell::Cell::new(0));
-    let mbg_click = menu_bar_group.clone();
-    let state_mbg = state.clone();
-    let weak_ui_mbg = ui.as_weak();
-    ui.on_menu_bar_group_clicked(move |group| {
-        log::debug!("Menu bar group clicked: {}", group);
-        mbg_click.set(group as u8);
-        // 主题键需在构造 items 前读取（UI 线程属性）
-        let dark = weak_ui_mbg
-            .upgrade()
-            .map(|ui| ui.get_is_dark_theme())
-            .unwrap_or(false);
-        let items: Vec<slint::SharedString> = {
-            let st = state_mbg.borrow();
-            let lb = st.loc.borrow();
-            let mut v = Vec::new();
-            match group {
-                0 => {
-                    v.push(lb.tr("Menu_NewItem").into());
-                    v.push(lb.tr("Menu_NewC").into());
-                    v.push(lb.tr("Menu_DelCurrentC").into());
-                    v.push(lb.tr("Menu_Exit").into());
-                }
-                1 => {
-                    v.push(lb.tr("Menu_RenameCurrentC").into());
-                    v.push(lb.tr("Menu_ViewHotKey").into());
-                }
-                2 => {
-                    v.push(lb.tr("Menu_ViewIcon0").into());
-                    v.push(lb.tr("Menu_ViewIcon1").into());
-                    let key = if dark { "Menu_SwitchLight" } else { "Menu_SwitchDark" };
-                    v.push(lb.tr(key).into());
-                }
-                3 => {
-                    v.push(lb.tr("Menu_FollowMouse").into());
-                    v.push(lb.tr("Tray_AutoStart").into());
-                    v.push("简体中文".into());
-                    v.push("繁體中文".into());
-                    v.push("English".into());
-                    v.push(lb.tr("Menu_ExportConfig").into());
-                    v.push(lb.tr("Menu_ImportConfig").into());
-                }
-                4 => {
-                    v.push(lb.tr("Menu_About").into());
-                }
-                _ => {}
-            }
-            v
-        };
-        if let Some(ui) = weak_ui_mbg.upgrade() {
-            ui.set_menu_popup_items(Rc::new(slint::VecModel::from(items)).into());
-        }
-    });
-
-    let mbg_sel = menu_bar_group.clone();
-    let state_mbs = state.clone();
-    let weak_ui_mbs = ui.as_weak();
-    let pcd_mbs = pending_category_delete.clone();
-    let pcr_mbs = pending_category_rename.clone();
-    let im_mbs = input_mode.clone();
-    ui.on_menu_bar_item_selected(move |index| {
-        log::debug!("Menu bar item selected: index={}, group={}", index, mbg_sel.get());
-        let ui = match weak_ui_mbs.upgrade() {
+    // 汉堡菜单（v2）：组装单一列表 + 危险项数组；动作在 menu_popup_selected 按索引分发。
+    let state_hb = state.clone();
+    let weak_ui_hb = ui.as_weak();
+    ui.on_hamburger_clicked(move || {
+        log::debug!("Hamburger menu opened");
+        let ui = match weak_ui_hb.upgrade() {
             Some(u) => u,
             None => return,
         };
-        match mbg_sel.get() {
-            0 => match index {
-                0 => ui.invoke_new_item_clicked(),
-                1 => ui.invoke_new_category(),
-                2 => {
-                    // 删除当前分类：复用分类右键删除流程（确认后级联删除）
-                    let mut state = state_mbs.borrow_mut();
-                    let cat_id = state.current_category_id.clone();
-                    if cat_id.is_empty() {
-                        return;
-                    }
-                    let loc_m = state.loc.clone();
-                    let cat_name = state
-                        .manager
-                        .categories()
-                        .iter()
-                        .find(|c| c.id == cat_id)
-                        .map(|c| c.name.clone())
-                        .unwrap_or_default();
-                    *pcd_mbs.borrow_mut() = Some(cat_id);
-                    drop(state);
-                    ui.set_confirm_dialog_title(loc_m.borrow().tr("Title_ConfirmDelete").into());
-                    ui.set_confirm_dialog_message(
-                        util::tr_fill(&loc_m, "Tip_DelCate", &cat_name).into(),
-                    );
-                    ui.set_confirm_confirm_text(loc_m.borrow().tr("Btn_Del").to_string().into());
-                    ui.set_confirm_dialog_visible(true);
+        let dark = ui.get_is_dark_theme();
+        let icon_view = ui.get_is_icon_view();
+        let items: Vec<slint::SharedString> = {
+            let st = state_hb.borrow();
+            let lb = st.loc.borrow();
+            let sep = slint::SharedString::from("-");
+            let mut v: Vec<slint::SharedString> = Vec::new();
+            v.push(lb.tr("Menu_NewItem").into());
+            v.push(lb.tr("Menu_NewC").into());
+            v.push(sep.clone());
+            v.push(lb.tr("Menu_DelCurrentC").into());
+            v.push(sep.clone());
+            v.push(lb.tr("Menu_RenameCurrentC").into());
+            v.push(lb.tr("Menu_ViewHotKey").into());
+            v.push(sep.clone());
+            // 切换视图：当前图标视图显示"列表"，反之显示"图标"
+            if icon_view {
+                v.push(lb.tr("Menu_ViewIcon1").into());
+            } else {
+                v.push(lb.tr("Menu_ViewIcon0").into());
+            }
+            let theme_key = if dark { "Menu_SwitchLight" } else { "Menu_SwitchDark" };
+            v.push(lb.tr(theme_key).into());
+            v.push(sep.clone());
+            v.push(lb.tr("Menu_FollowMouse").into());
+            v.push(lb.tr("Tray_AutoStart").into());
+            v.push(sep.clone());
+            v.push("简体中文".into());
+            v.push("繁體中文".into());
+            v.push("English".into());
+            v.push(sep.clone());
+            v.push(lb.tr("Menu_ExportConfig").into());
+            v.push(lb.tr("Menu_ImportConfig").into());
+            v.push(sep.clone());
+            v.push(lb.tr("Menu_About").into());
+            v.push(lb.tr("Menu_Exit").into());
+            v
+        };
+        // 危险项：删除当前分类(3)、退出(末位)
+        let n = items.len();
+        let mut danger: Vec<bool> = vec![false; n];
+        danger[3] = true;
+        danger[n - 1] = true;
+        ui.set_menu_popup_items(Rc::new(slint::VecModel::from(items)).into());
+        ui.set_menu_popup_danger(Rc::new(slint::VecModel::from(danger)).into());
+    });
+
+    let state_mps = state.clone();
+    let weak_ui_mps = ui.as_weak();
+    let pcd_mps = pending_category_delete.clone();
+    let pcr_mps = pending_category_rename.clone();
+    let im_mps = input_mode.clone();
+    ui.on_menu_popup_selected(move |index| {
+        log::debug!("Menu popup item selected: index={}", index);
+        let ui = match weak_ui_mps.upgrade() {
+            Some(u) => u,
+            None => return,
+        };
+        match index {
+            0 => ui.invoke_new_item_clicked(),
+            1 => ui.invoke_new_category(),
+            3 => {
+                // 删除当前分类：复用分类右键删除流程（确认后级联删除）
+                let mut state = state_mps.borrow_mut();
+                let cat_id = state.current_category_id.clone();
+                if cat_id.is_empty() {
+                    return;
                 }
-                3 => {
-                    // 退出：隐藏到托盘（快速启动器惯例，与托盘"显示/隐藏"一致）
-                    let _ = ui.hide();
+                let loc_m = state.loc.clone();
+                let cat_name = state
+                    .manager
+                    .categories()
+                    .iter()
+                    .find(|c| c.id == cat_id)
+                    .map(|c| c.name.clone())
+                    .unwrap_or_default();
+                *pcd_mps.borrow_mut() = Some(cat_id);
+                drop(state);
+                ui.set_confirm_dialog_title(loc_m.borrow().tr("Title_ConfirmDelete").into());
+                ui.set_confirm_dialog_message(
+                    util::tr_fill(&loc_m, "Tip_DelCate", &cat_name).into(),
+                );
+                ui.set_confirm_confirm_text(loc_m.borrow().tr("Btn_Del").to_string().into());
+                ui.set_confirm_dialog_visible(true);
+            }
+            5 => {
+                // 重命名当前分类：复用分类右键重命名流程（InputDialog）
+                let mut state = state_mps.borrow_mut();
+                let cat_id = state.current_category_id.clone();
+                if cat_id.is_empty() {
+                    return;
                 }
-                _ => {}
-            },
-            1 => match index {
-                0 => {
-                    // 重命名当前分类：复用分类右键重命名流程（InputDialog）
-                    let mut state = state_mbs.borrow_mut();
-                    let cat_id = state.current_category_id.clone();
-                    if cat_id.is_empty() {
-                        return;
-                    }
-                    let loc_m = state.loc.clone();
-                    let cat_name = state
-                        .manager
-                        .categories()
-                        .iter()
-                        .find(|c| c.id == cat_id)
-                        .map(|c| c.name.clone())
-                        .unwrap_or_default();
-                    *pcr_mbs.borrow_mut() = Some(cat_id);
-                    im_mbs.set(1);
-                    drop(state);
-                    ui.set_input_dialog_title(loc_m.borrow().tr("Title_RenameCategory").into());
-                    ui.set_input_dialog_text(cat_name.into());
-                    ui.set_input_dialog_error("".into());
-                    ui.set_input_dialog_visible(true);
-                }
-                1 => ui.invoke_hotkey(),
-                _ => {}
-            },
-            2 => match index {
-                // 图标/列表视图：复用 on_toggle_view（会更新分类 view_type 并保存）
-                0 => {
-                    if !ui.get_is_icon_view() {
-                        ui.invoke_toggle_view();
-                    }
-                }
-                1 => {
-                    if ui.get_is_icon_view() {
-                        ui.invoke_toggle_view();
-                    }
-                }
-                2 => ui.invoke_toggle_theme(),
-                _ => {}
-            },
-            3 => match index {
-                0 => crate::tray_ui::handle_tray_ui_action(
-                    crate::tray_ui::TrayUiAction::ToggleFollowMouse,
-                    &ui,
-                    &state_mbs,
-                ),
-                1 => {
-                    let _ = crate::tray::toggle_autostart();
-                }
-                2 => crate::tray_ui::handle_tray_ui_action(
-                    crate::tray_ui::TrayUiAction::SetLanguage("zh-CN".into()),
-                    &ui,
-                    &state_mbs,
-                ),
-                3 => crate::tray_ui::handle_tray_ui_action(
-                    crate::tray_ui::TrayUiAction::SetLanguage("zh-TW".into()),
-                    &ui,
-                    &state_mbs,
-                ),
-                4 => crate::tray_ui::handle_tray_ui_action(
-                    crate::tray_ui::TrayUiAction::SetLanguage("en-US".into()),
-                    &ui,
-                    &state_mbs,
-                ),
-                5 => crate::handlers::config_io::export_config(&ui, &state_mbs),
-                6 => crate::handlers::config_io::import_config(&ui, &state_mbs),
-                _ => {}
-            },
-            4 => match index {
-                0 => ui.set_about_dialog_visible(true),
-                _ => {}
-            },
+                let loc_m = state.loc.clone();
+                let cat_name = state
+                    .manager
+                    .categories()
+                    .iter()
+                    .find(|c| c.id == cat_id)
+                    .map(|c| c.name.clone())
+                    .unwrap_or_default();
+                *pcr_mps.borrow_mut() = Some(cat_id);
+                im_mps.set(1);
+                drop(state);
+                ui.set_input_dialog_title(loc_m.borrow().tr("Title_RenameCategory").into());
+                ui.set_input_dialog_text(cat_name.into());
+                ui.set_input_dialog_error("".into());
+                ui.set_input_dialog_visible(true);
+            }
+            6 => ui.invoke_hotkey(),
+            8 => {
+                // 视图切换（v2 单一"切换"项，无条件 toggle）
+                ui.invoke_toggle_view();
+            }
+            9 => ui.invoke_toggle_theme(),
+            11 => crate::tray_ui::handle_tray_ui_action(
+                crate::tray_ui::TrayUiAction::ToggleFollowMouse,
+                &ui,
+                &state_mps,
+            ),
+            12 => {
+                let _ = crate::tray::toggle_autostart();
+            }
+            14 => crate::tray_ui::handle_tray_ui_action(
+                crate::tray_ui::TrayUiAction::SetLanguage("zh-CN".into()),
+                &ui,
+                &state_mps,
+            ),
+            15 => crate::tray_ui::handle_tray_ui_action(
+                crate::tray_ui::TrayUiAction::SetLanguage("zh-TW".into()),
+                &ui,
+                &state_mps,
+            ),
+            16 => crate::tray_ui::handle_tray_ui_action(
+                crate::tray_ui::TrayUiAction::SetLanguage("en-US".into()),
+                &ui,
+                &state_mps,
+            ),
+            18 => crate::handlers::config_io::export_config(&ui, &state_mps),
+            19 => crate::handlers::config_io::import_config(&ui, &state_mps),
+            21 => ui.set_about_dialog_visible(true),
+            22 => {
+                // 退出：隐藏到托盘（快速启动器惯例，与托盘"显示/隐藏"一致）
+                let _ = ui.hide();
+            }
             _ => {}
         }
     });
@@ -810,8 +799,10 @@ pub fn wire_handler(
                         drop(state);
                         if let Some(ui) = weak_ui_menu.upgrade() {
                             ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
-                            ui.set_status_text(
-                                util::tr_fill(&loc_m, "Status_Pasted", &count.to_string()).into(),
+                            ui_sync::show_toast(
+                                &ui,
+                                util::tr_fill(&loc_m, "Status_Pasted", &count.to_string()),
+                                false,
                             );
                         }
                     }
@@ -1166,7 +1157,7 @@ pub fn wire_handler(
                             let weak = weak_ui_menu.clone();
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(ui) = weak.upgrade() {
-                                    ui.set_status_text(msg.into());
+                                    ui_sync::show_toast(&ui, msg, true);
                                 }
                             });
                         }
@@ -1254,7 +1245,7 @@ pub fn wire_handler(
                     "Status_ExternalImportFail"
                 };
                 let msg = state_confirm.borrow().loc.borrow().tr(key).to_string();
-                ui.set_status_text(msg.into());
+                ui_sync::show_toast(&ui, msg, true);
             }
             return;
         }
@@ -1269,7 +1260,7 @@ pub fn wire_handler(
                 let tip = state.loc.borrow().tr("Tip_NeedOneCategory").to_string();
                 drop(state);
                 if let Some(ui) = weak_ui_confirm.upgrade() {
-                    ui.set_status_text(tip.into());
+                    ui_sync::show_toast(&ui, tip, true);
                 }
                 return;
             }
@@ -1349,7 +1340,7 @@ pub fn wire_handler(
                     let weak = weak_ui_confirm.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(ui) = weak.upgrade() {
-                            ui.set_status_text(msg.into());
+                            ui_sync::show_toast(&ui, msg, true);
                         }
                     });
                 }
@@ -1359,7 +1350,7 @@ pub fn wire_handler(
                 if let Some(ui) = weak_ui_confirm.upgrade() {
                     let loc_m = state_confirm.borrow().loc.clone();
                     let msg = loc_m.borrow().tr("Tip_ItemNotFound").to_string();
-                    ui.set_status_text(msg.into());
+                    ui_sync::show_toast(&ui, msg, true);
                 }
             }
             return;
@@ -1402,7 +1393,7 @@ pub fn wire_handler(
                 let weak = weak_ui_confirm.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = weak.upgrade() {
-                        ui.set_status_text(msg.into());
+                        ui_sync::show_toast(&ui, msg, failed > 0);
                     }
                 });
             }
