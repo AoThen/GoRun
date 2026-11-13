@@ -96,33 +96,34 @@ impl ItemManager {
             .data
             .items
             .iter()
-            .filter(|i| {
-                let name_l = i.name.to_lowercase();
-                let kw_l = i.keywords.to_lowercase();
-                let target_l = i.target.to_lowercase();
-                if name_l.contains(&q)
+            // filter + map 合并单遍历：每 item 只做一次小写转换（原实现 filter/map
+            // 各自调用 to_lowercase，最多 6 次/item），匹配与打分共用结果。
+            .filter_map(|item| {
+                let name_l = item.name.to_lowercase();
+                let kw_l = item.keywords.to_lowercase();
+                let target_l = item.target.to_lowercase();
+                let matched = name_l.contains(&q)
                     || kw_l.contains(&q)
                     || target_l.contains(&q)
-                {
-                    return true;
+                    // 拼音匹配（P2 #1/#2 + P1-9）：按文本缓存拼音对，避免每次搜索逐字符重算
+                    || self.pinyin_match(&item.name, &q)
+                    || self.pinyin_match(&item.keywords, &q);
+                if !matched {
+                    return None;
                 }
-                // 拼音匹配（P2 #1/#2 + P1-9）：按文本缓存拼音对，避免每次搜索逐字符重算
-                self.pinyin_match(&i.name, &q) || self.pinyin_match(&i.keywords, &q)
-            })
-            .map(|item| {
                 let mut score = 0;
-                if item.name.to_lowercase() == q {
+                if name_l == q {
                     score += 1000;
-                } else if item.name.to_lowercase().starts_with(&q) {
+                } else if name_l.starts_with(&q) {
                     score += 100;
                 } else {
                     score += 10;
                 }
-                if item.keywords.to_lowercase().contains(&q) {
+                if kw_l.contains(&q) {
                     score += 50;
                 }
                 score += item.run_count;
-                (item.clone(), score)
+                Some((item.clone(), score))
             })
             .collect();
 
