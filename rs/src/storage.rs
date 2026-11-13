@@ -443,27 +443,21 @@ impl Storage {
         }
 
         let bak3 = format!("{}.bak3", self.path);
-        if Path::new(&bak3).exists() {
-            if fs::remove_file(&bak3).is_err() {
-                log::error!("Failed to delete old backup: {}", bak3);
-                return false;
-            }
+        if Path::new(&bak3).exists() && fs::remove_file(&bak3).is_err() {
+            log::error!("Failed to delete old backup: {}", bak3);
+            return false;
         }
 
         let bak2 = format!("{}.bak2", self.path);
-        if Path::new(&bak2).exists() {
-            if fs::rename(&bak2, &bak3).is_err() {
-                log::error!("Failed to rotate backup .bak2 to .bak3");
-                return false;
-            }
+        if Path::new(&bak2).exists() && fs::rename(&bak2, &bak3).is_err() {
+            log::error!("Failed to rotate backup .bak2 to .bak3");
+            return false;
         }
 
         let bak1 = format!("{}.bak1", self.path);
-        if Path::new(&bak1).exists() {
-            if fs::rename(&bak1, &bak2).is_err() {
-                log::error!("Failed to rotate backup .bak1 to .bak2");
-                return false;
-            }
+        if Path::new(&bak1).exists() && fs::rename(&bak1, &bak2).is_err() {
+            log::error!("Failed to rotate backup .bak1 to .bak2");
+            return false;
         }
 
         if fs::copy(&self.path, &bak1).is_err() {

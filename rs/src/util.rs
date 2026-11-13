@@ -22,6 +22,9 @@ pub fn sanitize_for_log(s: &str) -> String {
 /// 抽出为纯函数以便跨平台单测；Windows 分支读取 metrics 后调用。
 /// 非 Windows 下仅被单测引用（window_on_screen 恒 true），故允许 dead_code。
 #[cfg_attr(not(windows), allow(dead_code))]
+// 8 个几何参数均为独立标量，引入 Rect 结构体会波及全部调用点与测试；
+// 保留扁平签名并在此精确抑制（替代文件级 allow，让新告警重新可见）。
+#[allow(clippy::too_many_arguments)]
 fn rect_fully_inside_virtual_screen(
     x: i32,
     y: i32,

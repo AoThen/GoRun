@@ -86,7 +86,7 @@ pub fn expand_search(text: &str, search_param: &str) -> String {
         // 两个标记互不为子串（"%so%" 不是 "%so-url%" 的子串），同位不可能同时命中
         let (pos, use_url) = match (so, url) {
             (None, None) => break,
-            (Some(s), u) => (s, u.map_or(false, |u| u < s)),
+            (Some(s), u) => (s, u.is_some_and(|u| u < s)),
             (None, Some(u)) => (u, true),
         };
         out.push_str(&rest[..pos]);

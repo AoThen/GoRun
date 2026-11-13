@@ -273,15 +273,12 @@ pub fn wire_handler(
                 None => return,
             }
         };
-        let is_double = match last_click.take() {
+        let is_double = matches!(
+            last_click.take(),
             Some((last_id, last_time))
                 if last_id == clicked_id
-                    && now.duration_since(last_time).as_millis() < 500 =>
-            {
-                true
-            }
-            _ => false,
-        };
+                    && now.duration_since(last_time).as_millis() < 500
+        );
         if is_double {
             log::debug!("Item double-clicked: index={}", index);
             ui_sync::run_item_at_index(&weak_ui_dbl, &state_dbl, index);
@@ -605,6 +602,11 @@ pub fn wire_handler(
                 let refresh_idx = move_offset + 6;
                 let props_idx = move_offset + 7;
                 let moveto_base = move_offset + 8;
+                // collapsible_match 建议把 move_item_down/up 调用移入 match 守卫，
+                // 但二者是带副作用的修改（置位 modified、落盘配置），放进守卫会
+                // 让"是否执行移动"的判断与执行耦合，且与另一分支不一致，可读性差；
+                // 保留分支体内调用并精确抑制（替代文件级 allow，让新告警重新可见）。
+                #[allow(clippy::collapsible_match)]
                 match index {
                     0 => {
                         log::info!("Edit item: {} ({})", item.name, item.id);
@@ -809,7 +811,6 @@ pub fn wire_handler(
                             );
                             ui.set_confirm_dialog_visible(true);
                         }
-                        return;
                     }
                     2 => {
                         log::info!("Delete item: {} ({})", item.name, item.id);
@@ -830,7 +831,6 @@ pub fn wire_handler(
                             );
                             ui.set_confirm_dialog_visible(true);
                         }
-                        return;
                     }
                     3 => {
                         clipboard::copy_to_clipboard(&item.target);
@@ -877,7 +877,6 @@ pub fn wire_handler(
                                 }
                             });
                         }
-                        return;
                     }
                     x if x == refresh_idx => {
                         log::info!("Refresh icon: {} ({})", item.name, item.id);
@@ -907,7 +906,6 @@ pub fn wire_handler(
                                 if let Some(ui) = weak_ui_menu.upgrade() {
                                     ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                                 }
-                                return;
                             }
                         }
                     }
@@ -922,7 +920,6 @@ pub fn wire_handler(
                             if let Some(ui) = weak_ui_menu.upgrade() {
                                 ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                             }
-                            return;
                         }
                     }
                     x if x == 6 && normal_mode => {
@@ -934,7 +931,6 @@ pub fn wire_handler(
                             if let Some(ui) = weak_ui_menu.upgrade() {
                                 ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                             }
-                            return;
                         }
                     }
                     _ => {}
@@ -1293,7 +1289,7 @@ pub fn wire_handler(
                 let mut lines = shown.join("\n");
                 let remaining = cfg.data.items.len().saturating_sub(MAX_SHOWN);
                 if remaining > 0 {
-                    lines.push_str("\n");
+                    lines.push('\n');
                     lines.push_str(
                         &loc.borrow()
                             .tr("Tip_ExternalConfigMore")

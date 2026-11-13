@@ -37,7 +37,7 @@ impl IconCache {
         let mut feed = |data: &[u8]| {
             for &b in data {
                 hash ^= b as u64;
-                hash = hash.wrapping_mul(0x1_0000_0001_b3);
+                hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
             }
         };
         feed(id.as_bytes());

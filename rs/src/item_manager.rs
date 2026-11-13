@@ -127,7 +127,7 @@ impl ItemManager {
             })
             .collect();
 
-        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
         let results: Vec<Item> = scored.into_iter().map(|(item, _)| item).collect();
         log::debug!("Search: query={}, results={}", query, results.len());
         results
