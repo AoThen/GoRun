@@ -1,4 +1,7 @@
 //! GoRun 库根：全部实现从此处导出，bin（`main.rs`）只做转导出与 `main`。
+//! crate 名为品牌名 `GoRun`（项目名），允许非 snake_case。
+
+#![allow(non_snake_case)]
 
 pub mod app_state;
 pub mod clipboard;

@@ -2,7 +2,7 @@ use slint::Model;
 use std::rc::Rc;
 
 use GoRun::item_manager::ItemManager;
-use GoRun::model::{AppConfig, AppData, Category, Config, Item, ViewType};
+use GoRun::model::{AppConfig, AppData, Category, Config, Item};
 use GoRun::*;
 
 fn init_testing_backend() {
@@ -60,7 +60,7 @@ fn setup_ui_with_data(categories: Vec<Category>, items: Vec<Item>) -> MainWindow
 
 #[test]
 fn test_main_window_initializes() {
-    let ui = setup_ui_with_data(vec![], vec![]);
+    let _ui = setup_ui_with_data(vec![], vec![]);
     // Window title check - skipped as title() API varies by Slint version
 }
 

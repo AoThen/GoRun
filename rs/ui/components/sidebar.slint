@@ -1,4 +1,4 @@
-import { VerticalBox, ListView } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 struct CategoryModel {
@@ -46,12 +46,23 @@ export component Sidebar {
                         }
                     }
 
-                    Text {
-                        text: cat.name;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        padding-left: Theme.spacing-md;
+                    HorizontalBox {
+                        spacing: 0;
+                        padding: 0;
+
+                        Rectangle {
+                            width: Theme.spacing-md;
+                            height: 100%;
+                        }
+
+                        Text {
+                            text: cat.name;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
                     }
                 }
             }

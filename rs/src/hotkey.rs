@@ -275,6 +275,7 @@ impl HotkeyManager {
     }
 
     pub fn unregister(&mut self) -> bool {
+        #[cfg(windows)]
         let had_pump = self.pump_active;
         self.kill_pump_thread();
         self.pump_active = false;

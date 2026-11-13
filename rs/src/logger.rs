@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{LineWriter, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use log::{LevelFilter, Log, Metadata, Record};
@@ -171,6 +171,7 @@ pub fn set_panic_hook() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn test_sanitize_newlines() {

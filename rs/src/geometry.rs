@@ -108,6 +108,7 @@ pub fn position_menu_at_cursor(ui: &MainWindow, x: f32, y: f32, item_count: usiz
     }
     #[cfg(not(windows))]
     {
+        let _ = item_count;
         ui.set_context_menu_x(x);
         ui.set_context_menu_y(y);
     }

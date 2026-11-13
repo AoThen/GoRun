@@ -453,15 +453,15 @@ fn contains_cjk(s: &str) -> bool {
 
 /// 取文本的拼音首字母（非汉字保留原字符小写）。
 fn pinyin_initial(text: &str) -> String {
-    let args = pinyin::Args::new();
+    use pinyin::ToPinyin;
     let mut out = String::new();
     for ch in text.chars() {
         if !is_cjk(ch) {
             out.push(ch.to_ascii_lowercase());
             continue;
         }
-        if let Some(p) = pinyin::lazy_pinyin(&ch.to_string(), &args).into_iter().next() {
-            if let Some(c) = p.chars().next() {
+        if let Some(p) = ch.to_pinyin() {
+            if let Some(c) = p.plain().chars().next() {
                 out.push(c.to_ascii_lowercase());
             }
         }
@@ -479,15 +479,15 @@ fn pinyin_pair(text: &str) -> Option<(String, String)> {
 
 /// 取文本的完整拼音（多音字取第一个读音，非汉字保留原字符小写）。
 fn pinyin_full(text: &str) -> String {
-    let args = pinyin::Args::new();
+    use pinyin::ToPinyin;
     let mut out = String::new();
     for ch in text.chars() {
         if !is_cjk(ch) {
             out.push(ch.to_ascii_lowercase());
             continue;
         }
-        if let Some(p) = pinyin::lazy_pinyin(&ch.to_string(), &args).into_iter().next() {
-            out.push_str(&p.to_lowercase());
+        if let Some(p) = ch.to_pinyin() {
+            out.push_str(p.plain());
         }
     }
     out

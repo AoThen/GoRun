@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use crate::app_state::AppState;
 use crate::localization::Localization;
-use crate::model::{Category, Item, ViewType};
+use crate::model::{Category, ViewType};
 use crate::{
     clipboard, fileops, geometry, hotkey, model, ui_sync, util, EditDialog, MainWindow,
 };
@@ -61,7 +61,7 @@ pub fn wire_handler(
         let path = PathBuf::from(target.to_string());
         let mut state = state_file.borrow_mut();
         let cat_id = state.current_category_id.clone();
-        let count = state.manager.handle_drop(&[path], &cat_id);
+        let _count = state.manager.handle_drop(&[path], &cat_id);
         state.save_if_modified();
         let query = state.search_query.clone();
         drop(state);
@@ -417,7 +417,7 @@ pub fn wire_handler(
                 match index {
                     0 => {
                         // 重命名：打开 InputDialog
-                        let mut state = state_menu.borrow_mut();
+                        let state = state_menu.borrow_mut();
                         let loc_m = state.loc.clone();
                         if let Some(cat) = state.manager.categories().get(idx as usize) {
                             let cat_id = cat.id.clone();
@@ -437,7 +437,7 @@ pub fn wire_handler(
                     }
                     1 => {
                         // 删除：确认后级联删除项目
-                        let mut state = state_menu.borrow_mut();
+                        let state = state_menu.borrow_mut();
                         let loc_m = state.loc.clone();
                         if let Some(cat) = state.manager.categories().get(idx as usize) {
                             let cat_id = cat.id.clone();
@@ -557,7 +557,7 @@ pub fn wire_handler(
                 }
                 6 => {
                     // 运行全部：弹确认框（Tip_RunAll），确认后逐一执行分类内项目
-                    let mut state = state_menu.borrow_mut();
+                    let state = state_menu.borrow_mut();
                     let cat_id = state.current_category_id.clone();
                     let cat_name = state
                         .manager
@@ -621,7 +621,7 @@ pub fn wire_handler(
                             .position(|c| c.id == item.category_id)
                             .unwrap_or(0);
 
-                        if let Some(ui) = weak_ui_menu.upgrade() {
+                        if let Some(_ui) = weak_ui_menu.upgrade() {
                             let dialog = match EditDialog::new() {
                                 Ok(d) => d,
                                 Err(e) => {

@@ -1,4 +1,4 @@
-import { VerticalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export component ContextMenu {
@@ -32,14 +32,23 @@ export component ContextMenu {
                         height: 100%;
                         background: menu-touch.has-hover ? Theme.menu-hover : transparent;
 
-                        Text {
-                            text: item;
-                            font-size: Theme.font-size-sm;
-                            color: Theme.text-primary;
-                            width: 100%;
-                            overflow: elide;
-                            padding-left: 8px;
-                            vertical-alignment: center;
+                        HorizontalBox {
+                            spacing: 0;
+                            padding: 0;
+
+                            Rectangle {
+                                width: 8px;
+                                height: 100%;
+                            }
+
+                            Text {
+                                text: item;
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text-primary;
+                                overflow: elide;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
                         }
                     }
                 }

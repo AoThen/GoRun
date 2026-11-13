@@ -41,16 +41,21 @@ use std::sync::Mutex;
 #[cfg(windows)]
 const WM_TRAYICON: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 1;
 
-#[cfg(not(windows))]
-const WM_TRAYICON: u32 = 0x8001;
-
+#[cfg(windows)]
 const TRAY_ICON_ID: u32 = 1;
+#[cfg(windows)]
 const MENU_ID_SHOW: u32 = 1001;
+#[cfg(windows)]
 const MENU_ID_EXIT: u32 = 1002;
+#[cfg(windows)]
 const MENU_ID_AUTOSTART: u32 = 1003;
+#[cfg(windows)]
 const MENU_ID_FOLLOW_MOUSE: u32 = 1004;
+#[cfg(windows)]
 const MENU_ID_LANG_ZHCN: u32 = 1005;
+#[cfg(windows)]
 const MENU_ID_LANG_ZHTW: u32 = 1006;
+#[cfg(windows)]
 const MENU_ID_LANG_ENUS: u32 = 1007;
 
 #[derive(Debug, Clone)]
