@@ -11,6 +11,12 @@ pub struct IconCache {
     cache_dir: PathBuf,
     /// item_id -> 最近一次缓存文件名；编辑图标/目标/索引后按映射表清理旧文件
     item_keys: Arc<Mutex<HashMap<String, String>>>,
+    /// 解码后的图标像素内存缓存（key = cache_key 的 FNV 值）。
+    /// 存 SharedPixelBuffer（Send+Sync 的引用计数像素块）而非 slint::Image：
+    /// Image 持有 Slint 线程本地缓存、不是 Send，放进本结构会破坏
+    /// spawn_icon_refresh 的线程边界。UI 线程用时再以 Image::from_rgba8 轻量包装。
+    /// 目的：搜索输入等高频刷新路径避免对同一 PNG 反复读盘解码。
+    images: Arc<Mutex<HashMap<u64, slint::SharedPixelBuffer<slint::Rgba8Pixel>>>>,
 }
 
 impl Default for IconCache {
@@ -27,7 +33,44 @@ impl IconCache {
         IconCache {
             cache_dir: dir,
             item_keys: Arc::new(Mutex::new(HashMap::new())),
+            images: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// 从内存缓存取已解码像素；未命中返回 None（调用方再读盘并回填）。
+    /// 返回 SharedPixelBuffer 的轻量克隆，调用方包装成 slint::Image。
+    pub fn cached_image(
+        &self,
+        item: &Item,
+    ) -> Option<slint::SharedPixelBuffer<slint::Rgba8Pixel>> {
+        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
+        self.images
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&hash)
+            .cloned()
+    }
+
+    /// 回填内存缓存（读盘解码成功后调用）。
+    pub fn store_image(
+        &self,
+        item: &Item,
+        buffer: slint::SharedPixelBuffer<slint::Rgba8Pixel>,
+    ) {
+        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
+        self.images
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(hash, buffer);
+    }
+
+    /// 失效某项的内存缓存（编辑图标/目标后）。
+    pub fn invalidate_image(&self, item: &Item) {
+        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
+        self.images
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&hash);
     }
 
     fn cache_key(id: &str, icon_path: &str, icon_index: i32, target: &str) -> u64 {
@@ -79,6 +122,8 @@ impl IconCache {
     }
 
     pub fn delete_cache(&self, item: &Item) {
+        // 内存缓存同步失效（旧键已随 item_keys 移除；新键待下次读盘回填）
+        self.invalidate_image(item);
         // 编辑图标/目标/索引后缓存键变化，旧键文件按映射表清理（无界增长修复）
         if let Some(old_name) = self
             .item_keys
@@ -160,44 +205,44 @@ fn extract_hicon(
     icon_index: i32,
 ) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::UI::Shell::ExtractIconExW;
-    use windows::Win32::UI::WindowsAndMessaging::HICON;
+    use windows::Win32::UI::WindowsAndMessaging::{HICON, PrivateExtractIconsW};
 
-    let wide: Vec<u16> = std::ffi::OsStr::new(icon_path)
+    // 图标视图显示 48px（theme.icon-size）；此前 ExtractIconExW 只能取系统大图标
+    // （SM_CXICON=32px），放大 1.5x 显示发虚。PrivateExtractIconsW 支持指定精确尺寸，
+    // 对 exe/dll/ico 均有效；flags=0 表示按传入 cx/cy 提取。
+    const ICON_SIZE: i32 = 48;
+
+    let mut wide: Vec<u16> = std::ffi::OsStr::new(icon_path)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
+    // PrivateExtractIconsW 要求路径缓冲区定长 [u16; 260]（MAX_PATH）；
+    // 超长路径直接失败，避免截断后无 NUL 终止导致 FFI 越界读。
+    if wide.len() > 260 {
+        log::debug!("Icon path too long ({}), skipping: {}", wide.len(), icon_path);
+        return None;
+    }
+    let mut path_buf = [0u16; 260];
+    path_buf[..wide.len()].copy_from_slice(&wide);
 
-    let mut large_icon = HICON::default();
-    let mut small_icon = HICON::default();
-
+    let mut icon = HICON::default();
     let count = unsafe {
-        ExtractIconExW(
-            windows::core::PCWSTR(wide.as_ptr()),
+        PrivateExtractIconsW(
+            &path_buf,
             icon_index,
-            Some(&mut large_icon),
-            Some(&mut small_icon),
-            1,
+            ICON_SIZE,
+            ICON_SIZE,
+            Some(&mut [icon]),
+            None,
+            0,
         )
     };
 
-    if count == 0 {
-        log::debug!("ExtractIconExW returned 0 for: {}", icon_path);
+    if count == 0 || icon.is_invalid() {
+        log::debug!("PrivateExtractIconsW returned {} for: {}", count, icon_path);
         return None;
     }
-
-    if !large_icon.is_invalid() {
-        if !small_icon.is_invalid() {
-            unsafe {
-                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyIcon(small_icon);
-            }
-        }
-        Some(large_icon)
-    } else if !small_icon.is_invalid() {
-        Some(small_icon)
-    } else {
-        None
-    }
+    Some(icon)
 }
 
 #[cfg(windows)]
@@ -211,6 +256,29 @@ fn extract_hicon_from_target(
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
+
+    // 优先 PrivateExtractIconsW 取 48px（与 UI 显示 1:1）；目标可能是任意文件
+    // （非 exe/dll/ico 时该 API 返回 0），回退 SHGetFileInfoW 大图标（32px，放大可接受）。
+    if wide.len() <= 260 {
+        let mut path_buf = [0u16; 260];
+        path_buf[..wide.len()].copy_from_slice(&wide);
+        let mut icon = windows::Win32::UI::WindowsAndMessaging::HICON::default();
+        let count = unsafe {
+            windows::Win32::UI::WindowsAndMessaging::PrivateExtractIconsW(
+                &path_buf,
+                0,
+                48,
+                48,
+                Some(&mut [icon]),
+                None,
+                0,
+            )
+        };
+        if count > 0 && !icon.is_invalid() {
+            return Some(icon);
+        }
+        log::debug!("PrivateExtractIconsW fallback to SHGetFileInfoW for: {}", target);
+    }
 
     let mut file_info = windows::Win32::UI::Shell::SHFILEINFOW::default();
     let flags = SHGFI_ICON | SHGFI_LARGEICON;
@@ -397,12 +465,14 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
         }
 
         let tmp_path = path.with_extension("png.tmp");
-        if let Err(e) = image::save_buffer(
+        // 显式指定 PNG 格式：tmp 扩展名无法让 save_buffer 按扩展名推断（会永远失败）
+        if let Err(e) = image::save_buffer_with_format(
             &tmp_path,
             &pixels,
             width as u32,
             height as u32,
             image::ColorType::Rgba8,
+            image::ImageFormat::Png,
         ) {
             log::warn!("Failed to save icon PNG: {}", e);
             let _ = fs::remove_file(&tmp_path);

@@ -52,10 +52,10 @@ pub fn spawn_icon_refresh(
     std::thread::spawn(move || {
         // P1：单线程内预收集所有 (id, path) 更新，避免每项一次 invoke_from_event_loop
         // 且每次 O(N) 扫描模型（旧实现总复杂度 O(N²)，大分类时卡顿 UI）。
-        let mut updates: Vec<(String, String)> = Vec::new();
+        let mut updates: Vec<(Item, String)> = Vec::new();
         for item in &items {
             if let Some(path) = icon_cache.refresh_icon(item) {
-                updates.push((item.id.clone(), path.to_string_lossy().to_string()));
+                updates.push((item.clone(), path.to_string_lossy().to_string()));
             }
         }
         if updates.is_empty() {
@@ -67,23 +67,26 @@ pub fn spawn_icon_refresh(
                 // P0：先在事件循环线程登记缓存路径（供 Timer 回写并落盘），
                 // 否则进程重启后图标无从恢复（item_keys 只是内存映射）。
                 if let Ok(mut queue) = pending_icon_paths.lock() {
-                    for (id, path) in &updates {
-                        queue.insert(id.clone(), path.clone());
+                    for (item, path) in &updates {
+                        queue.insert(item.id.clone(), path.clone());
                     }
                 }
                 let model = ui.get_items();
-                // 构建 id -> path 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新。
-                let id_to_path: std::collections::HashMap<&str, &str> = updates
+                // 构建 id -> (path, item) 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新。
+                let id_to_path: std::collections::HashMap<&str, &(&Item, &String)> = updates
                     .iter()
-                    .map(|(id, path)| (id.as_str(), path.as_str()))
+                    .map(|(item, path)| (item.id.as_str(), (item, path)))
                     .collect();
                 for i in 0..model.row_count() {
                     if let Some(row) = model.row_data(i) {
-                        if let Some(path_str) = id_to_path.get(row.id.as_str()) {
+                        if let Some((item, path_str)) = id_to_path.get(row.id.as_str()) {
                             let mut new_row = row;
-                            new_row.icon_path =
-                                slint::Image::load_from_path(std::path::Path::new(path_str))
-                                    .unwrap_or_default();
+                            let img = slint::Image::load_from_path(std::path::Path::new(path_str))
+                                .unwrap_or_default();
+                            if let Some(buffer) = img.to_rgba8() {
+                                icon_cache.store_image(item, buffer);
+                            }
+                            new_row.icon_path = img;
                             model.set_row_data(i, new_row);
                         }
                     }
@@ -93,7 +96,6 @@ pub fn spawn_icon_refresh(
         .ok();
     });
 }
-
 /// 把后台提取出的图标缓存路径回写到项目模型并落盘（P0）。
 /// 必须调用方持有主线程状态；提取线程只负责产出路径，写模型留在事件循环内。
 pub fn persist_cached_icons(
@@ -238,16 +240,25 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
                 pending.push(item.clone());
                 String::new()
             };
+            // 高频刷新（搜索输入/切分类）下避免对同一 PNG 反复读盘解码：
+            // 先查内存像素缓存，未命中才 load_from_path 并回填。
+            let image = if icon_path.is_empty() {
+                slint::Image::default()
+            } else if let Some(buffer) = state.icon_cache.cached_image(item) {
+                slint::Image::from_rgba8(buffer)
+            } else {
+                let img = slint::Image::load_from_path(std::path::Path::new(&icon_path))
+                    .unwrap_or_default();
+                if let Some(buffer) = img.to_rgba8() {
+                    state.icon_cache.store_image(item, buffer);
+                }
+                img
+            };
             ItemModel {
                 id: item.id.clone().into(),
                 name: item.name.clone().into(),
                 target: item.target.clone().into(),
-                icon_path: if icon_path.is_empty() {
-                    slint::Image::default()
-                } else {
-                    slint::Image::load_from_path(std::path::Path::new(&icon_path))
-                        .unwrap_or_default()
-                },
+                icon_path: image,
                 search_active: !query.is_empty(),
             }
         })

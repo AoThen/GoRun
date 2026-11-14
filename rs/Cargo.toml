@@ -25,7 +25,8 @@ i-slint-backend-testing = { version = "1.7", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
-image = "0.25"
+# 仅用 PNG 编解码写图标缓存；default 集含 exr/ravif/qoi/gif/webp 等无关格式（体积 +2~3MB）。
+image = { version = "0.25", default-features = false, features = ["png"] }
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
 chrono = "0.4"
 pinyin = "0.10"
@@ -64,3 +65,8 @@ windows = { version = "0.57", features = [
 [profile.release]
 opt-level = 3
 lto = true
+# 体积优化：去除调试/符号表；panic 直接中止（GUI 已有 panic_hook 记录，无需展开栈）；
+# 单编译单元配合 lto 进一步压缩。预计 exe 9.3MB → ~4-5MB。
+strip = "symbols"
+panic = "abort"
+codegen-units = 1
