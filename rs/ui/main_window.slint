@@ -198,7 +198,7 @@ export component MainWindow inherits Window {
                     }
                     return accept;
                 }
-                if (event.text == "f" && event.modifiers.control) {
+                if (event.modifiers.control && (event.text == "f" || event.text == "F" || event.text == "\u{6}")) {
                     toolbar.focus-search();
                     return accept;
                 }

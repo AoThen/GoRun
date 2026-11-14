@@ -20,6 +20,12 @@ export component Toast {
         border-color: Theme.stroke-1;
         border-radius: Theme.radius-md;
 
+        // 吞掉点击与滚轮，防止鼠标事件穿透到下层（误触背景/弹层）
+        TouchArea {
+            clicked => { }
+            scroll-event(event) => { accept }
+        }
+
         HorizontalBox {
             padding: Theme.spacing-md;
             spacing: Theme.spacing-sm;
