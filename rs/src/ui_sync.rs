@@ -73,18 +73,25 @@ pub fn spawn_icon_refresh(
                 }
                 let model = ui.get_items();
                 // 构建 id -> (path, item) 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新。
-                let id_to_path: std::collections::HashMap<&str, &(&Item, &String)> = updates
+                // 直接存 (id, path) 的借用，model 行内再按 id 取 item 信息。
+                let id_to_path: std::collections::HashMap<&str, &String> = updates
                     .iter()
-                    .map(|(item, path)| (item.id.as_str(), &(item, path)))
+                    .map(|(item, path)| (item.id.as_str(), path))
+                    .collect();
+                let id_to_item: std::collections::HashMap<&str, &Item> = updates
+                    .iter()
+                    .map(|(item, _)| (item.id.as_str(), item))
                     .collect();
                 for i in 0..model.row_count() {
                     if let Some(row) = model.row_data(i) {
-                        if let Some((item, path_str)) = id_to_path.get(row.id.as_str()) {
+                        if let Some(path_str) = id_to_path.get(row.id.as_str()) {
                             let mut new_row = row;
                             let img = slint::Image::load_from_path(std::path::Path::new(path_str))
                                 .unwrap_or_default();
                             if let Some(buffer) = img.to_rgba8() {
-                                icon_cache.store_image(*item, buffer);
+                                if let Some(item) = id_to_item.get(row.id.as_str()) {
+                                    icon_cache.store_image(item, buffer);
+                                }
                             }
                             new_row.icon_path = img;
                             model.set_row_data(i, new_row);
