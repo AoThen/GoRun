@@ -35,7 +35,7 @@
 |-----|------|
 | 语言 | Rust 2021 |
 | 构建 | Cargo |
-| UI | Slint 1.7+ (Skia 渲染) |
+| UI | Slint 1.7+ (software 渲染器) |
 | 存储 | JSON (serde + serde_json) |
 | 平台 | Windows 10+ |
 
@@ -141,9 +141,9 @@ GoRun/
  │   ├── ui/
  │   │   ├── main_window.slint   # 主窗口 UI
  │   │   ├── edit_dialog.slint   # 编辑对话框 UI
- │   │   ├── theme.slint         # 主题样式
- │   │   ├── components/         # 复用组件
- │   │   └── dialogs/            # 对话框组件
+ │   │   ├── theme.slint         # 主题设计令牌（深/浅色板）
+ │   │   ├── components/         # 复用组件（toolbar/toast/sidebar/item_grid/item_tile/context_menu/menu_popup；menu_bar/status_bar/search_bar 已删）
+ │   │   └── dialogs/            # 对话框组件（confirm/input/about）
  │   └── tests/
  │       ├── gui_integration_test.rs  # GUI 集成测试
  │       └── storage_test.rs     # 存储单元测试
