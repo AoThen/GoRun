@@ -84,7 +84,7 @@ pub fn spawn_icon_refresh(
                             let img = slint::Image::load_from_path(std::path::Path::new(path_str))
                                 .unwrap_or_default();
                             if let Some(buffer) = img.to_rgba8() {
-                                icon_cache.store_image(item, buffer);
+                                icon_cache.store_image(*item, buffer);
                             }
                             new_row.icon_path = img;
                             model.set_row_data(i, new_row);
