@@ -219,3 +219,137 @@ fn test_empty_state_renders() {
     assert_eq!(ui.get_items().row_count(), 0);
     assert_eq!(ui.get_categories().row_count(), 0);
 }
+
+// ===== UI v2 重设计（提交 9415cf0 / 199daec）新增特性覆盖 =====
+
+/// 计数徽章：CategoryModel.count 填充为分类实际项目数（v2 侧栏行尾徽章）。
+#[test]
+fn test_count_badge_filled() {
+    let categories = vec![
+        Category {
+            id: "cat_1".into(),
+            name: "Programs".into(),
+            ..Default::default()
+        },
+        Category {
+            id: "cat_2".into(),
+            name: "Games".into(),
+            ..Default::default()
+        },
+    ];
+    let items = vec![
+        Item {
+            id: "i1".into(),
+            name: "Notepad".into(),
+            category_id: "cat_1".into(),
+            ..Default::default()
+        },
+        Item {
+            id: "i2".into(),
+            name: "Calc".into(),
+            category_id: "cat_1".into(),
+            ..Default::default()
+        },
+        Item {
+            id: "i3".into(),
+            name: "Minesweeper".into(),
+            category_id: "cat_2".into(),
+            ..Default::default()
+        },
+    ];
+    let ui = setup_ui_with_data(categories, items);
+    let cats = ui.get_categories();
+    assert_eq!(cats.row_count(), 2);
+    assert_eq!(cats.row_data(0).unwrap().count, 2);
+    assert_eq!(cats.row_data(1).unwrap().count, 1);
+}
+
+/// Toast 属性链路：message/error/visible 可 set 可 get（v2 替代 StatusBar）。
+#[test]
+fn test_toast_properties() {
+    let ui = setup_ui_with_data(vec![], vec![]);
+    assert!(!ui.get_toast_visible());
+    assert_eq!(ui.get_toast_message().as_str(), "");
+    ui.set_toast_message("Exported: config.json".into());
+    ui.set_toast_error(false);
+    ui.set_toast_visible(true);
+    assert!(ui.get_toast_visible());
+    assert_eq!(ui.get_toast_message().as_str(), "Exported: config.json");
+    assert!(!ui.get_toast_error());
+    // 错误态
+    ui.set_toast_error(true);
+    assert!(ui.get_toast_error());
+    ui.set_toast_visible(false);
+    assert!(!ui.get_toast_visible());
+}
+
+/// 空状态副文案属性（Tip_DropToAdd 接线目标）。
+#[test]
+fn test_empty_hint_text_property() {
+    let ui = setup_ui_with_data(vec![], vec![]);
+    assert_eq!(ui.get_empty_hint_text().as_str(), "");
+    ui.set_empty_hint_text("Drop files or shortcuts here to add".into());
+    assert_eq!(
+        ui.get_empty_hint_text().as_str(),
+        "Drop files or shortcuts here to add"
+    );
+}
+
+/// 右键菜单 danger 数组属性链路（v2 危险项标红）。
+#[test]
+fn test_context_menu_danger_property() {
+    let ui = setup_ui_with_data(vec![], vec![]);
+    ui.set_context_menu_items(Rc::new(slint::VecModel::from(vec![
+        slint::SharedString::from("Edit"),
+        slint::SharedString::from("Delete"),
+    ])).into());
+    ui.set_context_menu_danger(Rc::new(slint::VecModel::from(vec![false, true])).into());
+    let danger = ui.get_context_menu_danger();
+    assert_eq!(danger.row_count(), 2);
+    assert!(!danger.row_data(0).unwrap());
+    assert!(danger.row_data(1).unwrap());
+}
+
+/// 汉堡菜单弹层属性链路（v2 单一列表 + danger 数组 + 分隔符占位）。
+#[test]
+fn test_menu_popup_properties() {
+    let ui = setup_ui_with_data(vec![], vec![]);
+    assert!(!ui.get_menu_popup_visible());
+    ui.set_menu_popup_visible(true);
+    assert!(ui.get_menu_popup_visible());
+    let items = Rc::new(slint::VecModel::from(vec![
+        slint::SharedString::from("New Item"),
+        slint::SharedString::from("-"),
+        slint::SharedString::from("Exit"),
+    ]));
+    ui.set_menu_popup_items(items.into());
+    let got = ui.get_menu_popup_items();
+    assert_eq!(got.row_count(), 3);
+    assert_eq!(got.row_data(1).unwrap().as_str(), "-");
+    ui.set_menu_popup_danger(Rc::new(slint::VecModel::from(vec![false, false, true])).into());
+    let danger = ui.get_menu_popup_danger();
+    assert_eq!(danger.row_count(), 3);
+    assert!(danger.row_data(2).unwrap());
+}
+
+/// 汉堡菜单回调存在：invoke 不 panic（分发逻辑在 wire_handler，UI 层回调通路完整）。
+#[test]
+fn test_hamburger_menu_callbacks_exist() {
+    let ui = setup_ui_with_data(vec![], vec![]);
+    ui.invoke_hamburger_clicked();
+    ui.invoke_menu_popup_selected(0);
+    ui.invoke_menu_popup_selected(22);
+}
+
+/// Ctrl+F 目标：focus-search 回调在 Toolbar 内，main_window 暴露 toolbar 实例；
+/// 此处验证主窗口键盘焦点链路属性存在（search-field-focused 读写）。
+#[test]
+fn test_search_field_focus_property() {
+    let ui = setup_ui_with_data(vec![], vec![]);
+    assert!(!ui.get_search_field_focused());
+    ui.set_search_field_focused(true);
+    assert!(ui.get_search_field_focused());
+    ui.set_search_field_focused(false);
+    assert!(!ui.get_search_field_focused());
+}
+
