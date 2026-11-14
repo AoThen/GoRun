@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>GoRun UI 视觉稿原型 v1</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+
+:root { --r-xs: 4px; --r-md: 6px; --r-lg: 10px; }
+
+body[data-theme="dark"] {
+  --bg-0: #202020; --bg-1: #262626; --bg-2: #2c2c2c; --bg-3: #323232;
+  --stroke-1: #383838; --stroke-2: #454545;
+  --text-1: #f5f5f5; --text-2: #a8a8a8;
+  --hover: #2f2f2f;
+  --accent: #4cc2ff; --accent-subtle: rgba(76,194,255,.12); --accent-fg: #101010;
+  --danger: #ff99a4; --danger-subtle: rgba(255,153,164,.12); --danger-fg: #2b0000;
+  --mask: rgba(0,0,0,.5);
+  --shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+body[data-theme="light"] {
+  --bg-0: #f3f3f3; --bg-1: #fbfbfb; --bg-2: #ffffff; --bg-3: #ffffff;
+  --stroke-1: #e0e0e0; --stroke-2: #d0d0d0;
+  --text-1: #1a1a1a; --text-2: #5c5c5c;
+  --hover: #ebebeb;
+  --accent: #005fb8; --accent-subtle: rgba(0,95,184,.08); --accent-fg: #ffffff;
+  --danger: #c50f1f; --danger-subtle: rgba(197,15,31,.08); --danger-fg: #ffffff;
+  --mask: rgba(0,0,0,.4);
+  --shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+
+body {
+  background: #141414;
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+.window {
+  width: 800px; height: 600px;
+  background: var(--bg-0); color: var(--text-1);
+  border-radius: 8px; overflow: hidden; position: relative;
+  box-shadow: 0 16px 48px rgba(0,0,0,.5);
+  transition: background .15s;
+}
+
+/* ---- 模拟系统标题栏 ---- */
+.titlebar {
+  height: 32px; display: flex; align-items: center;
+  background: var(--bg-1); border-bottom: 1px solid var(--stroke-1);
+}
+.titlebar .logo { font-size: 13px; margin: 0 8px 0 12px; }
+.titlebar .title { font-size: 12px; color: var(--text-2); flex: 1; }
+.tb-btn { width: 40px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--text-2); cursor: default; }
+.tb-btn:hover { background: var(--hover); color: var(--text-1); }
+.tb-btn.close:hover { background: var(--danger); color: var(--danger-fg); }
+
+/* ---- 工具行 ---- */
+.toolbar {
+  height: 44px; display: flex; align-items: center; gap: 8px;
+  padding: 0 8px; background: var(--bg-0);
+  border-bottom: 1px solid var(--stroke-1);
+}
+.searchbox {
+  flex: 1; max-width: 320px; height: 30px;
+  background: var(--bg-3); border: 1px solid var(--stroke-2); border-radius: var(--r-xs);
+  display: flex; align-items: center; padding: 0 10px; gap: 8px;
+}
+.searchbox:focus-within { border-color: var(--accent); }
+.searchbox svg { flex: none; color: var(--text-2); }
+.searchbox input {
+  flex: 1; border: none; outline: none; background: transparent;
+  color: var(--text-1); font-size: 13px; user-select: text;
+}
+.searchbox input::placeholder { color: var(--text-2); }
+.toolbar .spacer { flex: 1; }
+.icon-btn {
+  width: 32px; height: 32px; border-radius: var(--r-xs);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-2); cursor: pointer;
+}
+.icon-btn:hover { background: var(--hover); color: var(--text-1); }
+
+/* ---- 主区 ---- */
+.main { display: flex; height: 524px; }
+
+/* ---- 侧边栏 ---- */
+.sidebar {
+  width: 180px; flex: none; background: var(--bg-1);
+  border-right: 1px solid var(--stroke-1);
+  display: flex; flex-direction: column; padding: 12px 8px 8px;
+}
+.sidebar-title { font-size: 13px; font-weight: 600; padding: 0 8px 8px; }
+.cat-list { flex: 1; overflow-y: auto; }
+.cat-item {
+  height: 32px; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; border-radius: var(--r-xs);
+  position: relative; cursor: pointer; font-size: 13px;
+}
+.cat-item::before {
+  content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px;
+  border-radius: 2px; background: transparent;
+}
+.cat-item:hover { background: var(--hover); }
+.cat-item.active { background: var(--accent-subtle); }
+.cat-item.active::before { background: var(--accent); }
+.cat-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-item.active .name { font-weight: 600; }
+.cat-item .count { font-size: 11px; color: var(--text-2); }
+.cat-add {
+  height: 32px; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; border-radius: var(--r-xs); margin-top: 4px;
+  color: var(--text-2); font-size: 13px; cursor: pointer;
+}
+.cat-add:hover { background: var(--hover); color: var(--text-1); }
+
+/* ---- 内容区 ---- */
+.content { flex: 1; position: relative; overflow-y: auto; padding: 12px; }
+
+.tile {
+  width: 96px; height: 88px; border-radius: var(--r-md);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  cursor: pointer; position: relative;
+}
+.tile:hover { background: var(--hover); }
+.tile.selected { background: var(--accent-subtle); outline: 1px solid var(--accent); outline-offset: -1px; }
+.tile .icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 34px; line-height: 1; }
+.tile .name {
+  font-size: 12px; text-align: center; max-width: 88px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.grid { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+
+.row {
+  height: 34px; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; border-radius: var(--r-xs); cursor: pointer;
+}
+.row:hover { background: var(--hover); }
+.row.selected { background: var(--accent-subtle); outline: 1px solid var(--accent); outline-offset: -1px; }
+.row .icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.row .name { font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- 空状态 ---- */
+.empty {
+  position: absolute; inset: 0; display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+}
+.empty .box {
+  width: 48px; height: 48px; border: 2px dashed var(--stroke-2);
+  border-radius: var(--r-md); opacity: .8;
+}
+.empty .t1 { font-size: 13px; font-weight: 600; }
+.empty .t2 { font-size: 12px; color: var(--text-2); }
+
+/* ---- 弹层通用 ---- */
+.popup {
+  position: absolute; width: 200px; z-index: 50;
+  background: var(--bg-2); border: 1px solid var(--stroke-1);
+  border-radius: var(--r-md); box-shadow: var(--shadow);
+  padding: 4px; display: none;
+}
+.popup.show { display: block; animation: pop .12s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(-4px); } }
+
+.menu-item {
+  height: 28px; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; border-radius: var(--r-xs); font-size: 13px; cursor: pointer;
+}
+.menu-item:hover { background: var(--hover); }
+.menu-item.danger { color: var(--danger); }
+.menu-item.danger:hover { background: var(--danger-subtle); }
+.menu-sep { height: 1px; background: var(--stroke-1); margin: 4px 0; }
+
+#hamburger { top: 80px; right: 8px; }
+#ctxmenu { width: 160px; }
+
+/* ---- 对话框 ---- */
+.mask {
+  position: absolute; inset: 0; z-index: 90;
+  background: var(--mask); display: none;
+  align-items: center; justify-content: center;
+}
+.mask.show { display: flex; animation: fade .12s ease-out; }
+@keyframes fade { from { opacity: 0; } }
+.dialog {
+  width: 340px; min-height: 160px; background: var(--bg-2);
+  border: 1px solid var(--stroke-1); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); padding: 16px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.dialog h3 { font-size: 16px; font-weight: 600; }
+.dialog .msg { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.dialog .msg b { color: var(--text-1); font-weight: 600; }
+.dialog input {
+  height: 30px; background: var(--bg-3); border: 1px solid var(--stroke-2);
+  border-radius: var(--r-xs); padding: 0 12px; color: var(--text-1);
+  font-size: 13px; outline: none; user-select: text;
+}
+.dialog input:focus { border-color: var(--accent); }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; }
+.btn {
+  height: 32px; min-width: 80px; border-radius: var(--r-xs);
+  font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.btn.cancel { border: 1px solid var(--stroke-2); color: var(--text-1); background: transparent; }
+.btn.cancel:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border: none; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { background: var(--danger); color: var(--danger-fg); border: none; }
+.btn.danger:hover { filter: brightness(1.08); }
+
+/* ---- Toast ---- */
+.toast {
+  position: absolute; right: 12px; bottom: 12px; z-index: 99;
+  background: var(--bg-2); border: 1px solid var(--stroke-1);
+  border-radius: var(--r-md); box-shadow: var(--shadow);
+  padding: 8px 12px; font-size: 12px; color: var(--text-1);
+  opacity: 0; transform: translateY(8px); transition: all .18s ease-out;
+  pointer-events: none; max-width: 360px;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { color: var(--danger); }
+
+/* ---- 滚动条 ---- */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: var(--stroke-2); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.tips {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  font-size: 12px; color: #888; background: #1c1c1c; padding: 6px 14px;
+  border-radius: 6px; border: 1px solid #333; z-index: 100;
+}
+</style>
+</head>
+<body data-theme="dark">
+<div class="tips">原型演示：切主题 ◐ · 切视图 ⊞ · 右键项目/空白 · 双击运行 · 搜索过滤 · 点 ≡</div>
+
+<div class="window" id="win">
+  <div class="titlebar">
+    <span class="logo">⚡</span>
+    <span class="title">GoRun — 极速启动</span>
+    <div class="tb-btn">─</div>
+    <div class="tb-btn">□</div>
+    <div class="tb-btn close">✕</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="searchbox">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/>
+      </svg>
+      <input id="search" placeholder="搜索（支持拼音）">
+    </div>
+    <div class="spacer"></div>
+    <div class="icon-btn" id="btn-view" title="切换视图">
+      <svg id="icon-grid" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+        <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+      </svg>
+      <svg id="icon-list" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display:none">
+        <rect x="1" y="2" width="14" height="2.6" rx="1"/><rect x="1" y="6.7" width="14" height="2.6" rx="1"/><rect x="1" y="11.4" width="14" height="2.6" rx="1"/>
+      </svg>
+    </div>
+    <div class="icon-btn" id="btn-theme" title="切换主题">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M8 1.5 A6.5 6.5 0 0 1 8 14.5 Z" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="icon-btn" id="btn-menu" title="菜单">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <rect x="1.5" y="3" width="13" height="1.8" rx="0.9"/><rect x="1.5" y="7.1" width="13" height="1.8" rx="0.9"/><rect x="1.5" y="11.2" width="13" height="1.8" rx="0.9"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-title">分类</div>
+      <div class="cat-list" id="cat-list"></div>
+      <div class="cat-add" id="cat-add">
+        <svg width="14" height="14" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5" fill="none">
+          <path d="M8 2v12M2 8h12"/>
+        </svg>
+        新建分类
+      </div>
+    </div>
+    <div class="content" id="content">
+      <div class="grid" id="grid"></div>
+      <div class="grid" id="list" style="display:none; flex-direction:column;"></div>
+      <div class="empty" id="empty">
+        <div class="box"></div>
+        <div class="t1">此处暂无项目</div>
+        <div class="t2">拖入文件或快捷方式即可添加</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="popup" id="hamburger"></div>
+  <div class="popup" id="ctxmenu"></div>
+
+  <div class="mask" id="mask">
+    <div class="dialog">
+      <h3 id="dlg-title">删除项目</h3>
+      <div class="msg" id="dlg-msg"></div>
+      <div class="actions">
+        <div class="btn cancel" id="dlg-cancel">取消</div>
+        <div class="btn danger" id="dlg-ok">删除</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+const DATA = {
+  cats: [
+    { id: "c1", name: "常用" },
+    { id: "c2", name: "开发" },
+    { id: "c3", name: "娱乐" },
+    { id: "c4", name: "工具" }
+  ],
+  items: [
+    { id: "i1",  name: "Chrome",       icon: "🌐", cat: "c1" },
+    { id: "i2",  name: "微信",         icon: "💬", cat: "c1" },
+    { id: "i3",  name: "文件管理器",    icon: "📁", cat: "c1" },
+    { id: "i4",  name: "记事本",       icon: "📝", cat: "c1" },
+    { id: "i5",  name: "计算器",       icon: "🧮", cat: "c1" },
+    { id: "i6",  name: "音乐播放器",    icon: "🎵", cat: "c1" },
+    { id: "i7",  name: "VS Code",     icon: "💻", cat: "c2" },
+    { id: "i8",  name: "Windows 终端", icon: "⌨️", cat: "c2" },
+    { id: "i9",  name: "Git Bash",    icon: "🐙", cat: "c2" },
+    { id: "i10", name: "Docker",      icon: "🐳", cat: "c2" },
+    { id: "i11", name: "接口调试",     icon: "📖", cat: "c2" },
+    { id: "i12", name: "数据库工具",    icon: "🗃️", cat: "c2" },
+    { id: "i13", name: "7-Zip",      icon: "📦", cat: "c4" },
+    { id: "i14", name: "Everything",  icon: "🔍", cat: "c4" },
+    { id: "i15", name: "PotPlayer",   icon: "🎬", cat: "c4" },
+    { id: "i16", name: "Snipaste",    icon: "✂️", cat: "c4" }
+  ]
+};
+
+let curCat = "c1";
+let selected = null;
+let isGridView = true;
+let searching = false;
+
+const $ = id => document.getElementById(id);
+const grid = $("grid"), list = $("list"), empty = $("empty");
+const esc = s => s.replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+
+function countOf(catId) { return DATA.items.filter(i => i.cat === catId).length; }
+
+function renderSidebar() {
+  $("cat-list").innerHTML = DATA.cats.map(c => `
+    <div class="cat-item ${c.id === curCat && !searching ? "active" : ""}" data-id="${c.id}">
+      <span class="name">${esc(c.name)}</span>
+      <span class="count">${countOf(c.id)}</span>
+    </div>`).join("");
+  $("cat-list").querySelectorAll(".cat-item").forEach(el => {
+    el.onclick = () => {
+      curCat = el.dataset.id;
+      searching = false;
+      $("search").value = "";
+      selected = null;
+      render();
+    };
+  });
+}
+
+function renderItems() {
+  let items;
+  if (searching) {
+    const q = $("search").value.trim().toLowerCase();
+    items = q ? DATA.items.filter(i => i.name.toLowerCase().includes(q)) : [];
+  } else {
+    items = DATA.items.filter(i => i.cat === curCat);
+  }
+  const tiles = items.map(i => `
+    <div class="tile ${selected === i.id ? "selected" : ""}" data-id="${i.id}" data-name="${esc(i.name)}">
+      <div class="icon">${i.icon}</div>
+      <div class="name">${esc(i.name)}</div>
+    </div>`).join("");
+  const rows = items.map(i => `
+    <div class="row ${selected === i.id ? "selected" : ""}" data-id="${i.id}" data-name="${esc(i.name)}">
+      <div class="icon">${i.icon}</div>
+      <div class="name">${esc(i.name)}</div>
+    </div>`).join("");
+  grid.innerHTML = tiles;
+  list.innerHTML = rows;
+  empty.style.display = items.length ? "none" : "flex";
+  bindItemEvents(grid); bindItemEvents(list);
+}
+
+function bindItemEvents(container) {
+  container.querySelectorAll(".tile,.row").forEach(el => {
+    el.onclick = () => {
+      if (selected !== el.dataset.id) {
+        selected = el.dataset.id;
+        [grid, list].forEach(c => c.querySelectorAll(".selected").forEach(s => s.classList.remove("selected")));
+        el.classList.add("selected");
+      }
+    };
+    el.ondblclick = () => toast(`已启动「${el.dataset.name}」`);
+    el.oncontextmenu = e => {
+      e.preventDefault(); e.stopPropagation();
+      closePopups();
+      if (selected !== el.dataset.id) {
+        selected = el.dataset.id;
+        [grid, list].forEach(c => c.querySelectorAll(".selected").forEach(s => s.classList.remove("selected")));
+        el.classList.add("selected");
+      }
+      showCtxMenu(e, [
+        { t: "运行", a: () => toast(`已启动「${el.dataset.name}」`) },
+        { t: "管理员运行", a: () => toast(`已以管理员启动「${el.dataset.name}」`) },
+        { sep: true },
+        { t: "编辑", a: () => toast("打开编辑对话框（演示）") },
+        { sep: true },
+        { t: "删除", d: true, a: () => askDelete(el.dataset.id, el.dataset.name) }
+      ]);
+    };
+  });
+}
+
+function render() { renderSidebar(); renderItems(); }
+
+/* ---- 弹层 ---- */
+function closePopups() {
+  $("hamburger").classList.remove("show");
+  $("ctxmenu").classList.remove("show");
+}
+
+function menuHTML(items) {
+  return items.map((m, idx) => m.sep
+    ? `<div class="menu-sep"></div>`
+    : `<div class="menu-item ${m.d ? "danger" : ""}" data-i="${idx}">${esc(m.t)}</div>`
+  ).join("");
+}
+function bindMenu(popup, items) {
+  popup.querySelectorAll(".menu-item").forEach(el => {
+    el.onclick = () => {
+      closePopups();
+      const m = items[+el.dataset.i];
+      if (m && m.a) m.a();
+    };
+  });
+}
+
+function showCtxMenu(e, items) {
+  const p = $("ctxmenu");
+  p.innerHTML = menuHTML(items);
+  p.style.left = "0px"; p.style.top = "0px";
+  p.classList.add("show");
+  const wr = $("win").getBoundingClientRect();
+  let x = e.clientX - wr.left, y = e.clientY - wr.top;
+  x = Math.min(x, $("win").clientWidth - p.offsetWidth - 8);
+  y = Math.min(y, $("win").clientHeight - p.offsetHeight - 8);
+  p.style.left = x + "px"; p.style.top = y + "px";
+  bindMenu(p, items);
+}
+
+$("btn-menu").onclick = e => {
+  e.stopPropagation();
+  const showing = $("hamburger").classList.contains("show");
+  closePopups();
+  if (showing) return;
+  const items = [
+    { t: "新建项目", a: () => toast("打开新建项目对话框（演示）") },
+    { t: "新建分类", a: () => toast("打开新建分类对话框（演示）") },
+    { sep: true },
+    { t: "刷新图标缓存", a: () => toast("图标缓存已刷新") },
+    { t: "切换视图", a: () => toggleView() },
+    { t: "切换主题", a: () => toggleTheme() },
+    { sep: true },
+    { t: "语言：简体中文", a: () => toast("打开语言选择（演示）") },
+    { t: "关于 GoRun", a: () => toast("打开关于对话框（演示）") },
+    { sep: true },
+    { t: "退出", d: true, a: () => toast("演示：退出程序", true) },
+    { t: "演示错误 Toast（红字 4s）", d: true, a: () => toast("启动失败：找不到目标文件", true) }
+  ];
+  const p = $("hamburger");
+  p.innerHTML = menuHTML(items);
+  p.classList.add("show");
+  bindMenu(p, items);
+};
+
+$("content").oncontextmenu = e => {
+  e.preventDefault();
+  closePopups();
+  showCtxMenu(e, [
+    { t: "新建项目", a: () => toast("打开新建项目对话框（演示）") },
+    { t: "新建分类", a: () => toast("打开新建分类对话框（演示）") },
+    { sep: true },
+    { t: "刷新图标缓存", a: () => toast("图标缓存已刷新") },
+    { t: "切换视图", a: () => toggleView() },
+    { t: "切换主题", a: () => toggleTheme() }
+  ]);
+};
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".popup")) closePopups();
+});
+document.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  if (!e.target.closest(".popup")) closePopups();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    closePopups();
+    if ($("mask").classList.contains("show")) pendingDelete = null;
+    $("mask").classList.remove("show");
+  }
+  if (e.ctrlKey && e.key.toLowerCase() === "f") {
+    if ($("mask").classList.contains("show")) return;
+    e.preventDefault();
+    $("search").focus();
+  }
+});
+
+/* ---- 删除确认 ---- */
+let pendingDelete = null;
+function askDelete(id, name) {
+  pendingDelete = id;
+  $("dlg-title").textContent = "删除项目";
+  $("dlg-msg").innerHTML = `确定删除「<b>${esc(name)}</b>」吗？<br>此操作不可撤销。`;
+  $("mask").classList.add("show");
+}
+$("dlg-ok").onclick = () => {
+  DATA.items = DATA.items.filter(i => i.id !== pendingDelete);
+  pendingDelete = null;
+  $("mask").classList.remove("show");
+  selected = null;
+  render();
+  toast("项目已删除");
+};
+$("dlg-cancel").onclick = () => {
+  pendingDelete = null;
+  $("mask").classList.remove("show");
+};
+
+/* ---- 主题 / 视图 ---- */
+function toggleTheme() {
+  document.body.dataset.theme = document.body.dataset.theme === "dark" ? "light" : "dark";
+}
+function toggleView() {
+  isGridView = !isGridView;
+  grid.style.display = isGridView ? "flex" : "none";
+  list.style.display = isGridView ? "none" : "flex";
+  $("icon-grid").style.display = isGridView ? "" : "none";
+  $("icon-list").style.display = isGridView ? "none" : "";
+}
+$("btn-theme").onclick = e => toggleTheme();
+$("btn-view").onclick = e => toggleView();
+
+/* ---- 搜索 ---- */
+$("search").oninput = () => {
+  searching = $("search").value.trim() !== "";
+  selected = null;
+  render();
+};
+
+/* ---- 其他入口 ---- */
+$("cat-add").onclick = () => toast("打开新建分类对话框（演示）");
+
+/* ---- Toast ---- */
+let toastTimer = null;
+function toast(msg, isError) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.toggle("error", !!isError);
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), isError ? 4000 : 2000);
+}
+
+render();
+</script>
+</body>
+</html>
