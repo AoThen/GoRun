@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'rs/**'
+      - 'resources/icons/**'
       - 'resources/lang/**'
       - '.github/workflows/rust-build.yml'
   pull_request:
     paths:
       - 'rs/**'
+      - 'resources/icons/**'
       - 'resources/lang/**'
       - '.github/workflows/rust-build.yml'
   workflow_dispatch:
