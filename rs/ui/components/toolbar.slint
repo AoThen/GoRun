@@ -21,7 +21,12 @@ export component Toolbar {
 
     HorizontalBox {
         spacing: Theme.spacing-md;
-        padding: Theme.spacing-md;
+        // 垂直 6px = (44-32)/2，使 30px 搜索框/32px 按钮在 44px 行内垂直居中；
+        // 水平 8px 与原型 .toolbar{padding:0 8px} 一致。
+        padding-left: Theme.spacing-md;
+        padding-right: Theme.spacing-md;
+        padding-top: 6px;
+        padding-bottom: 6px;
 
         // 搜索框（高 30px，裸 TextInput 自绘 + 放大镜 + 自绘 placeholder）
         Rectangle {
