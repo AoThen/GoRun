@@ -84,15 +84,16 @@ pub fn spawn_icon_refresh(
                     .collect();
                 for i in 0..model.row_count() {
                     if let Some(row) = model.row_data(i) {
-                        if let Some(path_str) = id_to_path.get(row.id.as_str()) {
-                            let mut new_row = row;
+                        let item_id = row.id.clone();
+                        if let Some(path_str) = id_to_path.get(item_id.as_str()) {
                             let img = slint::Image::load_from_path(std::path::Path::new(path_str))
                                 .unwrap_or_default();
                             if let Some(buffer) = img.to_rgba8() {
-                                if let Some(item) = id_to_item.get(row.id.as_str()) {
+                                if let Some(item) = id_to_item.get(item_id.as_str()) {
                                     icon_cache.store_image(item, buffer);
                                 }
                             }
+                            let mut new_row = row;
                             new_row.icon_path = img;
                             model.set_row_data(i, new_row);
                         }
