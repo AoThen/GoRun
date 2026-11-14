@@ -20,7 +20,7 @@ export component MenuPopup {
 
         VerticalBox {
             spacing: 0px;
-            padding: 2px;
+            padding: 4px;
             width: 100%;
 
             for item[index] in root.items:
@@ -41,20 +41,22 @@ export component MenuPopup {
                             Rectangle {
                                 width: 100%;
                                 height: 100%;
-                                background: menu-touch.has-hover ? Theme.hover : transparent;
+                                background: menu-touch.has-hover
+                                    ? ((index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger-subtle : Theme.hover)
+                                    : transparent;
 
                                 HorizontalBox {
                                     spacing: 0;
                                     padding: 0;
 
                                     Rectangle {
-                                        width: 8px;
+                                        width: 12px;
                                         height: 100%;
                                     }
 
                                     Text {
                                         text: item;
-                                        font-size: Theme.font-size-sm;
+                                        font-size: Theme.font-size-md;
                                         color: (index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger : Theme.text-1;
                                         overflow: elide;
                                         vertical-alignment: center;

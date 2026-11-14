@@ -13,7 +13,7 @@ export component Toast {
     Rectangle {
         x: parent.width - self.width - 12px;
         y: parent.height - self.height - 12px;
-        width: 260px;
+        width: min(360px, toast-text.preferred-width + 26px);
         min-height: 36px;
         background: Theme.bg-2;
         border-width: 1px;
@@ -30,7 +30,7 @@ export component Toast {
             padding: Theme.spacing-md;
             spacing: Theme.spacing-sm;
 
-            Text {
+            toast-text := Text {
                 text: root.message;
                 color: root.error ? Theme.danger : Theme.text-1;
                 font-size: Theme.font-size-sm;

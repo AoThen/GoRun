@@ -1,4 +1,4 @@
-import { HorizontalBox, LineEdit } from "std-widgets.slint";
+import { HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 // 工具行（v2 §2.3）：搜索框（左弹性，高 30px）+ 视图切换/主题切换/汉堡 三个 32×32 图标按钮。
@@ -23,20 +23,26 @@ export component Toolbar {
         spacing: Theme.spacing-md;
         padding: Theme.spacing-md;
 
-        // 搜索框（高 30px，bg-3 + stroke-2 描边）
+        // 搜索框（高 30px，bg-3 + stroke-2 描边，focus 转 accent；裸 TextInput 自绘，避免 fluent 双框）
         Rectangle {
             height: 30px;
             background: Theme.bg-3;
             border-width: 1px;
-            border-color: Theme.stroke-2;
+            border-color: search-edit.has-focus ? Theme.accent : Theme.stroke-2;
             border-radius: Theme.radius-xs;
             horizontal-stretch: 1;
 
-            search-edit := LineEdit {
+            search-edit := TextInput {
+                x: 10px;
+                width: parent.width - 20px;
+                height: parent.height;
                 text: root.text;
                 placeholder-text: root.search-hint;
+                placeholder-color: Theme.text-2;
+                color: Theme.text-1;
+                font-size: Theme.font-size-md;
+                vertical-alignment: center;
                 edited => { root.search-changed(self.text); }
-                font-size: Theme.font-size-sm;
                 changed has-focus => { root.field-focused = self.has-focus; }
             }
         }
@@ -52,7 +58,7 @@ export component Toolbar {
 
                 Text {
                     text: root.is-icon-view ? "\u{25a6}" : "\u{25a4}";
-                    color: Theme.text-1;
+                    color: view-touch.has-hover ? Theme.text-1 : Theme.text-2;
                     font-size: Theme.font-size-md;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -72,7 +78,7 @@ export component Toolbar {
 
                 Text {
                     text: root.is-dark-theme ? "\u{263d}" : "\u{2600}";
-                    color: Theme.text-1;
+                    color: theme-touch.has-hover ? Theme.text-1 : Theme.text-2;
                     font-size: Theme.font-size-md;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -92,7 +98,7 @@ export component Toolbar {
 
                 Text {
                     text: "\u{2630}";
-                    color: Theme.text-1;
+                    color: burger-touch.has-hover ? Theme.text-1 : Theme.text-2;
                     font-size: Theme.font-size-md;
                     horizontal-alignment: center;
                     vertical-alignment: center;

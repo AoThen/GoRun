@@ -98,7 +98,8 @@ export component Sidebar {
                                 Text {
                                     text: cat.name;
                                     color: Theme.text-1;
-                                    font-size: Theme.font-size-sm;
+                                    font-size: Theme.font-size-md;
+                                    font-weight: index == root.selected-index ? 700 : 400;
                                     vertical-alignment: center;
                                     overflow: elide;
                                     horizontal-stretch: 1;
@@ -119,12 +120,7 @@ export component Sidebar {
             }
         }
 
-        Rectangle {
-            height: 1px;
-            background: Theme.stroke-1;
-        }
-
-        // 新建分类行（v2：hover 显底）
+        // 新建分类行（v2：text-2 左对齐，hover 显底并提亮；对齐原型 .cat-add）
         Rectangle {
             height: 32px;
             background: add-cat-touch.has-hover ? Theme.hover : transparent;
@@ -135,12 +131,33 @@ export component Sidebar {
                     root.new-category();
                 }
 
-                Text {
-                    text: root.add-category-text;
-                    font-size: Theme.font-size-sm;
-                    color: Theme.accent;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                HorizontalBox {
+                    spacing: 0;
+                    padding: 0;
+
+                    Rectangle {
+                        width: Theme.spacing-md;
+                        height: 100%;
+                    }
+
+                    Text {
+                        text: "+";
+                        font-size: Theme.font-size-md;
+                        color: add-cat-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        width: Theme.spacing-sm;
+                        height: 100%;
+                    }
+
+                    Text {
+                        text: root.add-category-text;
+                        font-size: Theme.font-size-md;
+                        color: add-cat-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }
