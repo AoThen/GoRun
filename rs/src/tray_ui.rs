@@ -204,6 +204,7 @@ pub fn apply_localized_texts(
     ui.set_sidebar_add_category_text(lb.tr("Menu_NewC").into());
     ui.set_input_dialog_confirm_text(lb.tr("Btn_OK").into());
     ui.set_input_dialog_cancel_text(lb.tr("Btn_Cancel").into());
+    #[cfg(windows)]
     crate::tray::set_ui_texts(crate::tray::TrayTexts {
         show: lb.tr("Tray_ShowHide").to_string(),
         autostart: lb.tr("Tray_AutoStart").to_string(),
@@ -211,4 +212,7 @@ pub fn apply_localized_texts(
         low_resident: lb.tr("Tray_LowResident").to_string(),
         exit: lb.tr("Tray_Exit").to_string(),
     });
+    // 非 Windows：TrayTexts/托盘未编译；UI 文本已设置完毕，仅消费 lb 避免 unused 警告
+    #[cfg(not(windows))]
+    let _ = &lb;
 }

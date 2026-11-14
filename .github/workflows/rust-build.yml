@@ -64,6 +64,35 @@ jobs:
           path: rs/target/release/GoRun.exe
           retention-days: 7
 
+  rust-tests-windows:
+    # Windows 原生测试（P0-1/P1-7/托盘/图标等平台路径的 CI 覆盖）：
+    # Linux CI 无法执行 windows crate 路径（COM/注册表/WinHotkey），本 job 补齐。
+    # GUI 集成测试在 Windows runner 上无需 xvfb（有真实桌面会话），但事件循环
+    # 不可重建，仍以 --test-threads=1 串行执行，与 Linux job 策略一致。
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      - name: Build with testing backend
+        run: cargo build --features backend-testing
+
+      - name: Run all tests (Windows native)
+        run: cargo test --features backend-testing -- --test-threads=1
+
   rust-gui-tests-linux:
     runs-on: ubuntu-latest
     defaults:
