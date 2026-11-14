@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- GoRun 应用图标设计源：启动箭头 + squircle 底，accent 蓝与 UI 主题同源 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a63c9"/>
+      <stop offset="0.52" stop-color="#005fb8"/>
+      <stop offset="1" stop-color="#2fb1ee"/>
+    </linearGradient>
+    <linearGradient id="tri" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e4f2ff"/>
+    </linearGradient>
+  </defs>
+  <!-- squircle 底（渲染时以超椭圆/大圆角呈现） -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <!-- 顶部高光 -->
+  <rect x="8" y="8" width="240" height="120" rx="56" fill="#ffffff" opacity="0.06"/>
+  <!-- 播放三角（圆角） -->
+  <path d="M 90.4 84.5 L 161.6 121.5 Q 174 128 161.6 134.5 L 90.4 171.5 Q 78 178 78 164 L 78 92 Q 78 78 90.4 84.5 Z" fill="url(#tri)"/>
+  <!-- 速度线（小尺寸帧省略） -->
+  <rect x="188" y="100" width="40" height="16" rx="8" fill="#ffffff" opacity="0.85"/>
+  <rect x="188" y="140" width="28" height="16" rx="8" fill="#ffffff" opacity="0.5"/>
+</svg>
