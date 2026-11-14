@@ -766,3 +766,85 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 }
+
+#[cfg(test)]
+mod edge_tests {
+    use super::*;
+    use crate::model::{generate_id, Category, Item, ViewType};
+
+    fn sample() -> AppConfig {
+        let mut config = AppConfig::default();
+        config.data.categories.push(Category {
+            id: generate_id("cat"),
+            name: "边度分类".into(),
+            sort_order: 0,
+            view_type: ViewType::Icon,
+            icon_size: 48,
+        });
+        config.data.items.push(Item {
+            id: generate_id("item"),
+            name: "emoji🎯\"引号\"'单引'\\反斜\n换行".into(),
+            target: "C:\\Program Files\\测试 目录\\app.exe".into(),
+            ..Default::default()
+        });
+        config
+    }
+
+    /// export_to：无效目录（父路径是文件）应失败返回 false，不 panic。
+    #[test]
+    fn test_export_to_invalid_path_fails_gracefully() {
+        let dir = std::env::temp_dir().join("gorun_export_edge");
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("blocker_file");
+        std::fs::write(&blocker, b"x").unwrap();
+        // 父路径是文件 → 创建目录/写文件失败
+        let bad = blocker.join("sub").join("out.json");
+        let storage = Storage::new(dir.join("cfg.json").to_string_lossy().to_string());
+        assert!(!storage.export_to(&bad.to_string_lossy(), &sample()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// export_to → load_from(外部文件) 语义：导出的文件是合法 JSON，可被重新解析。
+    #[test]
+    fn test_export_then_parse_roundtrip() {
+        let dir = std::env::temp_dir().join("gorun_export_ok");
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("exported.json");
+        let cfg = sample();
+        let storage = Storage::new(dir.join("cfg.json").to_string_lossy().to_string());
+        assert!(storage.export_to(&out.to_string_lossy(), &cfg));
+        let text = std::fs::read_to_string(&out).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&text).expect("导出文件应是合法 JSON");
+        assert!(parsed.get("categories").is_some(), "导出格式为 categories 顶层键");
+        assert!(parsed.get("items").is_some(), "应含 items 字段");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 特殊字符（emoji/引号/反斜杠/换行/中文）save→load 往返不丢真。
+    #[test]
+    fn test_special_characters_roundtrip() {
+        let dir = std::env::temp_dir().join("gorun_special_chars");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cfg.json");
+        let storage = Storage::new(path.to_string_lossy().to_string());
+        let cfg = sample();
+        assert!(storage.save(&cfg));
+        let loaded = storage.load().expect("应能加载");
+        assert_eq!(loaded.data.items[0].name, cfg.data.items[0].name);
+        assert_eq!(loaded.data.items[0].target, cfg.data.items[0].target);
+        assert_eq!(loaded.data.categories[0].name, "边度分类");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// load：文件被截断/损坏（非法 JSON）时返回 None，不 panic。
+    #[test]
+    fn test_load_corrupt_json_returns_none() {
+        let dir = std::env::temp_dir().join("gorun_corrupt_json");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cfg.json");
+        std::fs::write(&path, "{ this is not json !!!").unwrap();
+        let storage = Storage::new(path.to_string_lossy().to_string());
+        assert!(storage.load().is_none(), "损坏 JSON 应返回 None");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

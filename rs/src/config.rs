@@ -196,6 +196,43 @@ mod tests {
     }
 
     #[test]
+    fn test_migrate_skips_when_no_old_config() {
+        let old = std::env::temp_dir().join("gorun_migrate_old_empty");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_empty");
+        let _ = std::fs::create_dir_all(&old);
+        let _ = std::fs::create_dir_all(&cur);
+        // 旧目录无 config.json → 直接跳过，不创建任何文件
+        migrate_legacy_from(&old, &cur);
+        assert!(!cur.join("config.json").exists(), "无旧配置时不应迁移");
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
+    fn test_migrate_copies_all_backups_and_multiple_icons() {
+        let old = std::env::temp_dir().join("gorun_migrate_old_full");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_full");
+        let _ = std::fs::create_dir_all(old.join("icons"));
+        let _ = std::fs::create_dir_all(&cur);
+        std::fs::write(old.join("config.json"), b"main").unwrap();
+        std::fs::write(old.join("config.json.bak1"), b"b1").unwrap();
+        std::fs::write(old.join("config.json.bak2"), b"b2").unwrap();
+        std::fs::write(old.join("config.json.bak3"), b"b3").unwrap();
+        std::fs::write(old.join("icons").join("a.png"), b"a").unwrap();
+        std::fs::write(old.join("icons").join("b.ico"), b"b").unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        for f in ["config.json", "config.json.bak1", "config.json.bak2", "config.json.bak3"] {
+            assert!(cur.join(f).exists(), "{} 应被复制", f);
+        }
+        assert!(cur.join("icons").join("a.png").exists());
+        assert!(cur.join("icons").join("b.ico").exists());
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
     fn test_migrate_skips_same_dir() {
         let dir = std::env::temp_dir().join("gorun_migrate_same");
         let _ = std::fs::create_dir_all(&dir);

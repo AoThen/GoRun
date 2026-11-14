@@ -521,3 +521,55 @@ mod tests {
         cache.delete_cache(&test_item("nonexistent_id"));
     }
 }
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+    use crate::model::Item;
+
+    /// restored_icon_path：cached_icon 指向真实文件时返回路径；缺失/空返回 None。
+    #[test]
+    fn test_restored_icon_path_hit_and_miss() {
+        // 命中：临时真实文件
+        let real = std::env::temp_dir().join("gorun_icon_hit_test.png");
+        std::fs::write(&real, b"fake-png-bytes").unwrap();
+        let mut item = Item { id: "r1".into(), ..Default::default() };
+        item.cached_icon = real.to_string_lossy().to_string();
+        let cache = IconCache::new();
+        assert_eq!(cache.restored_icon_path(&item), Some(real.clone()));
+        // 未命中：文件不存在
+        item.cached_icon = "/nonexistent/gorun_no_such.png".into();
+        assert!(cache.restored_icon_path(&item).is_none());
+        // 空 cached_icon
+        item.cached_icon = String::new();
+        assert!(cache.restored_icon_path(&item).is_none());
+        let _ = std::fs::remove_file(&real);
+    }
+
+    /// get_icon_path：缓存文件存在时返回 cache_path（按内容键定位），不存在返回 None。
+    #[test]
+    fn test_get_icon_path_after_cache_file_created() {
+        let cache = IconCache::new();
+        let item = Item { id: "r2".into(), ..Default::default() };
+        assert!(cache.get_icon_path(&item).is_none(), "初始无缓存");
+        // 手动在 cache_path 落一个文件，模拟提取完成
+        let p = cache.cache_path(&item);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, b"png").unwrap();
+        assert_eq!(cache.get_icon_path(&item), Some(p.clone()));
+        // 删除后恢复 None
+        cache.delete_cache(&item);
+        assert!(cache.get_icon_path(&item).is_none(), "delete_cache 后应无缓存");
+    }
+
+    /// 同一 item 的 cache_path 稳定；编辑 icon_path 后键变化（缓存失效语义）。
+    #[test]
+    fn test_cache_path_changes_on_icon_edit() {
+        let cache = IconCache::new();
+        let mut item = Item { id: "r3".into(), ..Default::default() };
+        let p1 = cache.cache_path(&item);
+        item.icon_path = "C:\\new_icon.ico".into();
+        let p2 = cache.cache_path(&item);
+        assert_ne!(p1, p2, "编辑 icon_path 后 cache_path 应变化");
+    }
+}

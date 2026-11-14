@@ -65,4 +65,26 @@ mod tests {
         let loc = Localization::new("nonexistent_lang");
         assert_eq!(loc.tr("SomeKey"), "SomeKey");
     }
+
+    #[test]
+    fn test_tr_hit_returns_translation() {
+        let loc = Localization::new("en-US");
+        assert_eq!(loc.tr("LANG_NAME"), "English");
+        assert_eq!(loc.tr("RunErr_FNF"), "File Not Found");
+    }
+
+    #[test]
+    fn test_language_code_roundtrip() {
+        assert_eq!(Localization::new("en-US").language_code(), "en-US");
+        assert_eq!(Localization::new("zh-TW").language_code(), "zh-TW");
+        // 未知语言回退 zh-CN 资源，但 lang_code 保留原值
+        assert_eq!(Localization::new("fr").language_code(), "fr");
+    }
+
+    #[test]
+    fn test_unknown_lang_falls_back_to_zh_cn_resource() {
+        let loc = Localization::new("xx-unknown");
+        assert!(!loc.tr("LANG_NAME").is_empty(), "回退资源应非空");
+        assert_ne!(loc.tr("LANG_NAME"), "LANG_NAME", "应命中 zh-CN 译文而非键");
+    }
 }
