@@ -75,7 +75,7 @@ pub fn spawn_icon_refresh(
                 // 构建 id -> (path, item) 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新。
                 let id_to_path: std::collections::HashMap<&str, &(&Item, &String)> = updates
                     .iter()
-                    .map(|(item, path)| (item.id.as_str(), (item, path)))
+                    .map(|(item, path)| (item.id.as_str(), &(item, path)))
                     .collect();
                 for i in 0..model.row_count() {
                     if let Some(row) = model.row_data(i) {
