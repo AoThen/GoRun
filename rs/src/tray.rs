@@ -16,11 +16,12 @@ use windows::Win32::UI::Shell::{
 };
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyMenu, LoadCursorW, LoadIconW,
+    CreateWindowExW, DefWindowProcW, DestroyMenu, LoadCursorW, LoadIconW, LoadImageW,
     RegisterClassExW, RegisterWindowMessageW, AppendMenuW, CreatePopupMenu, GetCursorPos,
     SetForegroundWindow, TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT,
-    HICON, IDC_ARROW, IDI_APPLICATION, MF_CHECKED, MF_UNCHECKED, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW,
+    HICON, IDC_ARROW, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_SHARED, MF_CHECKED,
+    MF_UNCHECKED, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_DESTROY, WM_LBUTTONDBLCLK,
+    WM_RBUTTONUP, WNDCLASSEXW,
 };
 
 #[cfg(windows)]
@@ -246,7 +247,20 @@ impl TrayIcon {
 
             let _ = tray().hwnd.set(hwnd);
 
-            let h_icon = LoadIconW(None, IDI_APPLICATION).unwrap_or_default();
+            // 优先用 exe 嵌入的应用图标（build.rs 嵌 app.ico，资源 ID 1），失败回退系统默认。
+            // LR_SHARED：共享句柄与进程同生命周期，无需 DestroyIcon。
+            let h_icon = LoadImageW(
+                HINSTANCE(h_instance.0),
+                windows::core::PCWSTR(1 as *const u16),
+                IMAGE_ICON,
+                0,
+                0,
+                LR_DEFAULTSIZE | LR_SHARED,
+            )
+            .ok()
+            .map(|h| HICON(h.0))
+            .filter(|h| !h.is_invalid())
+            .unwrap_or_else(|| LoadIconW(None, IDI_APPLICATION).unwrap_or_default());
             let _ = tray().icon_handle.set(h_icon);
 
             let mut tip = [0u16; 128];

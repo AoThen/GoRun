@@ -13,6 +13,8 @@ build = "build.rs"
 
 [build-dependencies]
 slint-build = "1.7"
+# Windows 产物嵌入 app.ico（exe/任务栏/托盘图标）；仅 windows target 时在 build.rs 中调用
+winresource = "0.1"
 
 [features]
 default = ["backend-winit"]
