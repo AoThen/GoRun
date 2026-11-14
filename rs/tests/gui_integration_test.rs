@@ -6,15 +6,13 @@ use GoRun::model::{AppConfig, AppData, Category, Config, Item};
 use GoRun::*;
 
 fn init_testing_backend() {
+    // 每个测试都重新初始化 testing 后端：winit 的 EventLoop 不可重建，
+    // 第二个测试的 MainWindow::new() 会落到 winit 而失败（probe_test 已复现）。
+    // init_no_event_loop() 重复调用返回 AlreadySet 错误，不 panic，可安全重复。
     #[cfg(feature = "backend-testing")]
     {
-        std::thread_local! {
-            static INIT: std::cell::OnceCell<()> = std::cell::OnceCell::new();
-        }
-        INIT.with(|cell| {
-            cell.get_or_init(|| {
-                i_slint_backend_testing::init_no_event_loop();
-            });
+        let _ = std::panic::catch_unwind(|| {
+            i_slint_backend_testing::init_no_event_loop();
         });
     }
 }
