@@ -212,7 +212,7 @@ fn extract_hicon(
     // 对 exe/dll/ico 均有效；flags=0 表示按传入 cx/cy 提取。
     const ICON_SIZE: i32 = 48;
 
-    let mut wide: Vec<u16> = std::ffi::OsStr::new(icon_path)
+    let wide: Vec<u16> = std::ffi::OsStr::new(icon_path)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
@@ -225,7 +225,7 @@ fn extract_hicon(
     let mut path_buf = [0u16; 260];
     path_buf[..wide.len()].copy_from_slice(&wide);
 
-    let mut icon = HICON::default();
+    let icon = HICON::default();
     let count = unsafe {
         PrivateExtractIconsW(
             &path_buf,
@@ -262,7 +262,7 @@ fn extract_hicon_from_target(
     if wide.len() <= 260 {
         let mut path_buf = [0u16; 260];
         path_buf[..wide.len()].copy_from_slice(&wide);
-        let mut icon = windows::Win32::UI::WindowsAndMessaging::HICON::default();
+        let icon = windows::Win32::UI::WindowsAndMessaging::HICON::default();
         let count = unsafe {
             windows::Win32::UI::WindowsAndMessaging::PrivateExtractIconsW(
                 &path_buf,
