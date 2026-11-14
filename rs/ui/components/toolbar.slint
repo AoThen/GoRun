@@ -1,14 +1,14 @@
-import { HorizontalBox, LineEdit } from "std-widgets.slint";
+import { HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 // 工具行（v2 §2.3）：搜索框（左弹性，高 30px）+ 视图切换/主题切换/汉堡 三个 32×32 图标按钮。
+// 图标统一用 Path 矢量绘制（对齐原型 SVG），不依赖系统字体字形。
 // 保留 field-focused 回写链路（main_window 回车守卫与 Ctrl+F 依赖）。
 export component Toolbar {
-    in property <string> text;
+    in-out property <string> text;
     in-out property <bool> field-focused: false;
     in property <string> search-hint: "";
     in property <bool> is-icon-view: true;
-    in property <bool> is-dark-theme: false;
     callback search-changed(text: string);
     callback toggle-view();
     callback toggle-theme();
@@ -23,7 +23,7 @@ export component Toolbar {
         spacing: Theme.spacing-md;
         padding: Theme.spacing-md;
 
-        // 搜索框（高 30px，LineEdit 自带 placeholder 支持）
+        // 搜索框（高 30px，裸 TextInput 自绘 + 放大镜 + 自绘 placeholder）
         Rectangle {
             height: 30px;
             background: Theme.bg-3;
@@ -32,14 +32,41 @@ export component Toolbar {
             border-radius: Theme.radius-xs;
             horizontal-stretch: 1;
 
-            search-edit := LineEdit {
+            // 放大镜（原型 14px SVG：圆 + 柄）
+            Path {
                 x: 10px;
-                width: parent.width - 20px;
+                y: (parent.height - self.height) / 2;
+                width: 14px;
+                height: 14px;
+                viewbox-width: 16;
+                viewbox-height: 16;
+                commands: "M 11.5 7 A 4.5 4.5 0 1 1 2.5 7 A 4.5 4.5 0 1 1 11.5 7 Z M 10.5 10.5 L 14 14";
+                stroke: Theme.text-2;
+                stroke-width: 1.5px;
+                fill: transparent;
+            }
+
+            search-edit := TextInput {
+                x: 30px;
+                width: parent.width - self.x - 10px;
                 height: parent.height;
-                text: root.text;
-                placeholder-text: root.search-hint;
+                vertical-alignment: center;
+                color: Theme.text-1;
+                font-size: Theme.font-size-md;
+                text <=> root.text;
                 edited => { root.search-changed(self.text); }
                 changed has-focus => { root.field-focused = self.has-focus; }
+            }
+
+            // 自绘 placeholder（builtin TextInput 无 placeholder 属性，仿官方 LineEditBase）
+            Text {
+                x: 30px;
+                width: parent.width - self.x - 10px;
+                height: parent.height;
+                vertical-alignment: center;
+                text: (root.text == "" && search-edit.preedit-text == "") ? root.search-hint : "";
+                color: Theme.text-2;
+                font-size: Theme.font-size-md;
             }
         }
         // 视图切换（图标视图 ↔ 列表视图）
@@ -52,17 +79,22 @@ export component Toolbar {
             view-touch := TouchArea {
                 clicked => { root.toggle-view(); }
 
-                Text {
-                    text: root.is-icon-view ? "\u{25a6}" : "\u{25a4}";
-                    color: view-touch.has-hover ? Theme.text-1 : Theme.text-2;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: root.is-icon-view
+                        ? "M 1 1 L 7 1 L 7 7 L 1 7 Z M 9 1 L 15 1 L 15 7 L 9 7 Z M 1 9 L 7 9 L 7 15 L 1 15 Z M 9 9 L 15 9 L 15 15 L 9 15 Z"
+                        : "M 1 2 L 15 2 L 15 4.6 L 1 4.6 Z M 1 6.7 L 15 6.7 L 15 9.3 L 1 9.3 Z M 1 11.4 L 15 11.4 L 15 14 L 1 14 Z";
+                    fill: view-touch.has-hover ? Theme.text-1 : Theme.text-2;
                 }
             }
         }
 
-        // 主题切换（双色半圆近似）
+        // 主题切换（对齐原型：描边圆 + 右半填充半圆）
         Rectangle {
             width: 32px;
             height: 32px;
@@ -72,12 +104,27 @@ export component Toolbar {
             theme-touch := TouchArea {
                 clicked => { root.toggle-theme(); }
 
-                Text {
-                    text: root.is-dark-theme ? "\u{263d}" : "\u{2600}";
-                    color: theme-touch.has-hover ? Theme.text-1 : Theme.text-2;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: "M 14.5 8 A 6.5 6.5 0 1 1 1.5 8 A 6.5 6.5 0 1 1 14.5 8 Z";
+                    stroke: theme-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                    stroke-width: 1.5px;
+                    fill: transparent;
+                }
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: "M 8 1.5 A 6.5 6.5 0 0 1 8 14.5 Z";
+                    fill: theme-touch.has-hover ? Theme.text-1 : Theme.text-2;
                 }
             }
         }
@@ -92,12 +139,15 @@ export component Toolbar {
             burger-touch := TouchArea {
                 clicked => { root.hamburger-clicked(); }
 
-                Text {
-                    text: "\u{2630}";
-                    color: burger-touch.has-hover ? Theme.text-1 : Theme.text-2;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: "M 1.5 3 L 14.5 3 L 14.5 4.8 L 1.5 4.8 Z M 1.5 7.1 L 14.5 7.1 L 14.5 8.9 L 1.5 8.9 Z M 1.5 11.2 L 14.5 11.2 L 14.5 13 L 1.5 13 Z";
+                    fill: burger-touch.has-hover ? Theme.text-1 : Theme.text-2;
                 }
             }
         }

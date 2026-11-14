@@ -223,11 +223,10 @@ export component MainWindow inherits Window {
 
             // v2 工具行（搜索 + 3 图标按钮，替代 MenuBar + SearchBar）
             toolbar := Toolbar {
-                text: root.search-text;
+                text <=> root.search-text;
                 field-focused <=> root.search-field-focused;
                 search-hint: root.sb-search-hint-text;
                 is-icon-view: root.is-icon-view;
-                is-dark-theme: root.is-dark-theme;
                 search-changed(text) => {
                     root.context-menu-visible = false;
                     root.search-changed(text);
