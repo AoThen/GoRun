@@ -1,5 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { ItemTile } from "item_tile.slint";
+import { VerticalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 struct ItemModel {
@@ -30,9 +31,9 @@ export component ItemGrid {
     in property <length> cell-width: 96px;
     in property <length> cell-height: 88px;
 
-    // 可用宽度内能容纳的列数（至少 1 列）；int() 截断偏保守（宁可少一列不溢出）
+    // 可用宽度内能容纳的列数（至少 1 列）；Math.floor 截断偏保守（宁可少一列不溢出）
     property <int> column-count:
-        max(1, int((self.width - 2 * Theme.spacing-md) / (root.cell-width + Theme.spacing-sm)));
+        max(1, Math.floor((self.width - 2 * Theme.spacing-md) / (root.cell-width + Theme.spacing-sm)));
 
     // 内容总高 = 行数 * 单元高 - 末行间距 + 上下 padding
     property <length> grid-content-height:
@@ -74,7 +75,7 @@ export component ItemGrid {
             y: 0;
 
             for item[index] in items: ItemTile {
-                x: (index % root.column-count) * (root.cell-width + Theme.spacing-sm) + Theme.spacing-md;
+                x: Math.mod(index, root.column-count) * (root.cell-width + Theme.spacing-sm) + Theme.spacing-md;
                 y: (index / root.column-count) * (root.cell-height + Theme.spacing-sm) + Theme.spacing-md;
                 width: root.cell-width;
                 height: root.cell-height;

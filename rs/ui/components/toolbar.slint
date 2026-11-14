@@ -1,4 +1,4 @@
-import { HorizontalBox } from "std-widgets.slint";
+import { HorizontalBox, LineEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 // 工具行（v2 §2.3）：搜索框（左弹性，高 30px）+ 视图切换/主题切换/汉堡 三个 32×32 图标按钮。
@@ -23,7 +23,7 @@ export component Toolbar {
         spacing: Theme.spacing-md;
         padding: Theme.spacing-md;
 
-        // 搜索框（高 30px，bg-3 + stroke-2 描边，focus 转 accent；裸 TextInput 自绘，避免 fluent 双框）
+        // 搜索框（高 30px，LineEdit 自带 placeholder 支持）
         Rectangle {
             height: 30px;
             background: Theme.bg-3;
@@ -32,16 +32,12 @@ export component Toolbar {
             border-radius: Theme.radius-xs;
             horizontal-stretch: 1;
 
-            search-edit := TextInput {
+            search-edit := LineEdit {
                 x: 10px;
                 width: parent.width - 20px;
                 height: parent.height;
                 text: root.text;
                 placeholder-text: root.search-hint;
-                placeholder-color: Theme.text-2;
-                color: Theme.text-1;
-                font-size: Theme.font-size-md;
-                vertical-alignment: center;
                 edited => { root.search-changed(self.text); }
                 changed has-focus => { root.field-focused = self.has-focus; }
             }

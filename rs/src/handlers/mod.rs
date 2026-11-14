@@ -594,7 +594,7 @@ pub fn wire_handler(
             1 => ui.invoke_new_category(),
             3 => {
                 // 删除当前分类：复用分类右键删除流程（确认后级联删除）
-                let mut state = state_mps.borrow_mut();
+                let state = state_mps.borrow_mut();
                 let cat_id = state.current_category_id.clone();
                 if cat_id.is_empty() {
                     return;
@@ -618,7 +618,7 @@ pub fn wire_handler(
             }
             5 => {
                 // 重命名当前分类：复用分类右键重命名流程（InputDialog）
-                let mut state = state_mps.borrow_mut();
+                let state = state_mps.borrow_mut();
                 let cat_id = state.current_category_id.clone();
                 if cat_id.is_empty() {
                     return;
@@ -880,7 +880,7 @@ pub fn wire_handler(
                 let props_idx = move_offset + 7;
                 let moveto_base = move_offset + 8;
                 // 菜单末尾"打开文件夹"（F8/文件夹展开）：索引 = MoveTo 起点 + 分类数
-                let cat_count = state.manager.categories().len();
+                let cat_count = state.manager.categories().len() as i32;
                 let open_folder_idx = moveto_base + cat_count;
                 // collapsible_match 建议把 move_item_down/up 调用移入 match 守卫，
                 // 但二者是带副作用的修改（置位 modified、落盘配置），放进守卫会

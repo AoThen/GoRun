@@ -25,7 +25,7 @@ pub fn show_toast(ui: &MainWindow, msg: impl Into<slint::SharedString>, error: b
     let weak = ui.as_weak();
     let dur = if error { 4000 } else { 2000 };
     TOAST_TIMER.with(|t| {
-        let mut timer = t.borrow_mut();
+        let timer = t.borrow_mut();
         timer.stop();
         timer.start(
             slint::TimerMode::SingleShot,

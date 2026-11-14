@@ -409,7 +409,7 @@ fn build_raw(app_config: &AppConfig) -> RawFile {
     pub fn save(&self, app_config: &AppConfig) -> bool {
         // P2-03：保存前按数组顺序重编号 sortOrder（0..n-1 / 分类内 0..m-1），
         // 保证写回的 JSON 数组序 ≡ sortOrder 序，与 C++ 渲染端排序语义恒一致。
-        let raw = build_raw(app_config);
+        let raw = Self::build_raw(app_config);
 
         let json = match serde_json::to_string(&raw) {
             Ok(s) => s,
@@ -447,7 +447,7 @@ fn build_raw(app_config: &AppConfig) -> RawFile {
 
     /// F8：导出当前配置为 JSON 到指定路径（不自持 self.path，供用户选目标文件）。
     pub fn export_to(&self, path: &str, app_config: &AppConfig) -> bool {
-        let raw = build_raw(app_config);
+        let raw = Self::build_raw(app_config);
         let json = match serde_json::to_string_pretty(&raw) {
             Ok(s) => s,
             Err(_) => {

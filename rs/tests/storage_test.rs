@@ -73,6 +73,7 @@ mod tests {
             remark: "test remark".to_string(),
             category_id: "cat_x".to_string(),
             sort_order: 3,
+            hotkey: String::new(),
         });
 
         let path = std::env::temp_dir()

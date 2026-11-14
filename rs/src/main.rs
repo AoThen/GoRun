@@ -357,19 +357,24 @@ fn main() {
     }
     let _hotkey_mgr = hotkey_mgr.clone();
 
-    // F8/4.1：条目级全局热键——消费线程收 item_id 后运行；首次注册所有非空条目热键
-    {
-        let ihk_state = state.clone();
-        std::thread::spawn(move || {
-            while let Ok(item_id) = ihk_rx.recv() {
-                let st = ihk_state.clone();
-                let _ = slint::invoke_from_event_loop(move || {
-                    crate::ui_sync::run_item_by_id(&st, &item_id);
-                });
-            }
-        });
-        ui_sync::sync_item_hotkeys(&state.borrow());
-    }
+    // F8/4.1：条目级全局热键——事件循环内轮询 item_id 并运行；首次注册所有非空条目热键
+    // （不用独立线程+invoke_from_event_loop：run_item_by_id 需 Rc<AppState>，非 Send；
+    //  事件循环 Timer 回调在 UI 线程执行，Rc 可捕获，与 geo_timer 同模式。）
+    let _ihk_timer = {
+        let timer = slint::Timer::default();
+        let state_ihk = state.clone();
+        timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(50),
+            move || {
+                while let Ok(item_id) = ihk_rx.try_recv() {
+                    crate::ui_sync::run_item_by_id(&state_ihk, &item_id);
+                }
+            },
+        );
+        timer
+    };
+    ui_sync::sync_item_hotkeys(&state.borrow());
 
     let st_cats = state.borrow();
     let categories: Vec<CategoryModel> = st_cats
