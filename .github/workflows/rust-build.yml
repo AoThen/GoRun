@@ -144,6 +144,9 @@ jobs:
         with:
           name: GoRun-rs-release
 
+      - name: Zip release exe
+        run: zip -9 GoRun-rs-release.zip GoRun.exe
+
       - name: Force-update latest tag
         run: |
           git tag -f latest
@@ -154,7 +157,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete latest -y >/dev/null 2>&1 || true
-          gh release create latest GoRun.exe \
+          gh release create latest GoRun-rs-release.zip \
             --title "GoRun CI build $(git rev-parse --short HEAD)" \
             --notes "Auto-built by cloud CI on $(date +%Y-%m-%d UTC), commit $(git rev-parse --short HEAD)" \
             --latest
