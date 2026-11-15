@@ -10,9 +10,9 @@
 #![windows_subsystem = "windows"]
 
 pub use GoRun::{
-    app_state, clipboard, config, drop_handler, fileops, geometry, handlers, hotkey, icon_cache,
-    item_manager, localization, logger, model, platform, runner, storage, tray, tray_ui, ui_sync,
-    util, CategoryModel, EditDialog, ItemModel, MainWindow,
+    app_state, background, clipboard, config, drop_handler, fileops, geometry, handlers, hotkey,
+    icon_cache, item_manager, localization, logger, model, platform, runner, storage, tray,
+    tray_ui, ui_sync, util, CategoryModel, EditDialog, ItemModel, MainWindow,
 };
 
 use std::cell::RefCell;
