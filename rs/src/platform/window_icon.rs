@@ -28,7 +28,7 @@ fn apply_impl(window: &slint::Window) {
         return;
     };
     let hwnd = HWND(win.hwnd.get());
-    let Ok(hmodule) = unsafe { GetModuleHandleW(None) } else {
+    let Ok(hmodule) = (unsafe { GetModuleHandleW(None) }) else {
         return;
     };
     let hinstance = HINSTANCE(hmodule.0);
