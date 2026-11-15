@@ -498,7 +498,9 @@ fn main() {
     }
 
     log::info!("Entering main event loop");
-    if let Err(e) = ui.run() {
+    // until_quit：隐藏窗口（热键/ESC/X/拖出自动隐藏）不再触发 keepalive 归零退出进程，
+    // 托盘常驻；仅显式 quit_event_loop（托盘/菜单"退出"）结束循环
+    if let Err(e) = ui.show().and_then(|_| slint::run_event_loop_until_quit()) {
         log::error!("Main event loop error: {}", e);
     }
     log::info!("Main event loop ended");

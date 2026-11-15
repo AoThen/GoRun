@@ -672,8 +672,8 @@ pub fn wire_handler(
             19 => crate::handlers::config_io::import_config(&ui, &state_mps),
             21 => ui.set_about_dialog_visible(true),
             22 => {
-                // 退出：隐藏到托盘（快速启动器惯例，与托盘"显示/隐藏"一致）
-                let _ = ui.hide();
+                // 退出：真正结束进程（与托盘"退出"一致）；几何由主循环收尾强制落盘
+                let _ = slint::quit_event_loop();
             }
             _ => {}
         }
