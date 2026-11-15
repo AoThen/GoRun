@@ -10,13 +10,13 @@ import { ConfirmDialog } from "dialogs/confirm_dialog.slint";
 import { InputDialog } from "dialogs/input_dialog.slint";
 import { AboutDialog } from "dialogs/about_dialog.slint";
 
-struct CategoryModel {
+export struct CategoryModel {
     id: string,
     name: string,
     count: int,
 }
 
-struct ItemModel {
+export struct ItemModel {
     id: string,
     name: string,
     target: string,
