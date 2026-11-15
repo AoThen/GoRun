@@ -74,7 +74,7 @@ fn default_version() -> String {
     crate::model::DEFAULT_VERSION.to_string()
 }
 fn default_hotkey() -> String {
-    "Ctrl+Alt+M".to_string()
+    "Ctrl+M".to_string()
 }
 fn default_window_x() -> i32 {
     100
@@ -257,7 +257,13 @@ impl Storage {
             .collect();
 
         let config = Config {
-            global_hotkey: raw_config.global_hotkey,
+            // 旧默认 Ctrl+Alt+M 全局注册易被其它程序占用（RegisterHotKey 系统级独占），
+            // 直接更换为 Ctrl+M：加载时把仍为旧默认的值一并升级，用户自定义的其它键不受影响。
+            global_hotkey: if raw_config.global_hotkey == "Ctrl+Alt+M" {
+                "Ctrl+M".to_string()
+            } else {
+                raw_config.global_hotkey
+            },
             window_x: raw_config.window_x,
             window_y: raw_config.window_y,
             window_width: raw_config.window_width,
@@ -473,24 +479,16 @@ fn build_raw(app_config: &AppConfig) -> RawFile {
             return true;
         }
 
-        let bak3 = format!("{}.bak3", self.path);
-        if Path::new(&bak3).exists() && fs::remove_file(&bak3).is_err() {
-            log::error!("Failed to delete old backup: {}", bak3);
-            return false;
-        }
-
-        let bak2 = format!("{}.bak2", self.path);
-        if Path::new(&bak2).exists() && fs::rename(&bak2, &bak3).is_err() {
-            log::error!("Failed to rotate backup .bak2 to .bak3");
-            return false;
+        // 精简为单份备份：仅保留 config.json.bak1（覆盖式）；
+        // 历史遗留的 bak2/bak3 顺手清理，主目录不再堆积多个备份文件。
+        for legacy in [".bak2", ".bak3"] {
+            let legacy_path = format!("{}{}", self.path, legacy);
+            if Path::new(&legacy_path).exists() && fs::remove_file(&legacy_path).is_err() {
+                log::error!("Failed to delete legacy backup: {}", legacy_path);
+            }
         }
 
         let bak1 = format!("{}.bak1", self.path);
-        if Path::new(&bak1).exists() && fs::rename(&bak1, &bak2).is_err() {
-            log::error!("Failed to rotate backup .bak1 to .bak2");
-            return false;
-        }
-
         if fs::copy(&self.path, &bak1).is_err() {
             log::error!("Failed to create backup .bak1");
             return false;
@@ -501,7 +499,7 @@ fn build_raw(app_config: &AppConfig) -> RawFile {
     }
 
     pub fn load_from_backup(&self) -> Option<AppConfig> {
-        for suffix in &[".bak1", ".bak2", ".bak3"] {
+        for suffix in &[".bak1"] {
             let backup_path = format!("{}{}", self.path, suffix);
             if Path::new(&backup_path).exists() {
                 log::info!("Trying to load from backup: {}", backup_path);
@@ -561,7 +559,7 @@ mod tests {
             target: "C:\\Windows\\notepad.exe".to_string(),
             ..Default::default()
         });
-        config.config.global_hotkey = "Ctrl+Alt+M".to_string();
+        config.config.global_hotkey = "Ctrl+Shift+P".to_string();
 
         let path = std::env::temp_dir()
             .join("gorun_test_config.json")
@@ -577,7 +575,7 @@ mod tests {
         assert_eq!(loaded.data.categories[0].name, "Test Category");
         assert_eq!(loaded.data.items.len(), 1);
         assert_eq!(loaded.data.items[0].target, "C:\\Windows\\notepad.exe");
-        assert_eq!(loaded.config.global_hotkey, "Ctrl+Alt+M");
+        assert_eq!(loaded.config.global_hotkey, "Ctrl+Shift+P");
 
         let _ = fs::remove_file(&path);
     }
@@ -683,6 +681,8 @@ mod tests {
         fs::write(&path, json).unwrap();
         let storage = Storage::new(path_str.clone());
         let loaded = storage.load().expect("should load C++ string config");
+        // 输入为旧默认 Ctrl+Alt+M，加载时应被升级为新默认 Ctrl+M（迁移逻辑锁定）
+        assert_eq!(loaded.config.global_hotkey, "Ctrl+M");
         assert_eq!(loaded.config.window_x, 100);
         assert_eq!(loaded.config.window_width, 800);
         assert_eq!(

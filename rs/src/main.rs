@@ -444,9 +444,24 @@ fn main() {
 
     // P0：拖放守卫必须存入 AppState 存活到进程结束；
     // 只把消息接收端交给消费线程。
-    if let Some((guard, rx)) = drop_handler::setup_drop_handler(&ui) {
-        drop_handler::spawn_drop_consumer(ui.as_weak(), rx, auto_hide);
-        state.borrow_mut().drop_handler = Some(guard);
+    // P1：装配延迟到事件循环首轮——ui.run() 前 winit 原生窗口未 realize，
+    // window_handle() 返回 NotSupported 会导致拖放被静默禁用（见 gorun_debug.log）。
+    // 用 single_shot Timer 而非 invoke_from_event_loop：闭包需捕获 Rc<AppState>（!Send），
+    // Timer 回调在事件循环（UI 线程）执行，与 geo_timer 同模式。
+    {
+        let weak_ui_drop = ui.as_weak();
+        let state_drop = state.clone();
+        let auto_hide_drop = auto_hide;
+        slint::Timer::single_shot(std::time::Duration::from_millis(0), move || {
+            if let Some(ui) = weak_ui_drop.upgrade() {
+                if let Some((guard, rx)) = drop_handler::setup_drop_handler(&ui) {
+                    drop_handler::spawn_drop_consumer(ui.as_weak(), rx, auto_hide_drop);
+                    state_drop.borrow_mut().drop_handler = Some(guard);
+                } else {
+                    log::warn!("Drop handler setup returned None; drag-and-drop disabled");
+                }
+            }
+        });
     }
 
     log::info!("Entering main event loop");
