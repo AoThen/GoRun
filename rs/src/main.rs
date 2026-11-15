@@ -245,9 +245,11 @@ fn main() {
 
     // 窗口几何恢复（C++ 存物理像素，直接以物理单位设置）；
     // 仅当配置合法（最小尺寸 + 在屏内）时应用（P2 #12）。
-    // set_size 必须延迟到 winit 窗口真正创建后（when_window_ready）：创建前 Physical
-    // 会被 backend 按 scale=1 转成 Logical 存储，窗口创建时再乘真实 DPI，导致窗口
-    // 高度每次启动按 DPI 倍数漂移增大（150% 缩放屏每次 ×1.5）。
+    // 创建前 backend 按 scale=1 把尺寸存为逻辑值，创建时再乘真实 DPI：若直接设
+    // Physical 会按 DPI 倍数漂移（旧缺陷），且首帧先按默认逻辑尺寸绘制、恢复后再
+    // 缩到保存尺寸，产生"先大后小"闪动。因此先查目标显示器缩放，把物理尺寸换算
+    // 成逻辑尺寸在创建前预设，首帧即命中目标大小；when_window_ready 的延迟恢复
+    // 保留为兜底校准（预设准确时为同尺寸无操作）。
     let mut pending_window_size: Option<(u32, u32)> = None;
     {
         let cfg = state.borrow().manager.config().config.clone();
@@ -264,6 +266,18 @@ fn main() {
             ui.window().set_position(PhysicalPosition::new(cfg.window_x, cfg.window_y));
             // 历史版本 DPI 漂移可能留下超过屏幕的超大尺寸：等比缩回虚拟屏 80% 以内
             let (w, h) = util::clamp_size_to_virtual_screen(cfg.window_width, cfg.window_height);
+            // 创建前以"物理尺寸 ÷ 所在屏缩放"的逻辑尺寸预设，首帧即为目标尺寸；
+            // scale 未知时不预设，退回 when_window_ready 的延迟恢复（原行为）。
+            // 注：winit 按创建位置的 DPI 物化 Logical 尺寸，保存位置跨异 DPI 副屏时
+            // 首帧可能仍有偏差，由 when_window_ready 的兜底恢复校准到目标尺寸。
+            match util::monitor_scale_at(cfg.window_x, cfg.window_y) {
+                Some(scale) => {
+                    log::info!("Pre-setting window to {}x{} physical (scale {:.2})", w, h, scale);
+                    ui.window()
+                        .set_size(slint::LogicalSize::new(w as f32 / scale, h as f32 / scale));
+                }
+                None => log::info!("Monitor scale unavailable; size restore deferred to window-ready"),
+            }
             pending_window_size = Some((w as u32, h as u32));
         }
     }
@@ -458,6 +472,10 @@ fn main() {
         let state_setup = state.clone();
         let auto_hide_drop = auto_hide;
         geometry::when_window_ready(weak_ui, move |ui| {
+            log::info!(
+                "Window ready; actual scale factor: {:.2}",
+                ui.window().scale_factor()
+            );
             // 1) 恢复窗口尺寸：窗口已存在，Physical 1:1 精确生效，无 DPI 换算
             if let Some((w, h)) = pending_window_size {
                 use slint::PhysicalSize;

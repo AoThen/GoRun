@@ -98,6 +98,44 @@ fn clamp_size_impl(w: i32, h: i32, vw: i32, vh: i32) -> (i32, i32) {
     }
 }
 
+/// 查询指定坐标所在显示器的缩放系数（有效 DPI / 96）。
+/// 供窗口创建前把"保存的物理尺寸"换算成逻辑尺寸，使首帧即命中目标大小，
+/// 消除"先按默认逻辑尺寸显示、再缩到保存尺寸"的启动闪动。
+/// 需在 MainWindow::new() 之后调用：winit EventLoop 已建立 Per-Monitor V2 感知，
+/// GetDpiForMonitor 才返回真实有效 DPI。失败或数值异常返回 None，
+/// 调用方退回"窗口就绪后延迟恢复"的原路径。
+pub fn monitor_scale_at(x: i32, y: i32) -> Option<f32> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTONEAREST};
+        use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+        let monitor = unsafe { MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST) };
+        if monitor.is_invalid() {
+            return None;
+        }
+        let mut dpi_x = 0u32;
+        let mut dpi_y = 0u32;
+        unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) }.ok()?;
+        // 显示器 x/y DPI 恒等（方形像素），取 x 即可
+        scale_from_dpi(dpi_x)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (x, y);
+        None
+    }
+}
+
+/// DPI → 缩放系数（纯函数便于单测）：96 DPI = 1.0；低于 96 视为异常返回 None。
+#[cfg(any(windows, test))]
+fn scale_from_dpi(dpi: u32) -> Option<f32> {
+    if dpi < 96 {
+        return None;
+    }
+    Some(dpi as f32 / 96.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,5 +319,16 @@ mod tests {
     fn test_clamp_size_extreme_value_never_zero() {
         // 极端超大值缩放后向零截断 → 至少保留 1px
         assert_eq!(clamp_size_impl(400, 1_000_000_000, 1920, 1080), (1, 864));
+    }
+
+    #[test]
+    fn test_scale_from_dpi() {
+        // 96 DPI = 100% 缩放；常见 Windows 档位 120=125%、144=150%
+        assert_eq!(scale_from_dpi(96), Some(1.0));
+        assert_eq!(scale_from_dpi(120), Some(1.25));
+        assert_eq!(scale_from_dpi(144), Some(1.5));
+        // 异常值（<96）不换算，交由调用方退回延迟恢复路径
+        assert_eq!(scale_from_dpi(0), None);
+        assert_eq!(scale_from_dpi(72), None);
     }
 }
