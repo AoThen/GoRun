@@ -5,6 +5,8 @@ import { Theme } from "../theme.slint";
 // 图标统一用 Path 矢量绘制（对齐原型 SVG），不依赖系统字体字形。
 // 保留 field-focused 回写链路（main_window 回车守卫与 Ctrl+F 依赖）。
 export component Toolbar {
+    // 有壁纸时工具行保持纯色（与无壁纸时的透明观感一致），壁纸仅在条目区透出
+    in property <bool> has-bg-image: false;
     in-out property <string> text;
     in-out property <bool> field-focused: false;
     in property <string> search-hint: "";
@@ -18,6 +20,15 @@ export component Toolbar {
     focus-search() => { search-edit.focus(); }
 
     height: 44px;
+
+    // 壁纸时的纯色底（底层，不遮挡内容）；无壁纸时透明，与原观感一致
+    Rectangle {
+        background: root.has-bg-image ? Theme.bg-0 : transparent;
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+    }
 
     HorizontalBox {
         spacing: Theme.spacing-md;

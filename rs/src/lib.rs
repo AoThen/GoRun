@@ -4,6 +4,7 @@
 #![allow(non_snake_case)]
 
 pub mod app_state;
+pub mod background;
 pub mod clipboard;
 pub mod config;
 pub mod drop_handler;

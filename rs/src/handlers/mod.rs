@@ -21,6 +21,23 @@ use crate::{
 };
 use slint::ComponentHandle;
 
+/// 应用背景图到 UI 并持久化路径。解码失败返回 false（调用方 Toast 提示，UI 保持现状）。
+fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) -> bool {
+    let Some(decoded) = crate::background::decode(path) else {
+        log::warn!("Background decode failed: {}", path);
+        return false;
+    };
+    ui.set_bg_image(slint::Image::from_rgba8(decoded.buffer));
+    ui.set_has_bg_image(true);
+    let mut st = state.borrow_mut();
+    st.manager
+        .config_mut()
+        .extra_config
+        .insert("background_image".into(), path.into());
+    st.save_if_modified();
+    true
+}
+
 pub fn wire_handler(
     ui: &MainWindow,
     state: Rc<RefCell<AppState>>,
@@ -222,6 +239,102 @@ pub fn wire_handler(
             ui.set_input_dialog_visible(true);
         }
     });
+
+    // 设置页：选择背景图（png/jpg；解码最长边 2560 封顶，见 background.rs）
+    {
+        let state_bg = state.clone();
+        let weak_ui_bg = ui.as_weak();
+        ui.on_settings_select_background(move || {
+            let Some(ui) = weak_ui_bg.upgrade() else {
+                return;
+            };
+            let Some(path) = fileops::browse_file_dialog(
+                "Select Background Image",
+                "Images (*.png;*.jpg;*.jpeg)\0*.png;*.jpg;*.jpeg\0\0",
+            ) else {
+                return;
+            };
+            if apply_background(&ui, &state_bg, &path) {
+                let name = std::path::Path::new(&path)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.clone());
+                ui.set_settings_bg_status(name.into());
+            } else {
+                let loc = state_bg.borrow().loc.clone();
+                let msg = loc.borrow().tr("Tip_BG_LoadFail").to_string();
+                ui_sync::show_toast(&ui, msg, true);
+            }
+        });
+    }
+    // 设置页：清除背景图（恢复纯色 bg-0）
+    {
+        let state_bg = state.clone();
+        let weak_ui_bg = ui.as_weak();
+        ui.on_settings_clear_background(move || {
+            let Some(ui) = weak_ui_bg.upgrade() else {
+                return;
+            };
+            ui.set_has_bg_image(false);
+            ui.set_bg_image(slint::Image::default());
+            let none_text = {
+                let mut st = state_bg.borrow_mut();
+                st.manager
+                    .config_mut()
+                    .extra_config
+                    .remove("background_image");
+                st.save_if_modified();
+                st.loc.borrow().tr("Dlg_BG_None").to_string()
+            };
+            ui.set_settings_bg_status(none_text.into());
+        });
+    }
+    // 设置页：遮罩开关（低频点击，立即落盘）
+    {
+        let state_bg = state.clone();
+        let weak_ui_bg = ui.as_weak();
+        ui.on_settings_dim_toggled(move |enabled| {
+            let Some(ui) = weak_ui_bg.upgrade() else {
+                return;
+            };
+            ui.set_bg_dim_enabled(enabled);
+            let mut st = state_bg.borrow_mut();
+            st.manager
+                .config_mut()
+                .extra_config
+                .insert(
+                    "background_dim_enabled".into(),
+                    if enabled { "1".into() } else { "0".into() },
+                );
+            st.save_if_modified();
+        });
+    }
+    // 设置页：遮罩浓度滑块（拖动中仅更新内存与 UI，关闭设置页时统一落盘）
+    {
+        let state_bg = state.clone();
+        let weak_ui_bg = ui.as_weak();
+        ui.on_settings_dim_changed(move |percent| {
+            let Some(ui) = weak_ui_bg.upgrade() else {
+                return;
+            };
+            ui.set_bg_dim((percent / 100.0).clamp(0.0, 1.0));
+            let mut st = state_bg.borrow_mut();
+            st.manager
+                .config_mut()
+                .extra_config
+                .insert(
+                    "background_dim".into(),
+                    (percent.round() as i32).clamp(0, 100).to_string(),
+                );
+        });
+    }
+    // 设置页关闭：把拖动中暂存的遮罩浓度统一落盘
+    {
+        let state_bg = state.clone();
+        ui.on_settings_closed(move || {
+            state_bg.borrow_mut().save_if_modified();
+        });
+    }
 
     let state_new = state.clone();
     let weak_ui_new = ui.as_weak();
@@ -565,6 +678,7 @@ pub fn wire_handler(
             v.push(lb.tr("Menu_ExportConfig").into());
             v.push(lb.tr("Menu_ImportConfig").into());
             v.push(sep.clone());
+            v.push(lb.tr("Menu_Settings").into());
             v.push(lb.tr("Menu_About").into());
             v.push(lb.tr("Menu_Exit").into());
             v
@@ -670,8 +784,35 @@ pub fn wire_handler(
             ),
             18 => crate::handlers::config_io::export_config(&ui, &state_mps),
             19 => crate::handlers::config_io::import_config(&ui, &state_mps),
-            21 => ui.set_about_dialog_visible(true),
-            22 => {
+            21 => {
+                // 打开设置对话框：回填背景图与遮罩当前状态
+                let st = state_mps.borrow();
+                let cfg = st.manager.config();
+                let status = match cfg.extra_config.get("background_image") {
+                    Some(p) => std::path::Path::new(p)
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| p.clone()),
+                    None => st.loc.borrow().tr("Dlg_BG_None").to_string(),
+                };
+                let dim_enabled = cfg
+                    .extra_config
+                    .get("background_dim_enabled")
+                    .map(|v| v == "1")
+                    .unwrap_or(true);
+                let dim_percent: f32 = cfg
+                    .extra_config
+                    .get("background_dim")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(35.0);
+                drop(st);
+                ui.set_settings_bg_status(status.into());
+                ui.set_settings_bg_dim_enabled(dim_enabled);
+                ui.set_settings_bg_dim_percent(dim_percent);
+                ui.set_settings_dialog_visible(true);
+            }
+            22 => ui.set_about_dialog_visible(true),
+            23 => {
                 // 退出：真正结束进程（与托盘"退出"一致）；几何由主循环收尾强制落盘
                 let _ = slint::quit_event_loop();
             }

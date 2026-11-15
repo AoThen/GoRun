@@ -27,8 +27,8 @@ i-slint-backend-testing = { version = "=1.18.1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
-# 仅用 PNG 编解码写图标缓存；default 集含 exr/ravif/qoi/gif/webp 等无关格式（体积 +2~3MB）。
-image = { version = "0.25", default-features = false, features = ["png"] }
+# 仅用 PNG/JPEG 解码（图标缓存写 PNG；背景图读 PNG/JPG）；default 集含 exr/ravif/qoi/gif/webp 等无关格式（体积 +2~3MB）。
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
 chrono = "0.4"
 pinyin = "0.10"

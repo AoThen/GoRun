@@ -422,6 +422,46 @@ fn main() {
         .unwrap_or(false);
     ui.set_is_dark_theme(is_dark);
 
+    // 背景图恢复（设置页 V1）：路径失效/解码失败时降级纯色、清除失效路径并告警，不阻断启动
+    {
+        let (bg_path, dim_enabled, dim_percent) = {
+            let st = state.borrow();
+            let cfg = st.manager.config();
+            (
+                cfg.extra_config.get("background_image").cloned(),
+                cfg.extra_config
+                    .get("background_dim_enabled")
+                    .map(|v| v == "1"),
+                cfg.extra_config
+                    .get("background_dim")
+                    .and_then(|v| v.parse::<f32>().ok()),
+            )
+        };
+        if let Some(path) = bg_path {
+            match crate::background::decode(&path) {
+                Some(decoded) => {
+                    ui.set_bg_image(slint::Image::from_rgba8(decoded.buffer));
+                    ui.set_has_bg_image(true);
+                }
+                None => {
+                    log::warn!("Background restore failed, fallback to solid: {}", path);
+                    let mut st = state.borrow_mut();
+                    st.manager
+                        .config_mut()
+                        .extra_config
+                        .remove("background_image");
+                    st.save_if_modified();
+                }
+            }
+        }
+        if let Some(v) = dim_enabled {
+            ui.set_bg_dim_enabled(v);
+        }
+        if let Some(p) = dim_percent {
+            ui.set_bg_dim((p / 100.0).clamp(0.0, 1.0));
+        }
+    }
+
     // 菜单栏/空状态/确认按钮/侧栏文本（本地化）；主题键按当前主题选择，避免文案错配
     tray_ui::apply_localized_texts(&ui, &loc, is_dark);
 

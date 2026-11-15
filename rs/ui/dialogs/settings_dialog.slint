@@ -1,0 +1,120 @@
+import { VerticalBox, HorizontalBox, Button, CheckBox, Slider } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 设置对话框（V1：背景图）。模式同 AboutDialog：普通覆盖层组件，
+// visible 由 main_window 的 settings-dialog-visible 驱动，Esc/关闭按钮收起。
+export component SettingsDialog {
+    in-out property <bool> dialog-visible;
+    in property <string> title-text: "Settings";
+    in property <string> bg-label: "Background image";
+    in property <string> bg-status-text: "";
+    in property <string> bg-select-text: "Choose image...";
+    in property <string> bg-clear-text: "Clear";
+    in property <string> bg-dim-label: "Dim overlay";
+    in property <bool> has-background: false;
+    in property <bool> bg-dim-enabled: true;
+    in property <float> bg-dim-percent: 35;
+    in property <string> close-text: "Close";
+    callback select-background();
+    callback clear-background();
+    callback dim-toggled(enabled: bool);
+    callback dim-changed(percent: float);
+    callback close();
+
+    visible: root.dialog-visible;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #00000060;
+
+        Rectangle {
+            width: 420px;
+            height: 250px;
+            background: Theme.bg-2;
+            border-radius: Theme.radius-lg;
+            border-width: 1px;
+            border-color: Theme.stroke-1;
+
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            VerticalBox {
+                padding: 16px;
+                spacing: 12px;
+
+                Text {
+                    text: root.title-text;
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-lg;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: root.bg-label;
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-md;
+                }
+
+                Text {
+                    text: root.bg-status-text;
+                    color: Theme.text-2;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+
+                HorizontalBox {
+                    spacing: Theme.spacing-md;
+                    Button {
+                        text: root.bg-select-text;
+                        clicked => {
+                            root.select-background();
+                        }
+                    }
+                    Button {
+                        text: root.bg-clear-text;
+                        enabled: root.has-background;
+                        clicked => {
+                            root.clear-background();
+                        }
+                    }
+                }
+
+                HorizontalBox {
+                    spacing: Theme.spacing-md;
+                    CheckBox {
+                        text: root.bg-dim-label;
+                        checked: root.bg-dim-enabled;
+                        toggled => {
+                            root.dim-toggled(self.checked);
+                        }
+                    }
+                    Slider {
+                        min-width: 160px;
+                        horizontal-stretch: 1;
+                        minimum: 0;
+                        maximum: 100;
+                        value: root.bg-dim-percent;
+                        enabled: root.bg-dim-enabled;
+                        changed(value) => {
+                            root.dim-changed(value);
+                        }
+                    }
+                }
+
+                HorizontalBox {
+                    alignment: end;
+                    Button {
+                        text: root.close-text;
+                        primary: true;
+                        clicked => {
+                            root.close();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

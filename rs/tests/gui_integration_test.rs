@@ -340,7 +340,8 @@ fn test_hamburger_menu_callbacks_exist() {
     let ui = setup_ui_with_data(vec![], vec![]);
     ui.invoke_hamburger_clicked();
     ui.invoke_menu_popup_selected(0);
-    ui.invoke_menu_popup_selected(22);
+    // 末位索引 = 退出（插入"设置"项后由 22 变 23）
+    ui.invoke_menu_popup_selected(23);
 }
 
 /// Ctrl+F 目标：focus-search 回调在 Toolbar 内，main_window 暴露 toolbar 实例；

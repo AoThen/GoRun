@@ -204,6 +204,13 @@ pub fn apply_localized_texts(
     ui.set_sidebar_add_category_text(lb.tr("Menu_NewC").into());
     ui.set_input_dialog_confirm_text(lb.tr("Btn_OK").into());
     ui.set_input_dialog_cancel_text(lb.tr("Btn_Cancel").into());
+    // 设置对话框（V1：背景图）
+    ui.set_settings_title(lb.tr("Dlg_Settings_Title").into());
+    ui.set_settings_bg_label(lb.tr("Dlg_BG_Label").into());
+    ui.set_settings_bg_select(lb.tr("Dlg_BG_Select").into());
+    ui.set_settings_bg_clear(lb.tr("Dlg_BG_Clear").into());
+    ui.set_settings_bg_dim_label(lb.tr("Dlg_BG_Dim").into());
+    ui.set_settings_close(lb.tr("Dlg_Close").into());
     #[cfg(windows)]
     crate::tray::set_ui_texts(crate::tray::TrayTexts {
         show: lb.tr("Tray_ShowHide").to_string(),

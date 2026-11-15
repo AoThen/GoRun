@@ -3,6 +3,8 @@ import { Theme } from "../theme.slint";
 import { CategoryModel } from "../models.slint";
 
 export component Sidebar {
+    // 有壁纸时侧边栏保持纯色（与无壁纸时的透明观感一致），壁纸仅在条目区透出
+    in property <bool> has-bg-image: false;
     in property <[CategoryModel]> categories;
     in-out property <int> selected-index: 0;
     in property <string> title-text: "Categories";
@@ -19,6 +21,15 @@ export component Sidebar {
     in property <bool> drag-enabled: true;
 
     width: 180px;
+
+    // 壁纸时的纯色底（底层，不遮挡内容）；无壁纸时透明，与原观感一致
+    Rectangle {
+        background: root.has-bg-image ? Theme.bg-0 : transparent;
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+    }
 
     VerticalBox {
         spacing: Theme.spacing-sm;

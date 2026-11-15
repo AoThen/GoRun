@@ -10,6 +10,7 @@ import { Toast } from "components/toast.slint";
 import { ConfirmDialog } from "dialogs/confirm_dialog.slint";
 import { InputDialog } from "dialogs/input_dialog.slint";
 import { AboutDialog } from "dialogs/about_dialog.slint";
+import { SettingsDialog } from "dialogs/settings_dialog.slint";
 
 export { CategoryModel, ItemModel }
 
@@ -113,6 +114,32 @@ export component MainWindow inherits Window {
 
     in-out property <bool> about-dialog-visible: false;
 
+    // 设置对话框（V1：背景图）
+    in-out property <bool> settings-dialog-visible: false;
+    // 对话框文案（Rust 侧本地化注入）
+    in property <string> settings-title: "Settings";
+    in property <string> settings-bg-label: "Background";
+    in property <string> settings-bg-select: "Choose image...";
+    in property <string> settings-bg-clear: "Clear";
+    in property <string> settings-bg-dim-label: "Dim overlay";
+    in property <string> settings-close: "Close";
+    // 背景图当前状态与遮罩设置（Rust 侧回填/持久化）
+    in-out property <string> settings-bg-status: "";
+    in-out property <bool> settings-bg-dim-enabled: true;
+    in-out property <float> settings-bg-dim-percent: 35;
+    callback settings-select-background();
+    callback settings-clear-background();
+    callback settings-dim-toggled(enabled: bool);
+    callback settings-dim-changed(percent: float);
+    callback settings-closed();
+
+    // 应用背景图：cover 铺满窗口底层；has-bg-image 为 false 时保持纯色 bg-0
+    in property <image> bg-image;
+    in property <bool> has-bg-image: false;
+    // 暗化遮罩：开关 + 浓度（0.0~1.0，默认 35%），保证图标/文字在壁纸上可读
+    in property <bool> bg-dim-enabled: true;
+    in property <float> bg-dim: 0.35;
+
     toggle-view => { is-icon-view = !is-icon-view; }
     toggle-theme => {
         is-dark-theme = !is-dark-theme;
@@ -121,6 +148,27 @@ export component MainWindow inherits Window {
 
     Rectangle {
         background: Theme.bg-0;
+
+        // 背景图层（最底层）：cover 铺满；TouchArea 在其上层照常接收点击
+        Image {
+            visible: root.has-bg-image;
+            source: root.bg-image;
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            image-fit: ImageFit.Cover;
+        }
+
+        // 暗化遮罩层：浓度由设置页滑块控制
+        Rectangle {
+            visible: root.has-bg-image && root.bg-dim-enabled;
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, root.bg-dim);
+        }
 
         // Background click catcher (bottom layer)
         TouchArea {
@@ -156,6 +204,9 @@ export component MainWindow inherits Window {
                         root.confirm-dialog-cancel();
                     } else if (root.about-dialog-visible) {
                         root.about-dialog-visible = false;
+                    } else if (root.settings-dialog-visible) {
+                        root.settings-dialog-visible = false;
+                        root.settings-closed();
                     } else if (root.menu-popup-visible) {
                         root.menu-popup-visible = false;
                     } else if (root.context-menu-visible) {
@@ -212,6 +263,7 @@ export component MainWindow inherits Window {
 
             // v2 工具行（搜索 + 3 图标按钮，替代 MenuBar + SearchBar）
             toolbar := Toolbar {
+                has-bg-image: root.has-bg-image;
                 text <=> root.search-text;
                 field-focused <=> root.search-field-focused;
                 search-hint: root.sb-search-hint-text;
@@ -240,6 +292,7 @@ export component MainWindow inherits Window {
                 padding: Theme.spacing-md;
 
                 Sidebar {
+                    has-bg-image: root.has-bg-image;
                     categories: root.categories;
                     selected-index: root.sidebar-selected-index;
                     title-text: root.sidebar-title-text;
@@ -379,6 +432,38 @@ export component MainWindow inherits Window {
             ok-text: root.about-ok-text;
             ok() => {
                 root.about-dialog-visible = false;
+            }
+        }
+
+        SettingsDialog {
+            dialog-visible: root.settings-dialog-visible;
+            title-text: root.settings-title;
+            bg-label: root.settings-bg-label;
+            bg-status-text: root.settings-bg-status;
+            bg-select-text: root.settings-bg-select;
+            bg-clear-text: root.settings-bg-clear;
+            bg-dim-label: root.settings-bg-dim-label;
+            close-text: root.settings-close;
+            has-background: root.has-bg-image;
+            bg-dim-enabled: root.settings-bg-dim-enabled;
+            bg-dim-percent: root.settings-bg-dim-percent;
+            select-background() => {
+                root.settings-select-background();
+            }
+            clear-background() => {
+                root.settings-clear-background();
+            }
+            dim-toggled(v) => {
+                root.settings-bg-dim-enabled = v;
+                root.settings-dim-toggled(v);
+            }
+            dim-changed(v) => {
+                root.settings-bg-dim-percent = v;
+                root.settings-dim-changed(v);
+            }
+            close() => {
+                root.settings-dialog-visible = false;
+                root.settings-closed();
             }
         }
     }
