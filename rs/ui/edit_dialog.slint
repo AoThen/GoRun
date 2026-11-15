@@ -45,11 +45,15 @@ export component EditDialog inherits Window {
     in-out property <string> add-category-text: "+";
 
     VerticalBox {
-        padding: 16px;
-        spacing: 10px;
+        // 高度预算：窗口固定 500px，11 行内容需压缩至 ≤480px 可用区，
+        // 否则底部 CheckBox/Save/Cancel 行会被推出窗口（fix: 布局溢出）。
+        padding: 10px;
+        spacing: 6px;
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-name; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-name;
@@ -59,6 +63,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-target; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-target;
@@ -73,6 +79,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-arguments; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-arguments;
@@ -82,6 +90,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-directory; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-working-dir;
@@ -91,6 +101,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-icon-path; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-icon-path;
@@ -105,6 +117,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-icon-index; width: 80px; color: Theme.text-1; }
             SpinBox {
                 value <=> root.item-icon-index;
@@ -115,6 +129,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-keywords; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-keywords;
@@ -124,6 +140,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-remark; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-remark;
@@ -133,6 +151,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-hotkey; width: 80px; color: Theme.text-1; }
             LineEdit {
                 text: root.item-hotkey;
@@ -142,6 +162,8 @@ export component EditDialog inherits Window {
 
         HorizontalBox {
             alignment: center;
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text { text: root.label-category; width: 80px; color: Theme.text-1; }
             ComboBox {
                 model: root.category-names;
@@ -158,6 +180,8 @@ export component EditDialog inherits Window {
         }
 
         HorizontalBox {
+            padding-top: 2px;
+            padding-bottom: 2px;
             CheckBox {
                 text: root.run-as-admin-text;
                 checked <=> root.run-as-admin;
@@ -165,6 +189,8 @@ export component EditDialog inherits Window {
         }
 
         if root.error-message != "": HorizontalBox {
+            padding-top: 2px;
+            padding-bottom: 2px;
             Text {
                 text: root.error-message;
                 color: Theme.danger;
@@ -175,6 +201,9 @@ export component EditDialog inherits Window {
             alignment: end;
             spacing: 8px;
             height: 36px;
+            // 32px 按钮 + 上下 2px padding 恰好 36px，避免按钮在行内下溢
+            padding-top: 2px;
+            padding-bottom: 2px;
             Button {
                 text: root.save-text;
                 clicked => { root.save(); }
