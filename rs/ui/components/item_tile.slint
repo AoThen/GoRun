@@ -1,13 +1,6 @@
 import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-
-struct ItemModel {
-    id: string,
-    name: string,
-    target: string,
-    icon-path: image,
-    search-active: bool,
-}
+import { ItemModel } from "../models.slint";
 
 export component ItemTile {
     callback clicked();

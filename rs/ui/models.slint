@@ -1,0 +1,15 @@
+// 全局数据模型 struct 统一定义：所有组件从此 import，
+// 避免 slint 1.18 为多文件重复定义的同名 struct 生成不同类型别名（E0605）。
+export struct CategoryModel {
+    id: string,
+    name: string,
+    count: int,
+}
+
+export struct ItemModel {
+    id: string,
+    name: string,
+    target: string,
+    icon-path: image,
+    search-active: bool,
+}

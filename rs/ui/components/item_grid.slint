@@ -2,14 +2,7 @@ import { ListView } from "std-widgets.slint";
 import { ItemTile } from "item_tile.slint";
 import { VerticalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-
-struct ItemModel {
-    id: string,
-    name: string,
-    target: string,
-    icon-path: image,
-    search-active: bool,
-}
+import { ItemModel } from "../models.slint";
 
 export component ItemGrid {
     callback item-tile-clicked(index: int);

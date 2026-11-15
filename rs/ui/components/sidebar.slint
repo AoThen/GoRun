@@ -1,11 +1,6 @@
 import { VerticalBox, HorizontalBox, ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-
-struct CategoryModel {
-    id: string,
-    name: string,
-    count: int,
-}
+import { CategoryModel } from "../models.slint";
 
 export component Sidebar {
     in property <[CategoryModel]> categories;
