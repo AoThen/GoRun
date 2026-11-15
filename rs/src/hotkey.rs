@@ -11,6 +11,26 @@ pub struct Hotkey {
     pub vk: u32,
 }
 
+/// US 布局标点键 → Windows 虚拟键码（VK_OEM 段）。
+/// 同一物理键的上档字符（如 `:` 与 `;`）共享同一 VK，按主字符（下档）登记。
+fn punct_vk(ch: char) -> Option<u32> {
+    let vk = match ch {
+        ';' | ':' => 0xBA, // VK_OEM_1
+        '=' | '+' => 0xBB,
+        ',' | '<' => 0xBC,
+        '-' | '_' => 0xBD,
+        '.' | '>' => 0xBE,
+        '/' | '?' => 0xBF, // VK_OEM_2
+        '`' | '~' => 0xC0, // VK_OEM_3
+        '[' | '{' => 0xDB,
+        '\\' | '|' => 0xDC,
+        ']' | '}' => 0xDD,
+        '\'' | '"' => 0xDE, // VK_OEM_7
+        _ => return None,
+    };
+    Some(vk)
+}
+
 pub fn parse_hotkey_string(s: &str) -> Option<Hotkey> {
     let mut modifiers = 0u32;
     let mut vk = 0u32;
@@ -34,7 +54,10 @@ pub fn parse_hotkey_string(s: &str) -> Option<Hotkey> {
                         if ch.is_ascii_alphabetic() || ch.is_ascii_digit() {
                             ch as u32
                         } else {
-                            return None;
+                            match punct_vk(ch) {
+                                Some(vk) => vk,
+                                None => return None,
+                            }
                         }
                     }
                     "SPACE" => 0x20,
@@ -551,9 +574,24 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_punct_keys() {
+        let hk = parse_hotkey_string("Ctrl+/").unwrap();
+        assert_eq!(hk.modifiers, 0x0002);
+        assert_eq!(hk.vk, 0xBF);
+        let hk = parse_hotkey_string("Ctrl+'").unwrap();
+        assert_eq!(hk.modifiers, 0x0002);
+        assert_eq!(hk.vk, 0xDE);
+        let hk = parse_hotkey_string("Ctrl+;").unwrap();
+        assert_eq!(hk.modifiers, 0x0002);
+        assert_eq!(hk.vk, 0xBA);
+    }
+
+    #[test]
     fn test_parse_invalid() {
         assert!(parse_hotkey_string("").is_none());
         assert!(parse_hotkey_string("Ctrl+").is_none());
+        // '+' 本身是分隔符，无法作为键位表达（既有限制）
+        assert!(parse_hotkey_string("Ctrl++").is_none());
     }
 
     #[test]

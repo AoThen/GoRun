@@ -74,7 +74,7 @@ fn default_version() -> String {
     crate::model::DEFAULT_VERSION.to_string()
 }
 fn default_hotkey() -> String {
-    "Ctrl+M".to_string()
+    "Ctrl+/".to_string()
 }
 fn default_window_x() -> i32 {
     100
@@ -257,12 +257,12 @@ impl Storage {
             .collect();
 
         let config = Config {
-            // 旧默认 Ctrl+Alt+M 全局注册易被其它程序占用（RegisterHotKey 系统级独占），
-            // 直接更换为 Ctrl+M：加载时把仍为旧默认的值一并升级，用户自定义的其它键不受影响。
-            global_hotkey: if raw_config.global_hotkey == "Ctrl+Alt+M" {
-                "Ctrl+M".to_string()
-            } else {
-                raw_config.global_hotkey
+            // 历史默认迁移链：Ctrl+Alt+M（全局注册易被其它程序占用）→ Ctrl+M → Ctrl+/
+            // （更冷门、冲突概率更低）。加载时把仍为任一旧默认的值逐级升级到当前默认，
+            // 用户自定义的其它键不受影响；当前默认值不在迁移源集合中，幂等。
+            global_hotkey: match raw_config.global_hotkey.as_str() {
+                "Ctrl+Alt+M" | "Ctrl+M" => "Ctrl+/".to_string(),
+                other => other.to_string(),
             },
             window_x: raw_config.window_x,
             window_y: raw_config.window_y,
@@ -681,8 +681,8 @@ mod tests {
         fs::write(&path, json).unwrap();
         let storage = Storage::new(path_str.clone());
         let loaded = storage.load().expect("should load C++ string config");
-        // 输入为旧默认 Ctrl+Alt+M，加载时应被升级为新默认 Ctrl+M（迁移逻辑锁定）
-        assert_eq!(loaded.config.global_hotkey, "Ctrl+M");
+        // 输入为最老默认 Ctrl+Alt+M，加载时应逐级升级到当前默认 Ctrl+/（迁移链锁定）
+        assert_eq!(loaded.config.global_hotkey, "Ctrl+/");
         assert_eq!(loaded.config.window_x, 100);
         assert_eq!(loaded.config.window_width, 800);
         assert_eq!(

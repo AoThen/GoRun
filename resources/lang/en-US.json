@@ -663,7 +663,7 @@
 
     "Tray_AutoStart": "Start with Windows",
     "Tray_LowResident": "Low Resident Mode",
-    "Tip_InvalidHotkey": "Invalid hotkey format, e.g. Ctrl+M",
+    "Tip_InvalidHotkey": "Invalid hotkey format, e.g. Ctrl+/",
     "Tip_ItemNotFound": "The item no longer exists; operation cancelled",
     "Tip_HotkeyRegisterFail": "Hotkey registration failed, possibly in use",
     "Tip_ExternalBackup": "External config backed up, not loaded",
