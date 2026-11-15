@@ -1,9 +1,11 @@
-//! 平台抽象：窗口拖放（Windows 用窗口子类化 + WM_DROPFILES）。
+//! 平台抽象：窗口拖放（Windows 用窗口子类化 + WM_DROPFILES）与主窗口图标设置。
 
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
 mod dragdrop;
+
+pub mod window_icon;
 
 pub enum DropMessage {
     Drop(Vec<PathBuf>),

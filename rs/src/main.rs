@@ -464,6 +464,20 @@ fn main() {
         });
     }
 
+    // 主窗口标题栏图标：窗口 realize 后把嵌入的 app.ico 设为 WM_SETICON 大/小图标。
+    // 与 drop_handler 的 Timer 装配不同：此处仅捕获 Send 的 Weak 句柄，
+    // 可直接投递事件循环；失败仅影响标题栏图标，记录告警即可。
+    {
+        let weak_ui_icon = ui.as_weak();
+        if let Err(e) = slint::invoke_from_event_loop(move || {
+            if let Some(ui) = weak_ui_icon.upgrade() {
+                platform::window_icon::apply_app_icon(ui.window());
+            }
+        }) {
+            log::warn!("Failed to apply window icon: {}", e);
+        }
+    }
+
     log::info!("Entering main event loop");
     if let Err(e) = ui.run() {
         log::error!("Main event loop error: {}", e);
