@@ -61,6 +61,43 @@ pub fn window_on_screen(x: i32, y: i32, w: i32, h: i32) -> bool {
     }
 }
 
+/// 窗口物理尺寸超过虚拟屏 80% 时等比缩回（修复历史版本 DPI 漂移留下的超大尺寸）。
+pub fn clamp_size_to_virtual_screen(w: i32, h: i32) -> (i32, i32) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+        };
+        let vw = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+        let vh = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+        clamp_size_impl(w, h, vw, vh)
+    }
+    #[cfg(not(windows))]
+    {
+        (w, h)
+    }
+}
+
+fn clamp_size_impl(w: i32, h: i32, vw: i32, vh: i32) -> (i32, i32) {
+    const LIMIT_RATIO: f64 = 0.8;
+    if vw <= 0 || vh <= 0 || w <= 0 || h <= 0 {
+        return (w, h);
+    }
+    let max_w = (vw as f64 * LIMIT_RATIO).floor() as i32;
+    let max_h = (vh as f64 * LIMIT_RATIO).floor() as i32;
+    let scale = (max_w as f64 / w as f64)
+        .min(max_h as f64 / h as f64)
+        .min(1.0);
+    if scale < 1.0 {
+        // 极端超大值缩放后可能向零截断：至少保留 1px，防止请求零尺寸窗口
+        let cw = ((w as f64 * scale) as i32).max(1);
+        let ch = ((h as f64 * scale) as i32).max(1);
+        (cw, ch)
+    } else {
+        (w, h)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +247,39 @@ mod tests {
             1920,
             1080
         ));
+    }
+
+    #[test]
+    fn test_clamp_size_within_limits_unchanged() {
+        // 800x600 在 1920x1080 的 80%（1536x864）以内 → 原样返回
+        assert_eq!(clamp_size_impl(800, 600, 1920, 1080), (800, 600));
+    }
+
+    #[test]
+    fn test_clamp_size_height_exceeding_scales_proportionally() {
+        // 高度超限：按高度比例等比缩（2880x1620 → 高度缩到 864 → 1536x864）
+        assert_eq!(clamp_size_impl(2880, 1620, 1920, 1080), (1536, 864));
+    }
+
+    #[test]
+    fn test_clamp_size_width_exceeding_scales_proportionally() {
+        // 宽度超限：按宽度比例等比缩（3000x600 → 宽度缩到 1536）
+        let (w, h) = clamp_size_impl(3000, 600, 1920, 1080);
+        assert_eq!(w, 1536);
+        assert_eq!(h, 307); // 600*0.512 = 307.2 → 307
+    }
+
+    #[test]
+    fn test_clamp_size_degenerate_inputs_unchanged() {
+        // 屏幕信息异常或尺寸非法时不做缩放
+        assert_eq!(clamp_size_impl(800, 600, 0, 1080), (800, 600));
+        assert_eq!(clamp_size_impl(800, 600, 1920, -1), (800, 600));
+        assert_eq!(clamp_size_impl(0, 600, 1920, 1080), (0, 600));
+    }
+
+    #[test]
+    fn test_clamp_size_extreme_value_never_zero() {
+        // 极端超大值缩放后向零截断 → 至少保留 1px
+        assert_eq!(clamp_size_impl(400, 1_000_000_000, 1920, 1080), (1, 864));
     }
 }

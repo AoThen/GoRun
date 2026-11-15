@@ -1,16 +1,16 @@
 //! 主窗口应用图标：把 build.rs 嵌入的 app.ico（资源 ID 1）设为标题栏图标。
 //!
-//! Slint/winit 不提供窗口图标 API；窗口 realize 后经 raw-window-handle
-//! 取 HWND，用 WM_SETICON 做实例级设置（不改 winit 共享窗口类）。
+//! Slint/winit 不提供窗口图标 API；窗口就绪后取 HWND，用 WM_SETICON
+//! 做实例级设置（不改 winit 共享窗口类）。
 
-/// 窗口 realize 后调用；非 Windows 目标为空实现。
-pub fn apply_app_icon(window: &slint::Window) {
-    apply_impl(window);
+/// 窗口就绪后调用（hwnd 来自 [`crate::drop_handler::try_get_hwnd`]）；
+/// 非 Windows 目标为空实现。
+pub fn apply_app_icon(hwnd: isize) {
+    apply_impl(hwnd);
 }
 
 #[cfg(windows)]
-fn apply_impl(window: &slint::Window) {
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+fn apply_impl(hwnd: isize) {
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -18,17 +18,9 @@ fn apply_impl(window: &slint::Window) {
         LR_DEFAULTSIZE, LR_SHARED, SM_CXICON, SM_CXSMICON, SM_CYICON, SM_CYSMICON, WM_SETICON,
     };
 
-    // slint 的固有 Window::window_handle() 返回 WindowHandle；
-    // 再经 HasWindowHandle 拿借用的原始句柄（注意与固有方法同名，用完全限定调用）。
-    let handle = window.window_handle();
-    let Ok(borrowed) = HasWindowHandle::window_handle(&handle) else {
-        return;
-    };
-    let RawWindowHandle::Win32(win) = borrowed.as_raw() else {
-        return;
-    };
-    let hwnd = HWND(win.hwnd.get());
+    let hwnd = HWND(hwnd);
     let Ok(hmodule) = (unsafe { GetModuleHandleW(None) }) else {
+        log::warn!("Failed to get module handle; title bar icon not set");
         return;
     };
     let hinstance = HINSTANCE(hmodule.0);
@@ -56,6 +48,8 @@ fn apply_impl(window: &slint::Window) {
                 WPARAM(ICON_BIG as usize),
                 LPARAM(big.0 as isize),
             );
+        } else {
+            log::warn!("Failed to load app icon (big); title bar icon not set");
         }
         if let Some(small) = load_icon(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON))
         {
@@ -65,9 +59,11 @@ fn apply_impl(window: &slint::Window) {
                 WPARAM(ICON_SMALL as usize),
                 LPARAM(small.0 as isize),
             );
+        } else {
+            log::warn!("Failed to load app icon (small); title bar icon not set");
         }
     }
 }
 
 #[cfg(not(windows))]
-fn apply_impl(_window: &slint::Window) {}
+fn apply_impl(_hwnd: isize) {}

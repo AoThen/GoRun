@@ -603,6 +603,7 @@
     "Title_Error": "错误",
     "Tip_SwitchListView": "切换到列表视图",
     "Tip_SwitchIconView": "切换到图标视图",
+    "Tip_HotkeyBusy": "全局热键注册失败，可能被其他程序占用，请在菜单中更换热键",
     "Btn_DarkMode": "暗色模式",
     "Btn_LightMode": "亮色模式",
     "Tip_SwitchDark": "切换到深色主题",

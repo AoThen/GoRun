@@ -58,6 +58,62 @@ fn save_window_geometry_with(
     }
 }
 
+/// 窗口就绪探测间隔与上限：winit 窗口在事件循环 Resumed/ensure_window 时才真正创建，
+/// 此前 `window_handle()` 返回 Err，需等待。
+const WINDOW_READY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+const WINDOW_READY_MAX_RETRIES: u32 = 100;
+
+type WindowReadyCallback = Box<dyn FnOnce(&MainWindow) + 'static>;
+
+/// 等待 winit 窗口真正创建后执行 `on_ready`（拖放装配/标题栏图标/尺寸恢复共用）。
+///
+/// 以 100ms 周期重试探测窗口句柄，就绪即回调；超过上限（10s）放弃并记录错误。
+/// 用 `Timer::single_shot` 链式探测：SingleShot 定时器不能在自身回调里 restart
+/// 同一句柄（slint 会在回调后移除槽位，再触发时 panic），每次新建定时器则无此问题。
+pub fn when_window_ready(
+    ui_weak: slint::Weak<MainWindow>,
+    on_ready: impl FnOnce(&MainWindow) + 'static,
+) {
+    #[cfg(not(windows))]
+    {
+        let _ = (ui_weak, on_ready);
+        log::debug!("when_window_ready: window handle probe is Windows-only");
+    }
+    #[cfg(windows)]
+    {
+        let callback = Rc::new(RefCell::new(Some(Box::new(on_ready) as WindowReadyCallback)));
+        probe_window_ready(ui_weak, callback, 0);
+    }
+}
+
+#[cfg(windows)]
+fn probe_window_ready(
+    ui_weak: slint::Weak<MainWindow>,
+    on_ready: Rc<RefCell<Option<WindowReadyCallback>>>,
+    attempt: u32,
+) {
+    if let Some(ui) = ui_weak.upgrade() {
+        if crate::drop_handler::try_get_hwnd(&ui).is_some() {
+            if let Some(on_ready) = on_ready.borrow_mut().take() {
+                on_ready(&ui);
+            }
+            return;
+        }
+    }
+    if attempt >= WINDOW_READY_MAX_RETRIES {
+        log::error!(
+            "Window not ready after {} retries; deferred setup (size/drop/icon) aborted",
+            WINDOW_READY_MAX_RETRIES
+        );
+        return;
+    }
+    let next_weak = ui_weak.clone();
+    let next_callback = on_ready.clone();
+    slint::Timer::single_shot(WINDOW_READY_INTERVAL, move || {
+        probe_window_ready(next_weak, next_callback, attempt + 1);
+    });
+}
+
 /// 显示窗口时定位到鼠标位置（跟随鼠标模式）。
 pub fn position_at_cursor(ui: &MainWindow) {
     #[cfg(windows)]

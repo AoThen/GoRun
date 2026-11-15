@@ -5,6 +5,20 @@ use crate::MainWindow;
 #[cfg(windows)]
 use slint::ComponentHandle;
 
+/// 尝试获取主窗口的 Win32 句柄；winit 窗口尚未创建时返回 None（静默，供重试探测复用）。
+#[cfg(windows)]
+pub fn try_get_hwnd(ui: &MainWindow) -> Option<isize> {
+    use raw_window_handle::HasWindowHandle;
+
+    let window_handle = ui.window().window_handle();
+    let raw_handle = HasWindowHandle::window_handle(&window_handle).ok()?;
+
+    match raw_handle.as_raw() {
+        raw_window_handle::RawWindowHandle::Win32(win32) => Some(win32.hwnd.get() as isize),
+        _ => None,
+    }
+}
+
 /// 安装拖放处理器。
 ///
 /// 返回的 `(guard, rx)`：
@@ -18,21 +32,10 @@ pub fn setup_drop_handler(
     crate::platform::DropHandler,
     std::sync::mpsc::Receiver<crate::platform::DropMessage>,
 )> {
-    use raw_window_handle::HasWindowHandle;
-
-    let window_handle = ui.window().window_handle();
-    let raw_handle = match HasWindowHandle::window_handle(&window_handle) {
-        Ok(handle) => handle,
-        Err(e) => {
-            log::warn!("Failed to get window handle: {e:?}, drag-and-drop disabled");
-            return None;
-        }
-    };
-
-    let hwnd = match raw_handle.as_raw() {
-        raw_window_handle::RawWindowHandle::Win32(win32) => win32.hwnd.get() as isize,
-        _ => {
-            log::warn!("Raw window handle is not Win32; drag-and-drop disabled");
+    let hwnd = match try_get_hwnd(ui) {
+        Some(hwnd) => hwnd,
+        None => {
+            log::warn!("Window handle not ready; drag-and-drop disabled");
             return None;
         }
     };
@@ -48,6 +51,12 @@ pub fn setup_drop_handler(
     std::sync::mpsc::Receiver<crate::platform::DropMessage>,
 )> {
     log::warn!("Drag-and-drop is only supported on Windows");
+    None
+}
+
+/// 非 Windows 平台无 Win32 句柄概念，恒为 None（仅为 when_window_ready 提供统一判据）。
+#[cfg(not(windows))]
+pub fn try_get_hwnd(_ui: &crate::MainWindow) -> Option<isize> {
     None
 }
 

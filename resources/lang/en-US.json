@@ -605,6 +605,7 @@
     "Title_Error": "Error",
     "Tip_SwitchListView": "Switch to List View",
     "Tip_SwitchIconView": "Switch to Icon View",
+    "Tip_HotkeyBusy": "Failed to register the global hotkey; it may be in use by another program. Please change it in the menu.",
     "Btn_DarkMode": "Dark Mode",
     "Btn_LightMode": "Light Mode",
     "Tip_SwitchDark": "Switch to Dark Theme",

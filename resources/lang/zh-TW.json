@@ -599,6 +599,7 @@
     "Title_Error": "錯誤",
     "Tip_SwitchListView": "切換到清單檢視",
     "Tip_SwitchIconView": "切換到圖示檢視",
+    "Tip_HotkeyBusy": "全域熱鍵註冊失敗，可能被其他程式占用，請在選單中更換熱鍵",
     "Btn_DarkMode": "暗色模式",
     "Btn_LightMode": "亮色模式",
     "Tip_SwitchDark": "切換到深色主題",

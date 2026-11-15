@@ -244,7 +244,11 @@ fn main() {
     log::info!("MainWindow created successfully");
 
     // 窗口几何恢复（C++ 存物理像素，直接以物理单位设置）；
-    // 仅当配置合法（最小尺寸 + 在屏内）时应用（P2 #12）
+    // 仅当配置合法（最小尺寸 + 在屏内）时应用（P2 #12）。
+    // set_size 必须延迟到 winit 窗口真正创建后（when_window_ready）：创建前 Physical
+    // 会被 backend 按 scale=1 转成 Logical 存储，窗口创建时再乘真实 DPI，导致窗口
+    // 高度每次启动按 DPI 倍数漂移增大（150% 缩放屏每次 ×1.5）。
+    let mut pending_window_size: Option<(u32, u32)> = None;
     {
         let cfg = state.borrow().manager.config().config.clone();
         if cfg.window_width >= 400
@@ -256,12 +260,11 @@ fn main() {
                 cfg.window_height,
             )
         {
-            use slint::{PhysicalPosition, PhysicalSize};
+            use slint::PhysicalPosition;
             ui.window().set_position(PhysicalPosition::new(cfg.window_x, cfg.window_y));
-            ui.window().set_size(PhysicalSize::new(
-                cfg.window_width as u32,
-                cfg.window_height as u32,
-            ));
+            // 历史版本 DPI 漂移可能留下超过屏幕的超大尺寸：等比缩回虚拟屏 80% 以内
+            let (w, h) = util::clamp_size_to_virtual_screen(cfg.window_width, cfg.window_height);
+            pending_window_size = Some((w as u32, h as u32));
         }
     }
 
@@ -338,6 +341,9 @@ fn main() {
             log::info!("Global hotkey registered: {}", hotkey_str);
         } else {
             log::warn!("Failed to register global hotkey: {}", hotkey_str);
+            // 热键常被输入法/截图等常驻软件占用：明确提示更换，而非静默失效
+            let msg = loc.borrow().tr("Tip_HotkeyBusy").to_string();
+            ui_sync::show_toast(&ui, msg, true);
         }
         let ui_hk = ui.as_weak();
         std::thread::spawn(move || {
@@ -442,40 +448,35 @@ fn main() {
         external_backup_path,
     );
 
-    // P0：拖放守卫必须存入 AppState 存活到进程结束；
-    // 只把消息接收端交给消费线程。
-    // P1：装配延迟到事件循环首轮——ui.run() 前 winit 原生窗口未 realize，
-    // window_handle() 返回 NotSupported 会导致拖放被静默禁用（见 gorun_debug.log）。
-    // 用 single_shot Timer 而非 invoke_from_event_loop：闭包需捕获 Rc<AppState>（!Send），
-    // Timer 回调在事件循环（UI 线程）执行，与 geo_timer 同模式。
+    // 窗口就绪后统一装配：尺寸恢复 + 拖放 + 标题栏图标。
+    // winit 窗口在事件循环 Resumed/ensure_window 时才真正创建，在此之前
+    // window_handle() 返回 Err（曾导致拖放被静默禁用、图标设置失效）。
+    // P0：拖放守卫必须存入 AppState 存活到进程结束；消息接收端交给消费线程。
+    // 回调经 when_window_ready 在事件循环（UI 线程）执行，可捕获 Rc<AppState>。
     {
-        let weak_ui_drop = ui.as_weak();
-        let state_drop = state.clone();
+        let weak_ui = ui.as_weak();
+        let state_setup = state.clone();
         let auto_hide_drop = auto_hide;
-        slint::Timer::single_shot(std::time::Duration::from_millis(0), move || {
-            if let Some(ui) = weak_ui_drop.upgrade() {
-                if let Some((guard, rx)) = drop_handler::setup_drop_handler(&ui) {
-                    drop_handler::spawn_drop_consumer(ui.as_weak(), rx, auto_hide_drop);
-                    state_drop.borrow_mut().drop_handler = Some(guard);
-                } else {
-                    log::warn!("Drop handler setup returned None; drag-and-drop disabled");
-                }
+        geometry::when_window_ready(weak_ui, move |ui| {
+            // 1) 恢复窗口尺寸：窗口已存在，Physical 1:1 精确生效，无 DPI 换算
+            if let Some((w, h)) = pending_window_size {
+                use slint::PhysicalSize;
+                ui.window().set_size(PhysicalSize::new(w, h));
+            }
+            // 2) 拖放装配
+            if let Some((guard, rx)) = drop_handler::setup_drop_handler(ui) {
+                drop_handler::spawn_drop_consumer(ui.as_weak(), rx, auto_hide_drop);
+                state_setup.borrow_mut().drop_handler = Some(guard);
+            } else {
+                log::warn!("Drop handler setup returned None; drag-and-drop disabled");
+            }
+            // 3) 标题栏图标（嵌入 app.ico，资源 ID 1，与托盘同源）
+            if let Some(hwnd) = drop_handler::try_get_hwnd(ui) {
+                platform::window_icon::apply_app_icon(hwnd);
+            } else {
+                log::warn!("Window handle unavailable; title bar icon not set");
             }
         });
-    }
-
-    // 主窗口标题栏图标：窗口 realize 后把嵌入的 app.ico 设为 WM_SETICON 大/小图标。
-    // 与 drop_handler 的 Timer 装配不同：此处仅捕获 Send 的 Weak 句柄，
-    // 可直接投递事件循环；失败仅影响标题栏图标，记录告警即可。
-    {
-        let weak_ui_icon = ui.as_weak();
-        if let Err(e) = slint::invoke_from_event_loop(move || {
-            if let Some(ui) = weak_ui_icon.upgrade() {
-                platform::window_icon::apply_app_icon(ui.window());
-            }
-        }) {
-            log::warn!("Failed to apply window icon: {}", e);
-        }
     }
 
     log::info!("Entering main event loop");
