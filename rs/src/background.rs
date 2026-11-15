@@ -35,18 +35,21 @@ pub fn decode(path: &str) -> Option<DecodedBackground> {
     let (w, h) = (img.width(), img.height());
 
     // image::Rgba<u8> 与 slint::Rgba8Pixel 同为 4 字节 RGBA，逐像素安全转换
-    let pixels: Vec<Rgba8Pixel> = img
-        .as_raw()
-        .chunks_exact(4)
-        .map(|c| Rgba8Pixel {
-            r: c[0],
-            g: c[1],
-            b: c[2],
-            a: c[3],
-        })
-        .collect();
+    let mut buffer = SharedPixelBuffer::<Rgba8Pixel>::new(w, h);
+    for (dst, src) in buffer
+        .make_mut_slice()
+        .iter_mut()
+        .zip(img.as_raw().chunks_exact(4))
+    {
+        *dst = Rgba8Pixel {
+            r: src[0],
+            g: src[1],
+            b: src[2],
+            a: src[3],
+        };
+    }
     Some(DecodedBackground {
-        buffer: SharedPixelBuffer::clone_from_slice(&pixels),
+        buffer,
         width: w,
         height: h,
     })

@@ -284,7 +284,9 @@ pub fn wire_handler(
                     .extra_config
                     .remove("background_image");
                 st.save_if_modified();
-                st.loc.borrow().tr("Dlg_BG_None").to_string()
+                // 先绑定再返回：避免临时 Ref 活过 st 的 drop（E0597）
+                let text = st.loc.borrow().tr("Dlg_BG_None").to_string();
+                text
             };
             ui.set_settings_bg_status(none_text.into());
         });
