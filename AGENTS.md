@@ -35,7 +35,7 @@
 |-----|------|
 | 语言 | Rust 2021 |
 | 构建 | Cargo |
-| UI | Slint 1.7+ (software 渲染器) |
+| UI | Slint 1.18 (software 渲染器) |
 | 存储 | JSON (serde + serde_json) |
 | 平台 | Windows 10+ |
 
@@ -213,7 +213,7 @@ cmake --build build --config Debug
 
 ### 环境要求
 
-- Rust 1.92+ (MSRV 由依赖链决定：slint 1.17 及 backend 依赖要求 rustc 1.92)
+- Rust 1.92+ (MSRV 由依赖链决定：slint 1.18 及 backend 依赖要求 rustc 1.92)
 - Cargo
 - Windows SDK (for windows crate)
 
@@ -239,7 +239,7 @@ cargo test
 
 | 依赖 | 版本 | 用途 |
 |-----|------|------|
-| slint | 1.7+ | UI 框架（software 渲染器） |
+| slint | 1.18.1 | UI 框架（software 渲染器） |
 | serde | 1.x | 序列化 |
 | serde_json | 1.x | JSON 解析 |
 | dirs | 5.x | 系统目录 |
@@ -249,7 +249,7 @@ cargo test
 | pinyin | 0.10 | 中文拼音转换（搜索） |
 | raw-window-handle | 0.6 | 窗口句柄 |
 | windows | 0.57 | Windows API 绑定（含托盘实现） |
-| i-slint-backend-testing | 1.7 | GUI 集成测试后端（可选，backend-testing feature） |
+| i-slint-backend-testing | 1.18.1 | GUI 集成测试后端（可选，backend-testing feature） |
 
 ---
 

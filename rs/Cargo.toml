@@ -3,7 +3,7 @@
 name = "GoRun"
 version = "1.0.0"
 edition = "2021"
-# MSRV 由依赖链决定：slint 1.17 及其 build/backend 依赖均要求 rustc 1.92。
+# MSRV 由依赖链决定：slint 1.18 及其 build/backend 依赖均要求 rustc 1.92。
 # 项目自身 edition 2021 无更高要求；1.75 声明与实际不符（无法构建），已修正。
 rust-version = "1.92"
 build = "build.rs"
@@ -12,7 +12,7 @@ build = "build.rs"
 # 已失效（cargo 报 unused manifest key），故不在此设置。
 
 [build-dependencies]
-slint-build = "=1.17.1"
+slint-build = "=1.18.1"
 # Windows 产物嵌入 app.ico（exe/任务栏/托盘图标）；仅 windows target 时在 build.rs 中调用
 winresource = "0.1"
 
@@ -22,8 +22,8 @@ backend-winit = ["slint/backend-winit"]
 backend-testing = ["slint/system-testing", "dep:i-slint-backend-testing"]
 
 [dependencies]
-slint = { version = "=1.17.1", default-features = false, features = ["renderer-software", "compat-1-2", "raw-window-handle-06"] }
-i-slint-backend-testing = { version = "=1.17.1", optional = true }
+slint = { version = "=1.18.1", default-features = false, features = ["renderer-software", "compat-1-2", "raw-window-handle-06"] }
+i-slint-backend-testing = { version = "=1.18.1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
