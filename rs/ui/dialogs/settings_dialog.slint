@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, Button, CheckBox, Slider, ComboBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, Button, CheckBox, Slider, ComboBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 // 设置对话框（V1：背景图 + 日志档位）。模式同 AboutDialog：普通覆盖层组件，
@@ -35,8 +35,9 @@ export component SettingsDialog {
         background: #00000060;
 
         Rectangle {
-            width: 420px;
-            height: 310px;
+            // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
+            width: min(420px, root.width * 0.92);
+            height: min(310px, root.height * 0.92);
             background: Theme.bg-2;
             border-radius: Theme.radius-lg;
             border-width: 1px;
@@ -56,77 +57,87 @@ export component SettingsDialog {
                     font-weight: 700;
                 }
 
-                Text {
-                    text: root.bg-label;
-                    color: Theme.text-1;
-                    font-size: Theme.font-size-md;
-                }
+                // 中段内容可滚动：卡片随窗口缩小时，标题与关闭按钮始终可见
+                ScrollView {
+                    vertical-stretch: 1;
 
-                Text {
-                    text: root.bg-status-text;
-                    color: Theme.text-2;
-                    font-size: Theme.font-size-sm;
-                    overflow: elide;
-                }
+                    VerticalBox {
+                        padding: 0px;
+                        spacing: 12px;
 
-                HorizontalBox {
-                    spacing: Theme.spacing-md;
-                    Button {
-                        text: root.bg-select-text;
-                        clicked => {
-                            root.select-background();
+                        Text {
+                            text: root.bg-label;
+                            color: Theme.text-1;
+                            font-size: Theme.font-size-md;
                         }
-                    }
-                    Button {
-                        text: root.bg-clear-text;
-                        enabled: root.has-background;
-                        clicked => {
-                            root.clear-background();
-                        }
-                    }
-                }
 
-                HorizontalBox {
-                    spacing: Theme.spacing-md;
-                    CheckBox {
-                        text: root.bg-dim-label;
-                        checked: root.bg-dim-enabled;
-                        toggled => {
-                            root.dim-toggled(self.checked);
+                        Text {
+                            text: root.bg-status-text;
+                            color: Theme.text-2;
+                            font-size: Theme.font-size-sm;
+                            overflow: elide;
                         }
-                    }
-                    Slider {
-                        min-width: 160px;
-                        horizontal-stretch: 1;
-                        minimum: 0;
-                        maximum: 100;
-                        value: root.bg-dim-percent;
-                        enabled: root.bg-dim-enabled;
-                        changed(value) => {
-                            root.dim-changed(value);
-                        }
-                    }
-                }
 
-                HorizontalBox {
-                    spacing: Theme.spacing-md;
-                    Text {
-                        text: root.log-label;
-                        color: Theme.text-1;
-                        font-size: Theme.font-size-md;
-                        vertical-alignment: center;
-                    }
-                    ComboBox {
-                        min-width: 160px;
-                        horizontal-stretch: 1;
-                        model: root.log-level-model;
-                        current-index: root.log-level-index;
-                        // ComboBox 的 selected 回调参数是选中项文本（非索引），映射回索引
-                        selected(value) => {
-                            root.log-level-changed(
-                                value == root.log-level-model[1] ? 1 :
-                                value == root.log-level-model[2] ? 2 : 0
-                            );
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            Button {
+                                text: root.bg-select-text;
+                                clicked => {
+                                    root.select-background();
+                                }
+                            }
+                            Button {
+                                text: root.bg-clear-text;
+                                enabled: root.has-background;
+                                clicked => {
+                                    root.clear-background();
+                                }
+                            }
+                        }
+
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            CheckBox {
+                                text: root.bg-dim-label;
+                                checked: root.bg-dim-enabled;
+                                toggled => {
+                                    root.dim-toggled(self.checked);
+                                }
+                            }
+                            Slider {
+                                min-width: 160px;
+                                horizontal-stretch: 1;
+                                minimum: 0;
+                                maximum: 100;
+                                value: root.bg-dim-percent;
+                                enabled: root.bg-dim-enabled;
+                                changed(value) => {
+                                    root.dim-changed(value);
+                                }
+                            }
+                        }
+
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            Text {
+                                text: root.log-label;
+                                color: Theme.text-1;
+                                font-size: Theme.font-size-md;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                min-width: 160px;
+                                horizontal-stretch: 1;
+                                model: root.log-level-model;
+                                current-index: root.log-level-index;
+                                // ComboBox 的 selected 回调参数是选中项文本（非索引），映射回索引
+                                selected(value) => {
+                                    root.log-level-changed(
+                                        value == root.log-level-model[1] ? 1 :
+                                        value == root.log-level-model[2] ? 2 : 0
+                                    );
+                                }
+                            }
                         }
                     }
                 }

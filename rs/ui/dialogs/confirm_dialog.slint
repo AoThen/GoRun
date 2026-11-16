@@ -28,8 +28,9 @@ export component ConfirmDialog {
             alignment: center;
 
             Rectangle {
-                width: 340px;
-                height: 280px;
+                // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
+                width: min(340px, root.width * 0.92);
+                height: min(280px, root.height * 0.92);
                 cross-axis-self-alignment: center;
                 background: Theme.bg-2;
                 border-radius: Theme.radius-lg;

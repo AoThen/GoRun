@@ -860,6 +860,8 @@ pub fn wire_handler(
                 let log_index = match cfg.extra_config.get("log_level").map(|s| s.as_str()) {
                     Some("info") => 1,
                     Some("debug") => 2,
+                    // 未设置（空）与实际生效档位一致：默认 Info（见 logger::apply_level）
+                    None | Some("") => 1,
                     _ => 0,
                 };
                 drop(st);
@@ -1497,6 +1499,8 @@ pub fn wire_handler(
                 let query = state.search_query.clone();
                 drop(state);
                 if let Some(ui) = weak_ui_confirm.upgrade() {
+                    // 条目数变化影响侧栏分类计数，需与条目列表一并刷新
+                    ui_sync::refresh_categories_ui(&ui, &state_confirm.borrow());
                     ui_sync::refresh_items_ui(&ui, &state_confirm.borrow(), &cat_id, &query);
                 }
                 // F8/4.1：删除条目后重注册条目热键

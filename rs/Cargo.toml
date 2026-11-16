@@ -27,10 +27,12 @@ i-slint-backend-testing = { version = "=1.18.1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
-# 仅用 PNG/JPEG 解码（图标缓存写 PNG；背景图读 PNG/JPG）；default 集含 exr/ravif/qoi/gif/webp 等无关格式（体积 +2~3MB）。
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# 解码用途：图标缓存写 PNG；背景图读 PNG/JPG；图标显示走 image 解码（与背景图
+# 同管线），需覆盖自定义图标选择器接受的格式（ico/bmp/png/jpg，见编辑对话框过滤器）。
+# default 集含 exr/ravif/qoi/gif/webp 等无关格式（体积 +2~3MB），故仅显式启用。
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "bmp"] }
 # 日志档位运行时可调（设置项：warn/info/debug）；编译期保留到 debug 级别宏，
-# release 下由 log::set_max_level 按设置过滤（默认 Warn）。
+# release 下由 log::set_max_level 按设置过滤（未设置默认 Info）。
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_debug"] }
 chrono = "0.4"
 pinyin = "0.10"

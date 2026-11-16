@@ -43,6 +43,12 @@ fn save_window_geometry_with(
     if cx == pos.x && cy == pos.y && cw == w && ch == h {
         return;
     }
+    // 诊断留痕：窗口尺寸/位置变化（定位"宽度无法拖动"类问题——若拖动边缘后
+    // 日志无对应变化，说明尺寸事件未到达 slint 层，需查 winit/OS 命中测试）
+    log::debug!(
+        "Window geometry change: pos ({},{}) -> ({},{}), size {}x{} -> {}x{}",
+        cx, cy, pos.x, pos.y, cw, ch, w, h
+    );
     let mut state = state.borrow_mut();
     // P1-2：窗口几何属于高频非关键写，使用 storage.save() 直接落盘，
     // 避免每次拖动/缩放触发 save_with_backup → rotate_backups 产生频繁文件复制。

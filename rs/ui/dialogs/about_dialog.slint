@@ -19,8 +19,9 @@ export component AboutDialog {
         background: #00000060;
 
         Rectangle {
-            width: 380px;
-            height: 200px;
+            // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
+            width: min(380px, root.width * 0.92);
+            height: min(200px, root.height * 0.92);
             background: Theme.bg-2;
             border-radius: Theme.radius-lg;
             border-width: 1px;

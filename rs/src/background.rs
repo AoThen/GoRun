@@ -1,6 +1,6 @@
 //! 应用背景图：解码与缩放。
 //! 方案 A：解码后最长边 2560px 等比封顶，内存封顶约 15MB（2560×1440×4），
-//! 1080p 壁纸约 8MB。解码用项目 image crate（png/jpeg），像素转入
+//! 1080p 壁纸约 8MB。解码用项目 image crate（png/jpeg/ico/bmp），像素转入
 //! SharedPixelBuffer 后由调用方以 Image::from_rgba8 包装（同 icon_cache 模式，
 //! 避免在非 UI 线程持有 slint::Image 的线程边界问题）。
 

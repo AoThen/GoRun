@@ -86,19 +86,22 @@ pub fn spawn_icon_refresh(
                     if let Some(row) = model.row_data(i) {
                         let item_id = row.id.clone();
                         if let Some(path_str) = id_to_path.get(item_id.as_str()) {
-                            let img = match slint::Image::load_from_path(std::path::Path::new(path_str)) {
-                                Ok(img) => img,
-                                Err(e) => {
-                                    // 加载失败必须留痕（此前静默降级为空图标，线上无从排查）
-                                    log::warn!("Failed to load cached icon {:?}: {}", path_str, e);
+                            // 与背景图同管线（image crate 解码 → RGBA8 → from_rgba8）：
+                            // 软件渲染器不绘制 load_from_path 产物，且其 to_rgba8 可能取不到
+                            // 像素，导致内存缓存永远无法回填、图标永久空白。
+                            let img = match crate::background::decode(*path_str) {
+                                Some(decoded) => {
+                                    if let Some(item) = id_to_item.get(item_id.as_str()) {
+                                        icon_cache.store_image(item, decoded.buffer.clone());
+                                    }
+                                    slint::Image::from_rgba8(decoded.buffer)
+                                }
+                                None => {
+                                    // 解码失败必须留痕（此前静默降级为空图标，线上无从排查）
+                                    log::warn!("Failed to decode cached icon {:?}", path_str);
                                     slint::Image::default()
                                 }
                             };
-                            if let Some(buffer) = img.to_rgba8() {
-                                if let Some(item) = id_to_item.get(item_id.as_str()) {
-                                    icon_cache.store_image(item, buffer);
-                                }
-                            }
                             let mut new_row = row;
                             new_row.icon_path = img;
                             model.set_row_data(i, new_row);
@@ -263,24 +266,25 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
                 String::new()
             };
             // 高频刷新（搜索输入/切分类）下避免对同一 PNG 反复读盘解码：
-            // 先查内存像素缓存，未命中才 load_from_path 并回填。
+            // 先查内存像素缓存，未命中才解码并回填。
             let image = if icon_path.is_empty() {
                 slint::Image::default()
             } else if let Some(buffer) = state.icon_cache.cached_image(item) {
                 slint::Image::from_rgba8(buffer)
             } else {
-                let img = match slint::Image::load_from_path(std::path::Path::new(&icon_path)) {
-                    Ok(img) => img,
-                    Err(e) => {
-                        // 加载失败留痕：缓存路径指向的文件缺失/损坏时可见（P0 排查项）
-                        log::warn!("Failed to load icon {:?}: {}", icon_path, e);
+                // 与背景图同管线（image crate 解码 → RGBA8 → from_rgba8）：
+                // 软件渲染器不绘制 load_from_path 产物，图标会永久空白。
+                match crate::background::decode(&icon_path) {
+                    Some(decoded) => {
+                        state.icon_cache.store_image(item, decoded.buffer.clone());
+                        slint::Image::from_rgba8(decoded.buffer)
+                    }
+                    None => {
+                        // 解码失败留痕：路径指向的文件缺失/损坏/格式不支持时可见（P0 排查项）
+                        log::warn!("Failed to decode icon {:?}", icon_path);
                         slint::Image::default()
                     }
-                };
-                if let Some(buffer) = img.to_rgba8() {
-                    state.icon_cache.store_image(item, buffer);
                 }
-                img
             };
             ItemModel {
                 id: item.id.clone().into(),
