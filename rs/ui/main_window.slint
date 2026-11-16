@@ -30,6 +30,9 @@ export component MainWindow inherits Window {
     // v2：汉堡菜单入口与弹层选择（单一入口语义，替代原五组菜单栏）
     in-out property <bool> menu-popup-visible: false;
     in-out property <[string]> menu-popup-items: [];
+    // 菜单内容总高（Rust 按 项数×28px + 分隔×1px + padding 8px 计算），
+    // 弹层实际高取 min(内容高, 窗口可用高)，矮窗口内滚动
+    in-out property <length> menu-popup-content-height: 600px;
     in-out property <[bool]> menu-popup-danger: [];
     callback hamburger-clicked();
     callback menu-popup-selected(index: int);
@@ -375,6 +378,9 @@ export component MainWindow inherits Window {
             visible: root.menu-popup-visible;
             x: max(8px, root.width - self.width - 8px);
             y: 80px;
+            // 限制在窗口内：超出部分弹层内滚动（设置等末尾项不再落到窗口外）
+            height: min(self.content-height, root.height - 88px);
+            content-height: root.menu-popup-content-height;
             items: root.menu-popup-items;
             menu-danger: root.menu-popup-danger;
             selected(index) => {

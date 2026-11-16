@@ -690,6 +690,13 @@ pub fn wire_handler(
         let mut danger: Vec<bool> = vec![false; n];
         danger[3] = true;
         danger[n - 1] = true;
+        // 弹层内容总高：项 28px、分隔线 1px、上下 padding 4px——供挂载处限高滚动
+        let content_h: f32 = items
+            .iter()
+            .map(|s| if s.as_str() == "-" { 1.0 } else { 28.0 })
+            .sum::<f32>()
+            + 8.0;
+        ui.set_menu_popup_content_height(content_h);
         ui.set_menu_popup_items(Rc::new(slint::VecModel::from(items)).into());
         ui.set_menu_popup_danger(Rc::new(slint::VecModel::from(danger)).into());
     });
