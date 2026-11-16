@@ -121,8 +121,12 @@ export component SettingsDialog {
                         horizontal-stretch: 1;
                         model: root.log-level-model;
                         current-index: root.log-level-index;
-                        selected(index) => {
-                            root.log-level-changed(index);
+                        // ComboBox 的 selected 回调参数是选中项文本（非索引），映射回索引
+                        selected(value) => {
+                            root.log-level-changed(
+                                value == root.log-level-model[1] ? 1 :
+                                value == root.log-level-model[2] ? 2 : 0
+                            );
                         }
                     }
                 }
