@@ -200,6 +200,37 @@ pub fn position_menu_at_cursor(ui: &MainWindow, x: f32, y: f32, item_count: usiz
     }
 }
 
+/// 热键唤醒：恢复最小化并把窗口带到前台。
+///
+/// slint `show()` 只设可见标志，不会恢复最小化，也不保证激活到前台；
+/// 对齐 C++ 版 WM_HOTKEY 行为（Window.cpp: SetForegroundWindow）。
+/// Windows 对后台进程设置前台有限制，但热键触发属"最近收到输入"，
+/// 权限窗口期内 SetForegroundWindow 可成功。
+pub fn bring_to_front(ui: &MainWindow) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            IsIconic, SetForegroundWindow, ShowWindow, SW_SHOW, SW_RESTORE,
+        };
+        if let Some(hwnd) = crate::drop_handler::try_get_hwnd(ui) {
+            unsafe {
+                let h = HWND(hwnd);
+                if IsIconic(h).as_bool() {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                } else {
+                    let _ = ShowWindow(h, SW_SHOW);
+                }
+                let _ = SetForegroundWindow(h);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = ui;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

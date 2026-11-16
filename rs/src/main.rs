@@ -365,10 +365,14 @@ fn main() {
                 let weak = ui_hk.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = weak.upgrade() {
-                        if ui.window().is_visible() {
+                        // 可见且未最小化 → 隐藏；否则（隐藏或最小化）唤醒并置前。
+                        // 最小化时 is_visible() 仍为 true，需排除，否则热键会把
+                        // 用户想唤起的窗口藏起来。
+                        if ui.window().is_visible() && !ui.window().is_minimized() {
                             let _ = ui.hide();
                         } else {
                             let _ = ui.show();
+                            geometry::bring_to_front(&ui);
                         }
                     }
                 });
