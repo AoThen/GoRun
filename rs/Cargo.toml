@@ -41,6 +41,7 @@ sha2 = "0.10"
 # SHELLEXECUTEINFOW）被其 cfg 依赖，删除会导致 unresolved import，故保留。
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.57", features = [
+    "implement",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Registry",

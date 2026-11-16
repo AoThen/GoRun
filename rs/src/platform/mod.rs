@@ -1,4 +1,4 @@
-//! 平台抽象：窗口拖放（Windows 用窗口子类化 + WM_DROPFILES）与主窗口图标设置。
+//! 平台抽象：窗口拖放（Windows：OLE IDropTarget + 鼠标跟踪子类化）与主窗口图标设置。
 
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
@@ -9,31 +9,56 @@ pub mod window_icon;
 
 pub enum DropMessage {
     Drop(Vec<PathBuf>),
-    /// 光标离开窗口（F7 自动隐藏）：WM_MOUSELEAVE。
+    /// 光标离开窗口（F7 自动隐藏）：WM_MOUSELEAVE / OLE DragLeave。
     MouseLeft,
-    /// 光标回到窗口（F7 自动隐藏）：WM_MOUSEMOVE（发过 MouseLeft 之后）。
+    /// 光标回到窗口（F7 自动隐藏）：WM_MOUSEMOVE / OLE DragEnter。
     MouseEnter,
 }
 
-/// 拖放子类化的生命周期守卫。
+/// 拖放装配的生命周期守卫。
 ///
-/// 只负责"子类化 + refdata"这对资源：必须与窗口同寿，Drop 时先
-/// `RemoveWindowSubclass` 再释放 refdata，避免回调读到已释放内存。
+/// Windows 持有必须与窗口同寿的资源：
+/// - 鼠标跟踪子类化 + refdata（F7 自动隐藏）；
+/// - OLE `IDropTarget` COM 对象（`RegisterDragDrop` 不增引用，必须保持存活到 `RevokeDragDrop`）。
+/// Drop 时先撤销 OLE 注册、再摘子类化，最后才释放 refdata/Sender，避免回调踩空。
 /// 消息接收端（Receiver）在构造时一并返回，由消费线程独占。
 pub struct DropHandler {
     hwnd: isize,
     /// 子类化 refdata：指向堆上的 `Sender`，与 `_tx` 的所有权绑定。
     refdata: *mut Sender<DropMessage>,
     _tx: Box<Sender<DropMessage>>,
+    /// OLE 拖放目标；None 表示注册失败（拖放禁用，鼠标跟踪仍有效）。
+    #[cfg(windows)]
+    _ole_target: Option<windows::Win32::System::Ole::IDropTarget>,
 }
 
 impl DropHandler {
-    /// 子类化窗口并把 `WM_DROPFILES` 路径转发到返回的 `Receiver`。
+    /// 装配拖放与鼠标跟踪，把文件路径/进出事件转发到返回的 `Receiver`。
+    #[cfg(windows)]
     pub fn new(hwnd: isize) -> (Self, std::sync::mpsc::Receiver<DropMessage>) {
         let (tx, rx) = std::sync::mpsc::channel();
         let mut tx = Box::new(tx);
         let refdata: *mut Sender<DropMessage> = &mut *tx;
-        dragdrop::setup_dragdrop(hwnd, refdata as usize);
+        dragdrop::setup_mouse_tracking(hwnd, refdata as usize);
+        let ole_target = dragdrop::register_ole_drop(hwnd, std::sync::Arc::new(tx.clone()));
+        (
+            DropHandler {
+                hwnd,
+                refdata,
+                _tx: tx,
+                _ole_target: ole_target,
+            },
+            rx,
+        )
+    }
+
+    /// 非 Windows：仅保留统一的装配入口，无拖放能力。
+    #[cfg(not(windows))]
+    pub fn new(hwnd: isize) -> (Self, std::sync::mpsc::Receiver<DropMessage>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut tx = Box::new(tx);
+        let refdata: *mut Sender<DropMessage> = &mut *tx;
+        dragdrop::setup_mouse_tracking(hwnd, refdata as usize);
         (
             DropHandler {
                 hwnd,
@@ -47,8 +72,13 @@ impl DropHandler {
 
 impl Drop for DropHandler {
     fn drop(&mut self) {
-        // P0：顺序不可颠倒 —— 先摘子类化，回调不再可能读到 refdata
-        dragdrop::remove_dragdrop(self.hwnd);
+        // P0：顺序不可颠倒 —— 先撤 OLE 注册与子类化，回调不再可能读到已释放资源
+        dragdrop::unregister_ole_drop(self.hwnd);
+        dragdrop::remove_mouse_tracking(self.hwnd);
+        #[cfg(windows)]
+        {
+            self._ole_target = None;
+        }
         debug_assert_eq!(
             self.refdata,
             &*self._tx as *const Sender<DropMessage> as *mut Sender<DropMessage>
@@ -57,7 +87,7 @@ impl Drop for DropHandler {
 }
 
 // refdata 指向堆分配，且只在主线程（窗口消息循环）读写；
-// 标记 Send 以便经 AppState 传递。
+// COM 对象由系统在窗口线程回调。标记 Send 以便经 AppState 传递。
 unsafe impl Send for DropHandler {}
 
 /// 安装拖放，返回 (生命周期守卫, 消息接收端)。
