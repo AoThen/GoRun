@@ -98,10 +98,10 @@ cargo test
 |-----|------|------|
 | slint | 1.18.1 | UI 框架 |
 | serde / serde_json | 1.x | JSON 序列化 |
-| dirs | 5.x | 系统目录 |
+| dirs | 7.x | 系统目录 |
 | image | 0.25 | 图标处理 |
 | pinyin | 0.10 | 中文拼音搜索 |
-| windows | 0.57 | Windows API（仅 Windows 目标） |
+| windows | 0.62 | Windows API（仅 Windows 目标） |
 
 ## 项目结构
 

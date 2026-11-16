@@ -119,7 +119,7 @@ struct OleDropTarget {
 }
 
 #[cfg(windows)]
-// 0.57 implement 宏约定：直接为原 struct 实现 _Impl trait（无 _Impl 包装类型）
+// implement 宏约定（0.57+，0.62 起宏内置无需 feature）：直接为原 struct 实现 _Impl trait（无 _Impl 包装类型）
 impl IDropTarget_Impl for OleDropTarget {
     fn DragEnter(
         &self,

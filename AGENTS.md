@@ -243,13 +243,13 @@ cargo test
 | slint | 1.18.1 | UI 框架（software 渲染器） |
 | serde | 1.x | 序列化 |
 | serde_json | 1.x | JSON 解析 |
-| dirs | 5.x | 系统目录 |
+| dirs | 7.x | 系统目录 |
 | image | 0.25 | 图像处理 |
-| log | 0.4 | 日志（运行时档位可调：Warn 默认/Info/Debug，设置项 `log_level`） |
+| log | 0.4 | 日志（运行时档位可调：Debug 默认/Info/Warn，设置项 `log_level`） |
 | chrono | 0.4 | 日期时间 |
 | pinyin | 0.10 | 中文拼音转换（搜索） |
 | raw-window-handle | 0.6 | 窗口句柄 |
-| windows | 0.57 | Windows API 绑定（含托盘实现） |
+| windows | 0.62 | Windows API 绑定（含托盘实现） |
 | i-slint-backend-testing | 1.18.1 | GUI 集成测试后端（可选，backend-testing feature） |
 
 ---
