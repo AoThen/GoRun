@@ -21,16 +21,19 @@ export component ConfirmDialog {
         height: 100%;
         background: #00000060;
 
-        Rectangle {
-            width: 340px;
-            min-height: 160px;
-            background: Theme.bg-2;
-            border-radius: Theme.radius-lg;
-            border-width: 1px;
-            border-color: Theme.stroke-1;
+        // 垂直居中容器：卡片高度由内容自适应撑起（修复长消息溢出卡片、
+        // 与背景内容视觉堆叠的问题；短消息仍受 min-height 兜底）。
+        VerticalLayout {
+            alignment: center;
 
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
+            Rectangle {
+                width: 340px;
+                min-height: 160px;
+                cross-axis-self-alignment: center;
+                background: Theme.bg-2;
+                border-radius: Theme.radius-lg;
+                border-width: 1px;
+                border-color: Theme.stroke-1;
 
             VerticalBox {
                 padding: 16px;
@@ -82,6 +85,7 @@ export component ConfirmDialog {
                         }
                     }
                 }
+            }
             }
         }
     }
