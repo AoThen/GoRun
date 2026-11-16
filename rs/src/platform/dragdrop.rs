@@ -27,10 +27,11 @@ use windows::Win32::System::Ole::{
     RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop, CF_HDROP, DROPEFFECT_COPY, IDropTarget,
     IDropTarget_Impl,
 };
+// grfkeystate 参数类型 MODIFIERKEYS_FLAGS 位于 SystemServices（0.57 实签）。
 #[cfg(windows)]
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    TrackMouseEvent, MODIFIERKEYS_FLAGS, TRACKMOUSEEVENT, TME_LEAVE,
-};
+use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
+#[cfg(windows)]
+use windows::Win32::UI::Input::KeyboardAndMouse::{TrackMouseEvent, TRACKMOUSEEVENT, TME_LEAVE};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{DefSubclassProc, DragQueryFileW, HDROP, RemoveWindowSubclass};
 #[cfg(windows)]
