@@ -921,4 +921,108 @@ mod edge_tests {
         assert!(storage.load().is_none(), "损坏 JSON 应返回 None");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn test_save_with_backup_creates_bak1() {
+        let dir = std::env::temp_dir().join(format!(
+            "gorun_backup_test_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let path_str = path.to_string_lossy().to_string();
+        let storage = Storage::new(path_str.clone());
+
+        let config = AppConfig::default();
+        // 先建立主配置，再次保存时才轮转备份（首次保存无旧配置可备份）
+        assert!(storage.save(&config));
+        assert!(storage.save_with_backup(&config));
+
+        let bak1 = format!("{}.bak1", path_str);
+        assert!(Path::new(&bak1).exists(), "save_with_backup 应创建 .bak1");
+        // 主配置仍可加载
+        assert!(storage.load().is_some());
+        // 备份本身也应是合法配置
+        let bak_storage = Storage::new(bak1.clone());
+        assert!(bak_storage.load().is_some());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_load_from_backup_restores_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "gorun_backup_restore_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let path_str = path.to_string_lossy().to_string();
+        let storage = Storage::new(path_str.clone());
+
+        let config = AppConfig::default();
+        // 先建立主配置，再保存以触发备份轮转
+        assert!(storage.save(&config));
+        assert!(storage.save_with_backup(&config));
+
+        // 模拟主配置损坏：删除主文件，仅剩 .bak1
+        std::fs::remove_file(&path).unwrap();
+        let restored = storage.load_from_backup();
+        assert!(restored.is_some(), "应从 .bak1 恢复配置");
+        // 恢复后主配置被重新写入（save 在 load_from_backup 内调用）
+        assert!(path.exists(), "恢复后主配置应重建");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_load_from_backup_no_backup_returns_none() {
+        let dir = std::env::temp_dir().join(format!(
+            "gorun_backup_none_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let storage = Storage::new(path.to_string_lossy().to_string());
+
+        assert!(
+            storage.load_from_backup().is_none(),
+            "无备份文件应返回 None"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_save_with_backup_cleans_legacy_bak_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "gorun_backup_legacy_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let path_str = path.to_string_lossy().to_string();
+
+        // 预置历史 bak2/bak3 垃圾
+        std::fs::write(format!("{}.bak2", path_str), b"old").unwrap();
+        std::fs::write(format!("{}.bak3", path_str), b"old").unwrap();
+
+        let storage = Storage::new(path_str.clone());
+        let config = AppConfig::default();
+        // 先建立主配置，再保存以触发备份轮转与 bak2/bak3 清理
+        assert!(storage.save(&config));
+        assert!(storage.save_with_backup(&config));
+
+        assert!(
+            !Path::new(&format!("{}.bak2", path_str)).exists(),
+            "历史 bak2 应被清理"
+        );
+        assert!(
+            !Path::new(&format!("{}.bak3", path_str)).exists(),
+            "历史 bak3 应被清理"
+        );
+        assert!(Path::new(&format!("{}.bak1", path_str)).exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
