@@ -724,7 +724,7 @@ pub fn wire_handler(
             items
         };
         // 危险项：删除当前分类、退出（由 action 映射生成，避免索引错位）
-        let danger: Vec<bool> = menu_actions
+        let danger: Vec<bool> = menu_actions_hb
             .borrow()
             .iter()
             .map(|a| matches!(a, Some(MenuAction::DelCategory) | Some(MenuAction::Exit)))
