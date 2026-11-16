@@ -371,6 +371,8 @@ export component MainWindow inherits Window {
             visible: root.context-menu-visible;
             x: root.context-menu-x;
             y: root.context-menu-y;
+            // 限制在窗口内：锚点下方空间不足时弹层内滚动（对齐 MenuPopup）
+            height: min(self.content-height, max(0px, root.height - root.context-menu-y - 8px));
             menu-items: root.context-menu-items;
             menu-danger: root.context-menu-danger;
             selected(index) => {

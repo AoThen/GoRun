@@ -1,14 +1,19 @@
-import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 // 右键菜单（v2）：项高 28px；items 中 "-" 渲染 1px 分隔线；
 // menu-danger 平行数组标记危险项（danger 色文字）；弹层视觉 bg-2 + stroke-1 描边（阴影降级）。
+// 高度取内容实际高（ScrollView viewport-height），挂载处再 clamp 到锚点下方窗口可用高——
+// 矮窗口内菜单项过多时弹层内滚动，不再被窗口底边裁切（对齐 MenuPopup 处理）。
 export component ContextMenu {
     in property <[string]> menu-items;
     in property <[bool]> menu-danger: [];
+    // 内容实际高（由 ScrollView 按内容自动计算），供挂载处 clamp
+    out property <length> content-height: sv.viewport-height;
     callback selected(index: int);
 
     width: 160px;
+    height: min(self.content-height, 1000px);
 
     Rectangle {
         background: Theme.bg-2;
@@ -18,46 +23,51 @@ export component ContextMenu {
         width: 100%;
         height: 100%;
 
-        VerticalBox {
-            spacing: 0px;
-            padding: 4px;
+        sv := ScrollView {
             width: 100%;
+            height: 100%;
 
-            for item[index] in root.menu-items: Rectangle {
-                // 分隔线（v2）：item == "-" 时渲染 1px stroke-1；否则 28px 菜单项
-                height: item == "-" ? 1px : 28px;
+            VerticalBox {
+                spacing: 0px;
+                padding: 4px;
                 width: 100%;
-                background: item == "-" ? Theme.stroke-1 : (menu-touch.has-hover
-                    ? ((index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger-subtle : Theme.hover)
-                    : transparent);
 
-                menu-touch := TouchArea {
-                    // 分隔线不响应点击
-                    visible: item != "-";
-                    clicked => { root.selected(index); }
+                for item[index] in root.menu-items: Rectangle {
+                    // 分隔线（v2）：item == "-" 时渲染 1px stroke-1；否则 28px 菜单项
+                    height: item == "-" ? 1px : 28px;
+                    width: 100%;
+                    background: item == "-" ? Theme.stroke-1 : (menu-touch.has-hover
+                        ? ((index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger-subtle : Theme.hover)
+                        : transparent);
 
-                    Rectangle {
+                    menu-touch := TouchArea {
+                        // 分隔线不响应点击
                         visible: item != "-";
-                        width: 100%;
-                        height: 100%;
-                        background: transparent;
+                        clicked => { root.selected(index); }
 
-                        HorizontalBox {
-                            spacing: 0;
-                            padding: 0;
+                        Rectangle {
+                            visible: item != "-";
+                            width: 100%;
+                            height: 100%;
+                            background: transparent;
 
-                            Rectangle {
-                                width: 12px;
-                                height: 100%;
-                            }
+                            HorizontalBox {
+                                spacing: 0;
+                                padding: 0;
 
-                            Text {
-                                text: item;
-                                font-size: Theme.font-size-md;
-                                color: (index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger : Theme.text-1;
-                                overflow: elide;
-                                vertical-alignment: center;
-                                horizontal-stretch: 1;
+                                Rectangle {
+                                    width: 12px;
+                                    height: 100%;
+                                }
+
+                                Text {
+                                    text: item;
+                                    font-size: Theme.font-size-md;
+                                    color: (index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger : Theme.text-1;
+                                    overflow: elide;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
                             }
                         }
                     }
