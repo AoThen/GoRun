@@ -1049,4 +1049,85 @@ mod tests {
         assert!(m.clear_cached_icon("a"));
         assert!(m.config.data.items[0].cached_icon.is_empty());
     }
+
+    #[test]
+    fn test_read_url_from_shortcut_parses_url_line() {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_url_test_{}.url",
+            std::process::id()
+        ));
+        std::fs::write(&path, "[InternetShortcut]\nURL=https://example.com/\n").unwrap();
+        assert_eq!(
+            read_url_from_internet_shortcut(&path).as_deref(),
+            Some("https://example.com/")
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_case_insensitive_key() {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_url_lower_{}.url",
+            std::process::id()
+        ));
+        std::fs::write(&path, "url=ftp://host/file\n").unwrap();
+        assert_eq!(
+            read_url_from_internet_shortcut(&path).as_deref(),
+            Some("ftp://host/file")
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_missing_file_returns_none() {
+        let path = std::env::temp_dir().join("gorun_url_definitely_missing.url");
+        assert!(read_url_from_internet_shortcut(&path).is_none());
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_no_url_line_returns_none() {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_url_nourl_{}.url",
+            std::process::id()
+        ));
+        std::fs::write(&path, "[InternetShortcut]\nIconFile=x.ico\n").unwrap();
+        assert!(read_url_from_internet_shortcut(&path).is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_empty_url_returns_none() {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_url_empty_{}.url",
+            std::process::id()
+        ));
+        std::fs::write(&path, "URL=\n").unwrap();
+        assert!(read_url_from_internet_shortcut(&path).is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_normalize_drop_target_uses_url_for_internet_shortcut() {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_norm_{}.url",
+            std::process::id()
+        ));
+        std::fs::write(&path, "URL=https://example.com/page\n").unwrap();
+        assert_eq!(
+            normalize_drop_target(&path),
+            "https://example.com/page"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_normalize_drop_target_keeps_plain_path() {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_plain_{}.exe",
+            std::process::id()
+        ));
+        // 非 .url 文件：原样返回路径（无需真实存在）
+        let out = normalize_drop_target(&path);
+        assert_eq!(out, path.to_string_lossy().to_string());
+    }
 }
