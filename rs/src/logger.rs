@@ -153,13 +153,13 @@ pub fn init(debug_to_console: bool) -> Result<(), Box<dyn std::error::Error>> {
 
 /// 运行时日志档位（设置项）：warn=最少 / info=标准 / debug=调试。
 /// 编译期 feature 已放宽到 release_max_level_debug，运行时按本设置过滤，
-/// 修改后立即生效（无需重启）。未设置（空）默认"标准"，便于首启排查问题；
+/// 修改后立即生效。未设置（空）默认"调试"，便于首启排查问题；
 /// 显式 warn 与未知值保守回退最少。
 pub fn apply_level(level: &str) {
     let filter = match level {
         "debug" => LevelFilter::Debug,
         "info" => LevelFilter::Info,
-        "" => LevelFilter::Info,
+        "" => LevelFilter::Debug,
         _ => LevelFilter::Warn,
     };
     log::set_max_level(filter);
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_apply_level_mapping() {
-        // 三档映射 + 未设置默认 Info + 未知值回退 Warn；全局 max_level 即时切换
+        // 三档映射 + 未设置默认 Debug + 未知值回退 Warn；全局 max_level 即时切换
         apply_level("debug");
         assert_eq!(log::max_level(), LevelFilter::Debug);
         apply_level("info");
@@ -221,7 +221,7 @@ mod tests {
         apply_level("nonsense");
         assert_eq!(log::max_level(), LevelFilter::Warn);
         apply_level("");
-        assert_eq!(log::max_level(), LevelFilter::Info);
+        assert_eq!(log::max_level(), LevelFilter::Debug);
         // 还原，避免影响其他依赖全局级别的测试
         apply_level("debug");
     }

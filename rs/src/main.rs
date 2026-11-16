@@ -146,7 +146,7 @@ fn main() {
         external_blocked = true;
     }
 
-    // 日志档位（设置项）：未设置默认标准（Info），可选最少 Warn/调试 Debug，运行时即时生效
+    // 日志档位（设置项）：未设置默认调试（Debug），可选标准 Info/最少 Warn，运行时即时生效
     let log_level = app_config
         .extra_config
         .get("log_level")

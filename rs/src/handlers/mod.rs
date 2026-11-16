@@ -860,8 +860,8 @@ pub fn wire_handler(
                 let log_index = match cfg.extra_config.get("log_level").map(|s| s.as_str()) {
                     Some("info") => 1,
                     Some("debug") => 2,
-                    // 未设置（空）与实际生效档位一致：默认 Info（见 logger::apply_level）
-                    None | Some("") => 1,
+                    // 未设置（空）与实际生效档位一致：默认 Debug（见 logger::apply_level）
+                    None | Some("") => 2,
                     _ => 0,
                 };
                 drop(st);
