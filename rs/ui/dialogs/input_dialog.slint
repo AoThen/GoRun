@@ -32,7 +32,7 @@ export component InputDialog {
         Rectangle {
             // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
             width: min(360px, root.width * 0.92);
-            height: min(180px, root.height * 0.92);
+            height: min(max(self.preferred-height, 160px), root.height * 0.92);
             background: Theme.bg-2;
             border-radius: Theme.radius-lg;
             border-width: 1px;
@@ -42,8 +42,8 @@ export component InputDialog {
             y: (parent.height - self.height) / 2;
 
             VerticalBox {
-                // spacing 10px：error 提示可见时内容 175.9px ≤ 180px 可用区（180-32 不成立，
-                // 原间距 12px 时 181.9px 会裁切底部按钮 2px）
+                // spacing 10px：紧凑起见（卡片高度现已贴合内容，不会裁切按钮）；
+                // 历史上 180px 固定高帽下 12px 间距曾致底部按钮被裁 2px。
                 padding: 16px;
                 spacing: 10px;
 

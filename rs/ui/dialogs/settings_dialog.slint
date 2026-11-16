@@ -36,8 +36,10 @@ export component SettingsDialog {
 
         Rectangle {
             // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
-            width: min(420px, root.width * 0.92);
-            height: min(310px, root.height * 0.92);
+            width: min(560px, root.width * 0.92);
+            // 高度贴合内容（preferred），矮窗口才收缩到窗口 92% 并由 ScrollView 滚动；
+            // 160px 地板防 preferred 异常为 0。
+            height: min(max(self.preferred-height, 160px), root.height * 0.92);
             background: Theme.bg-2;
             border-radius: Theme.radius-lg;
             border-width: 1px;

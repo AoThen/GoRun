@@ -21,16 +21,16 @@ export component ConfirmDialog {
         height: 100%;
         background: #00000060;
 
-        // 垂直居中容器：卡片固定高度，消息区用 ScrollView 滚动——
+        // 垂直居中容器：卡片高度贴合内容，消息区用 ScrollView 滚动——
         // 长消息（如外部配置目标列表）不再把卡片撑出屏幕/与背景堆叠，
-        // 短消息时留白但布局稳定。
+        // 矮窗口时卡片收缩到窗口 92% 内滚动显示。
         VerticalLayout {
             alignment: center;
 
             Rectangle {
                 // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
                 width: min(340px, root.width * 0.92);
-                height: min(280px, root.height * 0.92);
+                height: min(max(self.preferred-height, 160px), root.height * 0.92);
                 cross-axis-self-alignment: center;
                 background: Theme.bg-2;
                 border-radius: Theme.radius-lg;
