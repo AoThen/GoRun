@@ -344,7 +344,6 @@ fn get_default_icon() -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> 
 
 #[cfg(windows)]
 fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path: &Path) -> bool {
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::{
         CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetObjectW, ReleaseDC,
         BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetDIBits,
@@ -360,10 +359,10 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
 
         let mut bmp = BITMAP::default();
         let bmp_size = std::mem::size_of::<BITMAP>() as i32;
-        if GetObjectW(icon_info.hbmColor, bmp_size, Some(&mut bmp as *mut BITMAP as *mut std::ffi::c_void)) == 0 {
+        if GetObjectW(icon_info.hbmColor.into(), bmp_size, Some(&mut bmp as *mut BITMAP as *mut std::ffi::c_void)) == 0 {
             log::warn!("GetObjectW failed for icon bitmap");
-            let _ = DeleteObject(icon_info.hbmColor);
-            let _ = DeleteObject(icon_info.hbmMask);
+            let _ = DeleteObject(icon_info.hbmColor.into());
+            let _ = DeleteObject(icon_info.hbmMask.into());
             return false;
         }
 
@@ -372,13 +371,13 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
 
         if width <= 0 || height <= 0 || width > 256 || height > 256 {
             log::warn!("Invalid icon dimensions: {}x{}", width, height);
-            let _ = DeleteObject(icon_info.hbmColor);
-            let _ = DeleteObject(icon_info.hbmMask);
+            let _ = DeleteObject(icon_info.hbmColor.into());
+            let _ = DeleteObject(icon_info.hbmMask.into());
             return false;
         }
 
-        let hdc_screen = GetDC(HWND(0));
-        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        let hdc_screen = GetDC(None);
+        let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
 
         let mut bmi = BITMAPINFO::default();
         bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
@@ -443,9 +442,9 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
         }
 
         let _ = DeleteDC(hdc_mem);
-        let _ = ReleaseDC(HWND(0), hdc_screen);
-        let _ = DeleteObject(icon_info.hbmColor);
-        let _ = DeleteObject(icon_info.hbmMask);
+        let _ = ReleaseDC(None, hdc_screen);
+        let _ = DeleteObject(icon_info.hbmColor.into());
+        let _ = DeleteObject(icon_info.hbmMask.into());
 
         if lines == 0 {
             log::warn!("GetDIBits failed");

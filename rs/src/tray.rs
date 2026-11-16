@@ -117,6 +117,14 @@ impl TrayGlobals {
     }
 }
 
+// SAFETY：windows 0.62 起句柄类型（HWND/HICON，裸指针内含）不再自动实现
+// Send/Sync。托盘窗口/图标句柄仅主线程创建，跨线程只读共享（wndproc 与
+// 弹出菜单读取），Win32 句柄本身线程无关，共享安全。
+#[cfg(windows)]
+unsafe impl Send for TrayGlobals {}
+#[cfg(windows)]
+unsafe impl Sync for TrayGlobals {}
+
 #[cfg(windows)]
 static TRAY: OnceLock<TrayGlobals> = OnceLock::new();
 
@@ -203,7 +211,7 @@ impl TrayIcon {
                 let _ = tray().taskbar_created_msg.set(taskbar_msg);
             }
 
-            let hwnd = CreateWindowExW(
+            let hwnd = match CreateWindowExW(
                 Default::default(),
                 class_name,
                 windows::core::w!(""),
@@ -214,27 +222,28 @@ impl TrayIcon {
                 CW_USEDEFAULT,
                 None,
                 None,
-                h_instance,
+                Some(HINSTANCE(h_instance.0)),
                 None,
-            );
-
-            if hwnd.0 == 0 {
-                warn!("TrayIcon: failed to create message window");
-                return (
-                    TrayIcon {
-                        hwnd,
-                        sender: tx,
-                    },
-                    rx,
-                );
-            }
+            ) {
+                Ok(hwnd) => hwnd,
+                Err(_) => {
+                    warn!("TrayIcon: failed to create message window");
+                    return (
+                        TrayIcon {
+                            hwnd: HWND::default(),
+                            sender: tx,
+                        },
+                        rx,
+                    );
+                }
+            };
 
             let _ = tray().hwnd.set(hwnd);
 
             // 优先用 exe 嵌入的应用图标（build.rs 嵌 app.ico，资源 ID 1），失败回退系统默认。
             // LR_SHARED：共享句柄与进程同生命周期，无需 DestroyIcon。
             let h_icon = LoadImageW(
-                HINSTANCE(h_instance.0),
+                Some(HINSTANCE(h_instance.0)),
                 windows::core::PCWSTR(1 as *const u16),
                 IMAGE_ICON,
                 0,
@@ -362,7 +371,7 @@ fn popup_tray_menu(hwnd: HWND, sender: &Sender<TrayMessage>) {
             TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON,
             pos.x,
             pos.y,
-            0,
+            Some(0),
             hwnd,
             None,
         );
@@ -404,7 +413,7 @@ fn is_autostart_enabled() -> bool {
     unsafe {
         let mut key = HKEY::default();
         let key_w: Vec<u16> = AUTOSTART_KEY.encode_utf16().chain(std::iter::once(0)).collect();
-        if RegOpenKeyExW(HKEY_CURRENT_USER, windows::core::PCWSTR(key_w.as_ptr()), 0, KEY_READ, &mut key).is_err() {
+        if RegOpenKeyExW(HKEY_CURRENT_USER, windows::core::PCWSTR(key_w.as_ptr()), Some(0), KEY_READ, &mut key).is_err() {
             return false;
         }
         let value_w: Vec<u16> = AUTOSTART_VALUE.encode_utf16().chain(std::iter::once(0)).collect();
@@ -433,7 +442,7 @@ pub fn toggle_autostart() -> bool {
         if RegCreateKeyExW(
             HKEY_CURRENT_USER,
             windows::core::PCWSTR(key_w.as_ptr()),
-            0,
+            Some(0),
             None,
             REG_OPTION_NON_VOLATILE,
             KEY_WRITE,
@@ -463,7 +472,7 @@ pub fn toggle_autostart() -> bool {
             let _ = RegSetValueExW(
                 key,
                 windows::core::PCWSTR(value_w.as_ptr()),
-                0,
+                Some(0),
                 REG_SZ,
                 Some(&data),
             );

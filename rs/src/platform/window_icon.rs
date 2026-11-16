@@ -18,7 +18,7 @@ fn apply_impl(hwnd: isize) {
         LR_DEFAULTSIZE, LR_SHARED, SM_CXICON, SM_CXSMICON, SM_CYICON, SM_CYSMICON, WM_SETICON,
     };
 
-    let hwnd = HWND(hwnd);
+    let hwnd = HWND(hwnd as *mut std::ffi::c_void);
     let Ok(hmodule) = (unsafe { GetModuleHandleW(None) }) else {
         log::warn!("Failed to get module handle; title bar icon not set");
         return;
@@ -29,7 +29,7 @@ fn apply_impl(hwnd: isize) {
     let load_icon = |cx: i32, cy: i32| -> Option<HICON> {
         unsafe {
             LoadImageW(
-                hinstance,
+                Some(hinstance),
                 windows::core::PCWSTR(1 as *const u16),
                 IMAGE_ICON,
                 cx,
@@ -45,8 +45,8 @@ fn apply_impl(hwnd: isize) {
             SendMessageW(
                 hwnd,
                 WM_SETICON,
-                WPARAM(ICON_BIG as usize),
-                LPARAM(big.0 as isize),
+                Some(WPARAM(ICON_BIG as usize)),
+                Some(LPARAM(big.0 as isize)),
             );
         } else {
             log::warn!("Failed to load app icon (big); title bar icon not set");
@@ -56,8 +56,8 @@ fn apply_impl(hwnd: isize) {
             SendMessageW(
                 hwnd,
                 WM_SETICON,
-                WPARAM(ICON_SMALL as usize),
-                LPARAM(small.0 as isize),
+                Some(WPARAM(ICON_SMALL as usize)),
+                Some(LPARAM(small.0 as isize)),
             );
         } else {
             log::warn!("Failed to load app icon (small); title bar icon not set");

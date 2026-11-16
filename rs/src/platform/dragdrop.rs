@@ -87,14 +87,14 @@ pub fn setup_mouse_tracking(hwnd: isize, sender_ptr: usize) {
     use windows::Win32::UI::Shell::SetWindowSubclass;
 
     unsafe {
-        let hwnd = HWND(hwnd);
+        let hwnd = HWND(hwnd as *mut std::ffi::c_void);
         // 已装过则先摘除，避免重复子类化叠加（幂等）。
         let _ = RemoveWindowSubclass(hwnd, Some(mouse_subclass_proc), 0);
         let ok = SetWindowSubclass(hwnd, Some(mouse_subclass_proc), 0, sender_ptr);
         if ok.as_bool() {
-            log::debug!("Mouse tracking subclass installed on hwnd={}", hwnd.0);
+            log::debug!("Mouse tracking subclass installed on hwnd={}", hwnd.0 as usize);
         } else {
-            log::warn!("SetWindowSubclass failed for hwnd={}", hwnd.0);
+            log::warn!("SetWindowSubclass failed for hwnd={}", hwnd.0 as usize);
         }
     }
 }
@@ -103,7 +103,7 @@ pub fn setup_mouse_tracking(hwnd: isize, sender_ptr: usize) {
 #[cfg(windows)]
 pub fn remove_mouse_tracking(hwnd: isize) {
     unsafe {
-        let result = RemoveWindowSubclass(HWND(hwnd), Some(mouse_subclass_proc), 0);
+        let result = RemoveWindowSubclass(HWND(hwnd as *mut std::ffi::c_void), Some(mouse_subclass_proc), 0);
         if !result.as_bool() {
             log::debug!("RemoveWindowSubclass failed for hwnd={}", hwnd);
         }
@@ -119,11 +119,12 @@ struct OleDropTarget {
 }
 
 #[cfg(windows)]
-// implement 宏约定（0.57+，0.62 起宏内置无需 feature）：直接为原 struct 实现 _Impl trait（无 _Impl 包装类型）
-impl IDropTarget_Impl for OleDropTarget {
+// implement 宏约定（0.62）：宏生成 _Impl 包装类型（Deref 回原 struct），
+// trait 需为包装类型实现，字段经 Deref 直接 self.<field> 访问。
+impl IDropTarget_Impl for OleDropTarget_Impl {
     fn DragEnter(
         &self,
-        _pdataobj: Option<&IDataObject>,
+        _pdataobj: windows::core::Ref<'_, IDataObject>,
         _grfkeystate: MODIFIERKEYS_FLAGS,
         _pt: &POINTL,
         pdweffect: *mut windows::Win32::System::Ole::DROPEFFECT,
@@ -156,7 +157,7 @@ impl IDropTarget_Impl for OleDropTarget {
 
     fn Drop(
         &self,
-        pdataobj: Option<&IDataObject>,
+        pdataobj: windows::core::Ref<'_, IDataObject>,
         _grfkeystate: MODIFIERKEYS_FLAGS,
         _pt: &POINTL,
         pdweffect: *mut windows::Win32::System::Ole::DROPEFFECT,
@@ -164,7 +165,7 @@ impl IDropTarget_Impl for OleDropTarget {
         if !pdweffect.is_null() {
             unsafe { *pdweffect = DROPEFFECT_COPY };
         }
-        if let Some(data) = pdataobj {
+        if let Some(data) = pdataobj.as_ref() {
             let fmt = FORMATETC {
                 cfFormat: CF_HDROP.0,
                 dwAspect: DVASPECT_CONTENT.0,
@@ -177,7 +178,7 @@ impl IDropTarget_Impl for OleDropTarget {
             unsafe {
                 match data.GetData(&fmt) {
                     Ok(mut medium) => {
-                        let hdrop = HDROP(medium.u.hGlobal.0 as isize);
+                        let hdrop = HDROP(medium.u.hGlobal.0);
                         let file_count = DragQueryFileW(hdrop, u32::MAX, None);
                         let mut paths = Vec::new();
                         for i in 0..file_count {
@@ -213,9 +214,9 @@ pub fn register_ole_drop(
 ) -> Option<IDropTarget> {
     unsafe {
         // 幂等：先撤销旧注册再注册
-        let _ = RevokeDragDrop(HWND(hwnd));
+        let _ = RevokeDragDrop(HWND(hwnd as *mut std::ffi::c_void));
         let target: IDropTarget = OleDropTarget { sender }.into();
-        match RegisterDragDrop(HWND(hwnd), &target) {
+        match RegisterDragDrop(HWND(hwnd as *mut std::ffi::c_void), &target) {
             Ok(()) => {
                 log::debug!("OLE drop target registered on hwnd={}", hwnd);
                 Some(target)
@@ -232,7 +233,7 @@ pub fn register_ole_drop(
 #[cfg(windows)]
 pub fn unregister_ole_drop(hwnd: isize) {
     unsafe {
-        if let Err(e) = RevokeDragDrop(HWND(hwnd)) {
+        if let Err(e) = RevokeDragDrop(HWND(hwnd as *mut std::ffi::c_void)) {
             log::debug!("RevokeDragDrop failed for hwnd={}: {}", hwnd, e);
         }
     }

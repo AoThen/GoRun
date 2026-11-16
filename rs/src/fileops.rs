@@ -134,7 +134,6 @@ pub fn open_file_location(path: &str) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::Path;
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
 
@@ -172,17 +171,17 @@ pub fn open_file_location(path: &str) {
 
     unsafe {
         let result = ShellExecuteW(
-            HWND::default(),
+            None,
             windows::core::w!("open"),
             windows::core::w!("explorer"),
             windows::core::PCWSTR(params.as_ptr()),
             windows::core::PCWSTR(std::ptr::null()),
             SW_SHOW,
         );
-        if result.0 <= 32 {
+        if (result.0 as usize) <= 32 {
             log::error!(
                 "Failed to open file location, error code: {}",
-                result.0
+                result.0 as usize
             );
         } else {
             log::info!("Opened file location: {}", target);
@@ -205,7 +204,6 @@ pub fn open_folder(path: &str) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::Path;
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
 
@@ -235,15 +233,15 @@ pub fn open_folder(path: &str) {
 
     unsafe {
         let result = ShellExecuteW(
-            HWND::default(),
+            None,
             windows::core::w!("open"),
             windows::core::w!("explorer"),
             windows::core::PCWSTR(params.as_ptr()),
             windows::core::PCWSTR(std::ptr::null()),
             SW_SHOW,
         );
-        if result.0 <= 32 {
-            log::error!("Failed to open folder, error code: {}", result.0);
+        if (result.0 as usize) <= 32 {
+            log::error!("Failed to open folder, error code: {}", result.0 as usize);
         } else {
             log::info!("Opened folder: {}", target);
         }

@@ -198,7 +198,7 @@ impl HotkeyManager {
             .spawn(move || {
                 #[cfg(windows)]
                 unsafe {
-                    use windows::Win32::Foundation::{FALSE, TRUE};
+                    use windows::Win32::Foundation::TRUE;
                     use windows::Win32::UI::Input::KeyboardAndMouse::{
                         RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS,
                     };
@@ -232,7 +232,7 @@ impl HotkeyManager {
                         // 不传事件句柄（None），唤醒掩码 QS_ALLINPUT；官方语义：
                         // 有匹配消息返回 WAIT_OBJECT_0(0)，超时返回 WAIT_TIMEOUT(258)，
                         // 失败返回 WAIT_FAILED(0xFFFFFFFF)。
-                        let waited = MsgWaitForMultipleObjects(None, FALSE, 500, QS_ALLINPUT);
+                        let waited = MsgWaitForMultipleObjects(None, false, 500, QS_ALLINPUT);
                         // windows crate 返回 WAIT_EVENT(pub u32)；用字面量避免
                         // 常量类型不一致（WAIT_TIMEOUT=258, WAIT_FAILED=0xFFFFFFFF）。
                         match waited.0 {
@@ -407,7 +407,7 @@ impl ItemHotkeyManager {
                 #[cfg(windows)]
                 unsafe {
                     use std::collections::HashMap;
-                    use windows::Win32::Foundation::{FALSE, TRUE};
+                    use windows::Win32::Foundation::TRUE;
                     use windows::Win32::UI::Input::KeyboardAndMouse::{
                         RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS,
                     };
@@ -464,7 +464,7 @@ impl ItemHotkeyManager {
                             log::info!("ItemHotkeyManager: pump thread received kill signal");
                             break;
                         }
-                        let waited = MsgWaitForMultipleObjects(None, FALSE, 500, QS_ALLINPUT);
+                        let waited = MsgWaitForMultipleObjects(None, false, 500, QS_ALLINPUT);
                         match waited.0 {
                             258 => {}
                             0xFFFF_FFFF => {

@@ -221,7 +221,7 @@ pub fn bring_to_front(ui: &MainWindow) {
         };
         if let Some(hwnd) = crate::drop_handler::try_get_hwnd(ui) {
             unsafe {
-                let h = HWND(hwnd);
+                let h = HWND(hwnd as *mut std::ffi::c_void);
                 if IsIconic(h).as_bool() {
                     let _ = ShowWindow(h, SW_RESTORE);
                 } else {
