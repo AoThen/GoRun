@@ -1377,7 +1377,8 @@ pub fn wire_handler(
                             // 空目标条目（如历史占位 "New Item"）：明确提示而非静默无动作
                             let msg = {
                                 let loc_m = state.loc.clone();
-                                loc_m.borrow().tr("Err_EmptyTarget").to_string()
+                                let lb = loc_m.borrow();
+                                lb.tr("Err_EmptyTarget").to_string()
                             };
                             drop(state);
                             if let Some(ui) = weak_ui_menu.upgrade() {
