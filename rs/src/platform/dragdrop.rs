@@ -119,7 +119,8 @@ struct OleDropTarget {
 }
 
 #[cfg(windows)]
-impl IDropTarget_Impl for OleDropTarget_Impl {
+// 0.57 implement 宏约定：直接为原 struct 实现 _Impl trait（无 _Impl 包装类型）
+impl IDropTarget_Impl for OleDropTarget {
     fn DragEnter(
         &self,
         _pdataobj: Option<&IDataObject>,
@@ -168,7 +169,7 @@ impl IDropTarget_Impl for OleDropTarget_Impl {
                 cfFormat: CF_HDROP.0,
                 dwAspect: DVASPECT_CONTENT.0,
                 lindex: -1,
-                tymed: TYMED_HGLOBAL.0,
+                tymed: TYMED_HGLOBAL.0 as u32,
                 ptd: std::ptr::null_mut(),
             };
             // SAFETY：GetData/ReleaseStgMedium 为标准 COM 数据传输调用，

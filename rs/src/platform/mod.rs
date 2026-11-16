@@ -40,7 +40,7 @@ impl DropHandler {
         let mut tx = Box::new(tx);
         let refdata: *mut Sender<DropMessage> = &mut *tx;
         dragdrop::setup_mouse_tracking(hwnd, refdata as usize);
-        let ole_target = dragdrop::register_ole_drop(hwnd, std::sync::Arc::new(tx.clone()));
+        let ole_target = dragdrop::register_ole_drop(hwnd, std::sync::Arc::new((**tx).clone()));
         (
             DropHandler {
                 hwnd,
