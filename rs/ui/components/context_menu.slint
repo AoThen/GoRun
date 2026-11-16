@@ -8,8 +8,9 @@ import { Theme } from "../theme.slint";
 export component ContextMenu {
     in property <[string]> menu-items;
     in property <[bool]> menu-danger: [];
-    // 内容实际高（由 ScrollView 按内容自动计算），供挂载处 clamp
-    out property <length> content-height: sv.viewport-height;
+    // 内容总高由 Rust 精确计算注入（项 28px、分隔线 1px、padding 8px，同 MenuPopup），
+    // 供挂载处 clamp 到窗口可用高；不能取自 ScrollView 自身（viewport 依赖高度，成环）
+    in property <length> content-height: 600px;
     callback selected(index: int);
 
     width: 160px;

@@ -99,6 +99,8 @@ export component MainWindow inherits Window {
     }
     in-out property <length> context-menu-x: 0px;
     in-out property <length> context-menu-y: 0px;
+    // 右键菜单内容总高（Rust 按 项数×28 + 分隔×1 + padding 8 计算），矮窗口内限高滚动
+    in-out property <length> context-menu-content-height: 600px;
 
     in-out property <bool> confirm-dialog-visible: false;
     in-out property <string> confirm-dialog-title: "Delete Item";
@@ -373,6 +375,7 @@ export component MainWindow inherits Window {
             y: root.context-menu-y;
             // 限制在窗口内：锚点下方空间不足时弹层内滚动（对齐 MenuPopup）
             height: min(self.content-height, max(0px, root.height - root.context-menu-y - 8px));
+            content-height: root.context-menu-content-height;
             menu-items: root.context-menu-items;
             menu-danger: root.context-menu-danger;
             selected(index) => {

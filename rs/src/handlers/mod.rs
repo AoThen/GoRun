@@ -22,6 +22,15 @@ use crate::{
 use slint::ComponentHandle;
 
 /// 应用背景图到 UI 并持久化路径。解码失败返回 false（调用方 Toast 提示，UI 保持现状）。
+/// 菜单/弹层内容总高：项 28px、分隔线("-") 1px、上下 padding 4px×2——供挂载处限高滚动
+fn menu_content_height(items: &[slint::SharedString]) -> f32 {
+    items
+        .iter()
+        .map(|s| if s.as_str() == "-" { 1.0 } else { 28.0 })
+        .sum::<f32>()
+        + 8.0
+}
+
 fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) -> bool {
     let Some(decoded) = crate::background::decode(path) else {
         log::warn!("Background decode failed: {}", path);
@@ -576,12 +585,14 @@ pub fn wire_handler(
         }
         menu_vec.push(slint::SharedString::from(open_folder));
         let item_count = menu_vec.len();
+        let content_h = menu_content_height(&menu_vec);
         let menu_items = Rc::new(slint::VecModel::from(menu_vec));
         // v2 危险项标红：删除项(index 2)为 danger；其余 false
         let mut danger: Vec<bool> = vec![false; item_count];
         danger[2] = true;
         let danger_model = Rc::new(slint::VecModel::from(danger));
         if let Some(ui) = weak_ui_right.upgrade() {
+            ui.set_context_menu_content_height(content_h);
             ui.set_context_menu_items(menu_items.into());
             ui.set_context_menu_danger(danger_model.into());
             geometry::position_menu_at_cursor(&ui, x, y, item_count);
@@ -604,7 +615,7 @@ pub fn wire_handler(
         let sort_tpl = lb.tr("Menu_SortBy").to_string();
         let sort_name = lb.tr("Menu_Sort_Name").to_string();
         let sort_usage = lb.tr("Menu_Sort_RunCount").to_string();
-        let menu_items = Rc::new(slint::VecModel::from(vec![
+        let menu_vec = vec![
             slint::SharedString::from(lb.tr("Menu_NewItem")),
             slint::SharedString::from(lb.tr("Menu_NewC")),
             slint::SharedString::from(lb.tr("Menu_RefreshIcon")),
@@ -612,9 +623,11 @@ pub fn wire_handler(
             slint::SharedString::from(sort_tpl.replace("{0}", &sort_name)),
             slint::SharedString::from(sort_tpl.replace("{0}", &sort_usage)),
             slint::SharedString::from(lb.tr("Menu_RunAll")),
-        ]));
+        ];
+        let content_h = menu_content_height(&menu_vec);
         if let Some(ui) = weak_ui_bg.upgrade() {
-            ui.set_context_menu_items(menu_items.into());
+            ui.set_context_menu_content_height(content_h);
+            ui.set_context_menu_items(Rc::new(slint::VecModel::from(menu_vec)).into());
             // v2：背景菜单无危险项
             let danger: Vec<bool> = vec![false; 7];
             ui.set_context_menu_danger(Rc::new(slint::VecModel::from(danger)).into());
@@ -635,14 +648,16 @@ pub fn wire_handler(
         let loc_m = st.loc.clone();
         drop(st);
         let lb = loc_m.borrow();
-        let menu_items = Rc::new(slint::VecModel::from(vec![
+        let menu_vec = vec![
             slint::SharedString::from(lb.tr("Menu_ReName")),
             slint::SharedString::from(lb.tr("Menu_DelC")),
             slint::SharedString::from(lb.tr("Menu_MoveUp")),
             slint::SharedString::from(lb.tr("Menu_MoveDown")),
-        ]));
+        ];
+        let content_h = menu_content_height(&menu_vec);
         if let Some(ui) = weak_ui_cat_right.upgrade() {
-            ui.set_context_menu_items(menu_items.into());
+            ui.set_context_menu_content_height(content_h);
+            ui.set_context_menu_items(Rc::new(slint::VecModel::from(menu_vec)).into());
             // v2 危险项标红：删除分类(index 1)
             let danger: Vec<bool> = vec![false, true, false, false];
             ui.set_context_menu_danger(Rc::new(slint::VecModel::from(danger)).into());
@@ -743,11 +758,7 @@ pub fn wire_handler(
             .map(|a| matches!(a, Some(MenuAction::DelCategory) | Some(MenuAction::Exit)))
             .collect();
         // 弹层内容总高：项 28px、分隔线 1px、上下 padding 4px——供挂载处限高滚动
-        let content_h: f32 = items
-            .iter()
-            .map(|s| if s.as_str() == "-" { 1.0 } else { 28.0 })
-            .sum::<f32>()
-            + 8.0;
+        let content_h = menu_content_height(&items);
         ui.set_menu_popup_content_height(content_h);
         ui.set_menu_popup_items(Rc::new(slint::VecModel::from(items)).into());
         ui.set_menu_popup_danger(Rc::new(slint::VecModel::from(danger)).into());
