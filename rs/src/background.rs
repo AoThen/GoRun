@@ -54,3 +54,66 @@ pub fn decode(path: &str) -> Option<DecodedBackground> {
         height: h,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static SEQ: AtomicU32 = AtomicU32::new(0);
+
+    fn temp_png(name: &str, width: u32, height: u32, pixel: [u8; 4]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_bg_test_{}_{}_{}.png",
+            std::process::id(),
+            name,
+            SEQ.fetch_add(1, Ordering::SeqCst)
+        ));
+        let img = image::RgbaImage::from_pixel(width, height, image::Rgba(pixel));
+        img.save(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn decode_png_normal_keeps_dimensions_and_pixels() {
+        let path = temp_png("normal", 64, 48, [255, 128, 0, 255]);
+        let mut decoded = decode(path.to_str().unwrap()).expect("应解码成功");
+        assert_eq!(decoded.width, 64);
+        assert_eq!(decoded.height, 48);
+        // 首像素与写入像素一致（未缩放时像素应精确）
+        let px = decoded.buffer.make_mut_slice();
+        assert_eq!(px[0], Rgba8Pixel { r: 255, g: 128, b: 0, a: 255 });
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn decode_scales_down_over_limit_keeps_aspect() {
+        // 超上限（2560）：5120×2880（16:9）→ 缩放到最长边 2560
+        let path = temp_png("large", 5120, 2880, [10, 20, 30, 255]);
+        let decoded = decode(path.to_str().unwrap()).expect("应解码成功");
+        assert_eq!(decoded.width, 2560);
+        assert_eq!(decoded.height, 1440);
+        // 缩放后仍保持 16:9
+        assert_eq!(decoded.width * 9, decoded.height * 16);
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn decode_nonexistent_returns_none() {
+        let path = std::env::temp_dir().join("gorun_bg_definitely_missing.png");
+        assert!(decode(path.to_str().unwrap()).is_none());
+    }
+
+    #[test]
+    fn decode_corrupt_returns_none() {
+        let path = std::env::temp_dir().join(format!(
+            "gorun_bg_corrupt_{}.png",
+            std::process::id()
+        ));
+        fs::write(&path, b"not a real png").unwrap();
+        assert!(decode(path.to_str().unwrap()).is_none());
+        fs::remove_file(&path).ok();
+    }
+}
