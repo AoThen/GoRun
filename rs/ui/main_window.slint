@@ -19,6 +19,11 @@ export component MainWindow inherits Window {
     // 最小尺寸 360×240：允许自由缩小窗口（原 800×600 下限导致"不能调节大小"）
     min-width: 360px;
     min-height: 240px;
+    // 显式声明最大尺寸：覆盖子组件布局合成的有限 max（否则 winit 的
+    // ptMaxTrackSize 被钳死，窗口无法向右拖宽）。16777215px = 2^24-1，
+    // 与 Slint 内部"无上限"同值。
+    max-width: 16777215px;
+    max-height: 16777215px;
     preferred-width: 800px;
     preferred-height: 600px;
 

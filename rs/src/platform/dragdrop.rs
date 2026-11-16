@@ -11,7 +11,7 @@ use std::path::PathBuf;
 #[cfg(windows)]
 use std::sync::mpsc::Sender;
 #[cfg(windows)]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(windows)]
 use std::sync::Arc;
 #[cfg(windows)]
@@ -35,7 +35,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{TrackMouseEvent, TRACKMOUSEEVE
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{DefSubclassProc, DragQueryFileW, HDROP, RemoveWindowSubclass};
 #[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE;
+use windows::Win32::UI::WindowsAndMessaging::{MINMAXINFO, WM_GETMINMAXINFO, WM_MOUSEMOVE};
 #[cfg(windows)]
 use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 
@@ -43,6 +43,10 @@ use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 /// 下次 WM_MOUSEMOVE（回到窗口）时发 MouseEnter 取消隐藏。单窗口单实例。
 #[cfg(windows)]
 static LEFT_SENT: AtomicBool = AtomicBool::new(false);
+
+/// 上次读取的 ptMaxTrackSize 打包值（x<<32|y）：仅变化时打一条诊断日志。
+#[cfg(windows)]
+static LAST_MAX_TRACK: AtomicU64 = AtomicU64::new(0);
 
 /// 子类化回调：仅处理鼠标进出跟踪（F7 自动隐藏）。
 /// 模块级定义（非嵌套），供 setup/remove 成对引用（RemoveWindowSubclass 需同函数指针）。
@@ -76,6 +80,23 @@ unsafe extern "system" fn mouse_subclass_proc(
         let sender = &*(_dwrefdata as *const Sender<DropMessage>);
         sender.send(DropMessage::MouseLeft).ok();
         LRESULT(0)
+    } else if umsg == WM_GETMINMAXINFO {
+        // 诊断：先透传让 winit 窗口过程写入其 min/max 约束，再读取 TrackSize
+        // （本子类先于 winit 收到消息，不透传会读到系统默认值而非 winit 设置值）。
+        let r = DefSubclassProc(hwnd, umsg, wparam, lparam);
+        let mm = unsafe { &*(lparam.0 as *const MINMAXINFO) };
+        let packed = ((mm.ptMaxTrackSize.x as u32 as u64) << 32)
+            | (mm.ptMaxTrackSize.y as u32 as u64);
+        if LAST_MAX_TRACK.swap(packed, Ordering::Relaxed) != packed {
+            log::debug!(
+                "Window minmax track: min=({}, {}) max=({}, {})",
+                mm.ptMinTrackSize.x,
+                mm.ptMinTrackSize.y,
+                mm.ptMaxTrackSize.x,
+                mm.ptMaxTrackSize.y
+            );
+        }
+        r
     } else {
         DefSubclassProc(hwnd, umsg, wparam, lparam)
     }
