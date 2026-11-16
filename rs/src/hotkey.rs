@@ -54,10 +54,7 @@ pub fn parse_hotkey_string(s: &str) -> Option<Hotkey> {
                         if ch.is_ascii_alphabetic() || ch.is_ascii_digit() {
                             ch as u32
                         } else {
-                            match punct_vk(ch) {
-                                Some(vk) => vk,
-                                None => return None,
-                            }
+                            punct_vk(ch)?
                         }
                     }
                     "SPACE" => 0x20,

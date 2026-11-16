@@ -89,7 +89,7 @@ pub fn spawn_icon_refresh(
                             // 与背景图同管线（image crate 解码 → RGBA8 → from_rgba8）：
                             // 软件渲染器不绘制 load_from_path 产物，且其 to_rgba8 可能取不到
                             // 像素，导致内存缓存永远无法回填、图标永久空白。
-                            let img = match crate::background::decode(*path_str) {
+                            let img = match crate::background::decode(path_str) {
                                 Some(decoded) => {
                                     if let Some(item) = id_to_item.get(item_id.as_str()) {
                                         icon_cache.store_image(item, decoded.buffer.clone());

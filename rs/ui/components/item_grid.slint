@@ -58,8 +58,9 @@ export component ItemGrid {
         width: 100%;
         height: 100%;
         visible: root.is-icon-view;
-        viewport-width: self.width;
-        viewport-height: root.grid-content-height;
+        // Slint 1.18：viewport-width/height 已弃用，改用 content-width/height（语义等价）
+        content-width: self.width;
+        content-height: root.grid-content-height;
 
         Rectangle {
             width: 100%;

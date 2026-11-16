@@ -175,7 +175,7 @@ fn main() {
         .map(|v| v == "1")
         .unwrap_or(false);
     // P2-3：提前创建 loc，以便用当前语言重命名首启默认分类
-    let loc = Rc::new(RefCell::new(localization::Localization::new(&lang_code)));
+    let loc = Rc::new(RefCell::new(localization::Localization::new(lang_code)));
     if created_default_cat {
         let default_name = loc.borrow().tr("Default_Category").to_string();
         if let Some(first) = app_config.data.categories.first_mut() {

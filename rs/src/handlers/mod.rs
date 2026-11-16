@@ -84,7 +84,7 @@ pub fn wire_handler(
         let path = PathBuf::from(target.to_string());
         let mut state = state_file.borrow_mut();
         let cat_id = state.current_category_id.clone();
-        let added_ids = state.manager.handle_drop(&[path.clone()], &cat_id);
+        let added_ids = state.manager.handle_drop(std::slice::from_ref(&path), &cat_id);
         state.save_if_modified();
         // P0：小批量拖入同步提取图标（对齐 C++ 的即时显示体验，拖入即见图标）；
         // 大批量仍走 refresh_items_ui 的异步提取队列兜底，避免阻塞 UI 线程。

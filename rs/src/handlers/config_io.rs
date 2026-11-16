@@ -37,10 +37,10 @@ pub fn export_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
     let st = state.borrow();
     if st.storage.export_to(&path, st.manager.config()) {
         log::info!("Exported config to {}", path);
-        crate::ui_sync::show_toast(&ui, format!("Exported: {}", path), false);
+        crate::ui_sync::show_toast(ui, format!("Exported: {}", path), false);
     } else {
         log::error!("Failed to export config to {}", path);
-        crate::ui_sync::show_toast(&ui, "Export failed", true);
+        crate::ui_sync::show_toast(ui, "Export failed", true);
     }
 }
 
@@ -57,7 +57,7 @@ pub fn import_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
         Some(c) => c,
         None => {
             log::error!("Failed to parse import config: {}", path);
-            crate::ui_sync::show_toast(&ui, "Import failed: invalid config file", true);
+            crate::ui_sync::show_toast(ui, "Import failed: invalid config file", true);
             return;
         }
     };
@@ -85,14 +85,14 @@ pub fn import_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
 
     if !saved {
         log::error!("Failed to save imported config");
-        crate::ui_sync::show_toast(&ui, "Import failed: save error", true);
+        crate::ui_sync::show_toast(ui, "Import failed: save error", true);
         return;
     }
     crate::ui_sync::refresh_categories_ui(ui, &state.borrow());
     crate::ui_sync::refresh_items_ui(ui, &state.borrow(), &cur, "");
     // F8/4.1：导入后重注册条目热键（条目集整体变化）
     crate::ui_sync::sync_item_hotkeys(&state.borrow());
-    crate::ui_sync::show_toast(&ui, "Imported config", false);
+    crate::ui_sync::show_toast(ui, "Imported config", false);
     log::info!("Imported config from {}", path);
 }
 
