@@ -149,6 +149,7 @@ pub fn run_error_text(loc: &Rc<RefCell<Localization>>, error: &RunError) -> Stri
         RunError::DllNotFound => "Err_DllNotFound",
         RunError::Cancelled => "Err_Cancelled",
         RunError::UnsafeSearchParam => "Err_UnsafeSearchParam",
+        RunError::EmptyTarget => "Err_EmptyTarget",
         RunError::Unknown => "Err_Unknown",
     };
     loc.borrow().tr(key).to_string()
@@ -251,6 +252,13 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
             } else if let Some(p) = state.icon_cache.get_icon_path(item) {
                 p.to_string_lossy().to_string()
             } else {
+                // 诊断：无自定义图标且无缓存来源，交由异步提取队列兜底
+                // （线上排查"拖入/显示无图标"的关键留痕）
+                log::debug!(
+                    "Icon source none (pending extract): id={}, name={}",
+                    item.id,
+                    item.name
+                );
                 pending.push(item.clone());
                 String::new()
             };
@@ -397,6 +405,10 @@ mod tests {
         assert_eq!(
             run_error_text(&loc, &RunError::UnsafeSearchParam),
             "搜索参数含不安全命令字符，已拒绝执行"
+        );
+        assert_eq!(
+            run_error_text(&loc, &RunError::EmptyTarget),
+            "目标为空，请先编辑该条目设置目标"
         );
         assert_eq!(run_error_text(&loc, &RunError::Unknown), "未知错误");
     }

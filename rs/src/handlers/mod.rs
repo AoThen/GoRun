@@ -75,13 +75,26 @@ pub fn wire_handler(
         let path = PathBuf::from(target.to_string());
         let mut state = state_file.borrow_mut();
         let cat_id = state.current_category_id.clone();
-        let added_ids = state.manager.handle_drop(&[path], &cat_id);
+        let added_ids = state.manager.handle_drop(&[path.clone()], &cat_id);
         state.save_if_modified();
         // P0：小批量拖入同步提取图标（对齐 C++ 的即时显示体验，拖入即见图标）；
         // 大批量仍走 refresh_items_ui 的异步提取队列兜底，避免阻塞 UI 线程。
         const SYNC_ICON_LIMIT: usize = 8;
-        if !added_ids.is_empty() && added_ids.len() <= SYNC_ICON_LIMIT {
-            for id in &added_ids {
+        // 重复拖入被幂等跳过时，若已存在条目缺图标（历史记录提取失败/缓存丢失），
+        // 同样同步补齐——用户视角"拖入就该有图标"，无论是否首次添加。
+        let mut sync_ids = added_ids;
+        if sync_ids.is_empty() {
+            let drop_target = crate::item_manager::normalize_drop_target(&path);
+            if let Some(existing) = state.manager.find_item_by_target(&cat_id, &drop_target) {
+                if existing.icon_path.is_empty()
+                    && state.icon_cache.get_icon_path(&existing).is_none()
+                {
+                    sync_ids.push(existing.id);
+                }
+            }
+        }
+        if !sync_ids.is_empty() && sync_ids.len() <= SYNC_ICON_LIMIT {
+            for id in &sync_ids {
                 let item = match state.manager.get_item(id) {
                     Some(it) => it.clone(),
                     None => continue,
@@ -1360,7 +1373,20 @@ pub fn wire_handler(
                     }
                     x if x == props_idx => {
                         log::info!("Properties: {} ({})", item.target, item.id);
-                        fileops::show_properties(&item.target);
+                        if item.target.trim().is_empty() {
+                            // 空目标条目（如历史占位 "New Item"）：明确提示而非静默无动作
+                            let msg = {
+                                let loc_m = state.loc.clone();
+                                loc_m.borrow().tr("Err_EmptyTarget").to_string()
+                            };
+                            drop(state);
+                            if let Some(ui) = weak_ui_menu.upgrade() {
+                                ui_sync::show_toast(&ui, msg, true);
+                            }
+                        } else {
+                            drop(state);
+                            fileops::show_properties(&item.target);
+                        }
                     }
                     x if x >= moveto_base && x < moveto_base + cat_count => {
                         let cat_pos = (x - moveto_base) as usize;

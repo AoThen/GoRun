@@ -112,6 +112,7 @@ pub fn get_error_message(error: &RunError) -> String {
         RunError::DllNotFound => "找不到指定的 DLL 文件".to_string(),
         RunError::Cancelled => "用户取消了提权请求".to_string(),
         RunError::UnsafeSearchParam => "搜索参数含不安全命令字符，已拒绝执行".to_string(),
+        RunError::EmptyTarget => "目标为空，请先编辑该条目设置目标".to_string(),
         RunError::Unknown => "未知错误".to_string(),
     }
 }
@@ -208,6 +209,14 @@ fn normalize_path(p: &std::path::Path) -> std::path::PathBuf {
 }
 
 fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
+    // 空 target（如历史占位 "New Item"）直接拒绝并给出明确错误，经 toast 提示用户
+    if item.target.trim().is_empty() {
+        return RunResult {
+            success: false,
+            error: RunError::EmptyTarget,
+            error_message: get_error_message(&RunError::EmptyTarget),
+        };
+    }
     let base_target = item.target.clone();
     let mut target = expand_search(&expand_pre(&item.target, &base_target), search_param);
 
@@ -762,6 +771,31 @@ mod tests {
         assert!(!r.success);
         assert_eq!(r.error, RunError::UnsafeSearchParam);
         let _ = std::fs::remove_file(&bat);
+    }
+
+    #[test]
+    fn test_execute_rejects_empty_target() {
+        // 空目标条目（如历史占位 "New Item"）直接拒绝，给出 EmptyTarget 明确错误
+        let item = Item {
+            id: "t".into(),
+            name: "New Item".into(),
+            target: String::new(),
+            ..Default::default()
+        };
+        let r = run(&item, "");
+        assert!(!r.success);
+        assert_eq!(r.error, RunError::EmptyTarget);
+        assert!(!r.error_message.is_empty());
+        // 空白 target 同样拒绝
+        let item_ws = Item {
+            id: "t2".into(),
+            name: "New Item".into(),
+            target: "   ".into(),
+            ..Default::default()
+        };
+        let r2 = run(&item_ws, "");
+        assert!(!r2.success);
+        assert_eq!(r2.error, RunError::EmptyTarget);
     }
 
     #[test]

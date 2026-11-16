@@ -671,6 +671,7 @@
     "Err_DllNotFound": "找不到指定的 DLL 文件",
     "Err_Cancelled": "已取消提权请求",
     "Err_UnsafeSearchParam": "搜索参数含不安全命令字符，已拒绝执行",
+    "Err_EmptyTarget": "目标为空，请先编辑该条目设置目标",
     "Err_Unknown": "未知错误",
 
     "Tray_AutoStart": "开机自启",

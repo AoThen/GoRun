@@ -133,6 +133,8 @@ pub enum RunError {
     Cancelled,
     /// 搜索参数含 shell 元字符，拒绝注入到 shell 型目标（P0-1）
     UnsafeSearchParam,
+    /// 条目未设置目标（如历史占位 "New Item"），无法运行/查看属性
+    EmptyTarget,
     Unknown,
 }
 

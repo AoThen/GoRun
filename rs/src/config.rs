@@ -80,6 +80,17 @@ pub fn migrate_legacy_from(old: &Path, current: &Path) {
         return;
     }
 
+    // 空占位旧配置不迁移：所有条目均无 target（如历史版本留下的 "New Item" 占位），
+    // 属于无任何可运行数据的空壳，迁移只会把垃圾占位带进新目录。
+    // 判定失败（坏 JSON）保守照旧迁移，交由启动信任检查兜底。
+    let legacy_json = std::fs::read_to_string(old.join("config.json")).unwrap_or_default();
+    if is_placeholder_only_config(&legacy_json) {
+        log::info!(
+            "Legacy migration skipped: old config has no usable targets (placeholder-only items)"
+        );
+        return;
+    }
+
     log::info!("Migrating legacy data from {:?} to {:?}", old, current);
     let mut any_fail = false;
 
@@ -139,6 +150,24 @@ pub fn migrate_legacy_from(old: &Path, current: &Path) {
     } else {
         log::info!("Legacy migration completed");
     }
+}
+
+/// 判定旧配置是否为"纯占位空壳"：items 非空且所有条目的 target 均为空。
+/// 兼容旧 C++/rs JSON 字段名（items[].target）；解析失败返回 false（保守照常迁移）。
+fn is_placeholder_only_config(json: &str) -> bool {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+        return false;
+    };
+    let Some(items) = v.get("items").and_then(|i| i.as_array()) else {
+        return false;
+    };
+    !items.is_empty()
+        && items.iter().all(|it| match it.get("target") {
+            // 字段缺失视同空（旧版占位条目常缺省字段）
+            None => true,
+            // 字段存在但类型异常：保守按"非空"处理，照常迁移
+            Some(v) => v.as_str().map(|t| t.trim().is_empty()).unwrap_or(false),
+        })
 }
 
 #[cfg(test)]
@@ -294,5 +323,45 @@ mod tests {
         migrate_legacy_from(&dir, &dir);
         assert_eq!(std::fs::read(dir.join("config.json")).unwrap(), b"x");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_placeholder_only_config_detection() {
+        // 空壳：条目存在但全部无 target（缺失字段视同空）
+        let shell = r#"{"items":[{"id":"i1","name":"New Item","target":""},{"id":"i2","name":"New Item"}]}"#;
+        assert!(is_placeholder_only_config(shell));
+        // 空白 target 同样视为空
+        let ws = r#"{"items":[{"name":"New Item","target":"   "}]}"#;
+        assert!(is_placeholder_only_config(ws));
+        // 有真实 target → 非空壳
+        let real = r#"{"items":[{"name":"app","target":"C:\\a.exe"}]}"#;
+        assert!(!is_placeholder_only_config(real));
+        // target 字段类型异常 → 保守按非空处理（照常迁移）
+        let weird = r#"{"items":[{"name":"app","target":123}]}"#;
+        assert!(!is_placeholder_only_config(weird));
+        // 空 items / 无 items / 坏 JSON → 非空壳（照常迁移，不误伤）
+        assert!(!is_placeholder_only_config(r#"{"items":[]}"#));
+        assert!(!is_placeholder_only_config(r#"{"version":"1.0.0"}"#));
+        assert!(!is_placeholder_only_config("not json"));
+    }
+
+    #[test]
+    fn test_migrate_skips_placeholder_only_config() {
+        // 空占位旧配置（如历史遗留的 6 个 "New Item"）不应被迁入新目录
+        let old = std::env::temp_dir().join("gorun_migrate_old_shell");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_shell");
+        let _ = std::fs::create_dir_all(&old);
+        let _ = std::fs::create_dir_all(&cur);
+        let shell = r#"{"version":"1.0.0","categories":[{"id":"c1","name":"默认","sortOrder":0}],"items":[{"id":"i1","name":"New Item","target":""}]}"#;
+        std::fs::write(old.join("config.json"), shell).unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        assert!(
+            !cur.join("config.json").exists(),
+            "空占位配置不应被迁移"
+        );
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
     }
 }

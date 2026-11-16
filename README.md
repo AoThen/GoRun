@@ -135,7 +135,7 @@ GoRun/
 
 ## 数据存储
 
-> 主线（`rs/`，Rust）：**便携优先**——配置 `config.json` 与图标缓存 `icons/` 均位于可执行文件所在目录（`%EXEDIR%`）；仅当 exe 目录不可写时回退系统数据目录（Windows 为 `%LOCALAPPDATA%/GoRun`）。首次运行时自动创建目录和默认配置文件，并迁移旧版 `%APPDATA%/GoRun` 数据（只复制不删源）。
+> 主线（`rs/`，Rust）：**便携优先**——配置 `config.json` 与图标缓存 `icons/` 均位于可执行文件所在目录（`%EXEDIR%`）；仅当 exe 目录不可写时回退系统数据目录（Windows 为 `%LOCALAPPDATA%/GoRun`）。首次运行时自动创建目录和默认配置文件，并迁移旧版 `%APPDATA%/GoRun` 数据（只复制不删源）；空占位旧配置（所有条目无 target）不迁移。
 
 > C++ 冻结版（`src/`，维护模式）：配置路径为 `%APPDATA%/GoRun/config.json`，图标缓存为 `%APPDATA%/GoRun/icons/`。
 

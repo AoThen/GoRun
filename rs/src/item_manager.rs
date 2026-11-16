@@ -435,17 +435,7 @@ impl ItemManager {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| "Unknown".to_string());
 
-            // F8/URL 拖入：.url 快捷方式文件 → 读 [InternetShortcut] 的 URL= 行作为真实 target
-            let target = if path
-                .extension()
-                .map(|e| e.eq_ignore_ascii_case("url"))
-                .unwrap_or(false)
-            {
-                read_url_from_internet_shortcut(path)
-                    .unwrap_or_else(|| path.to_string_lossy().to_string())
-            } else {
-                path.to_string_lossy().to_string()
-            };
+            let target = normalize_drop_target(path);
             let working_dir = path
                 .parent()
                 .map(|p| p.to_string_lossy().to_string())
@@ -466,6 +456,16 @@ impl ItemManager {
             }
         }
         added
+    }
+
+    /// 按分类与目标路径查找已存在条目（重复拖入幂等跳过时用于补齐图标等补救动作）。
+    pub fn find_item_by_target(&self, category_id: &str, target: &str) -> Option<Item> {
+        self.config
+            .data
+            .items
+            .iter()
+            .find(|i| i.category_id == category_id && i.target == target)
+            .cloned()
     }
 
     pub fn get_item(&self, id: &str) -> Option<&Item> {
@@ -585,6 +585,21 @@ fn read_url_from_internet_shortcut(path: &std::path::Path) -> Option<String> {
         }
     }
     None
+}
+
+/// 拖入目标的规范化 target：.url 快捷方式 → 读 URL= 行作为真实 target，其余为原路径。
+/// handle_drop 与 on_file_dropped 的重复拖入查询必须共用此逻辑，保证 target 一致。
+pub fn normalize_drop_target(path: &std::path::Path) -> String {
+    if path
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("url"))
+        .unwrap_or(false)
+    {
+        read_url_from_internet_shortcut(path)
+            .unwrap_or_else(|| path.to_string_lossy().to_string())
+    } else {
+        path.to_string_lossy().to_string()
+    }
 }
 
 #[cfg(test)]
