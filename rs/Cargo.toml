@@ -29,7 +29,9 @@ serde_json = "1"
 dirs = "5"
 # 仅用 PNG/JPEG 解码（图标缓存写 PNG；背景图读 PNG/JPG）；default 集含 exr/ravif/qoi/gif/webp 等无关格式（体积 +2~3MB）。
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
+# 日志档位运行时可调（设置项：warn/info/debug）；编译期保留到 debug 级别宏，
+# release 下由 log::set_max_level 按设置过滤（默认 Warn）。
+log = { version = "0.4", features = ["max_level_debug", "release_max_level_debug"] }
 chrono = "0.4"
 pinyin = "0.10"
 raw-window-handle = "0.6"

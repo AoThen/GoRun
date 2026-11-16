@@ -1,7 +1,7 @@
 //! 事件处理器模块（P1-3 自 main.rs 拆出）
 //!
 //! 按职责分组：
-//! - `dialogs`：编辑对话框辅助（分类新增按钮、外部配置信任导入）
+//! - `dialogs`：编辑对话框辅助（分类新增按钮、外部配置静默恢复导入）
 //! - `edit_dialog`：新建/编辑项目对话框的共享展示逻辑
 //! - `wire_handler`：主窗口事件回调注册（D3 自 main.rs 迁入）
 
@@ -44,14 +44,10 @@ pub fn wire_handler(
     loc: &Rc<RefCell<Localization>>,
     hotkey_mgr: Rc<RefCell<hotkey::HotkeyManager>>,
     hk_tx_shared: Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>>,
-    external_backup_path: Option<String>,
 ) {
     let right_clicked_index: Rc<std::cell::Cell<Option<i32>>> = Rc::new(std::cell::Cell::new(None));
     let pending_delete: Rc<std::cell::RefCell<Option<String>>> =
         Rc::new(std::cell::RefCell::new(None));
-    // 外部配置信任导入：Some(隔离备份路径) 时弹确认框，确认后导入（P0-8）
-    let pending_external_trust: Rc<std::cell::RefCell<Option<String>>> =
-        Rc::new(std::cell::RefCell::new(external_backup_path));
     // 右键菜单来源：0=项目 1=背景 2=分类（单个 ContextMenu 复用，按来源分发）
     let menu_kind: Rc<std::cell::Cell<u8>> = Rc::new(std::cell::Cell::new(0));
     let right_clicked_category: Rc<std::cell::Cell<Option<i32>>> =
@@ -79,8 +75,23 @@ pub fn wire_handler(
         let path = PathBuf::from(target.to_string());
         let mut state = state_file.borrow_mut();
         let cat_id = state.current_category_id.clone();
-        let _count = state.manager.handle_drop(&[path], &cat_id);
+        let added_ids = state.manager.handle_drop(&[path], &cat_id);
         state.save_if_modified();
+        // P0：小批量拖入同步提取图标（对齐 C++ 的即时显示体验，拖入即见图标）；
+        // 大批量仍走 refresh_items_ui 的异步提取队列兜底，避免阻塞 UI 线程。
+        const SYNC_ICON_LIMIT: usize = 8;
+        if !added_ids.is_empty() && added_ids.len() <= SYNC_ICON_LIMIT {
+            for id in &added_ids {
+                let item = match state.manager.get_item(id) {
+                    Some(it) => it.clone(),
+                    None => continue,
+                };
+                if let Some(p) = state.icon_cache.refresh_icon(&item) {
+                    state.manager.set_cached_icon(id, &p.to_string_lossy());
+                }
+            }
+            state.save_if_modified();
+        }
         let query = state.search_query.clone();
         drop(state);
         if let Some(ui) = weak_ui_file.upgrade() {
@@ -637,9 +648,29 @@ pub fn wire_handler(
     let pra_admin_menu = pending_run_admin.clone();
     let im_menu = input_mode.clone();
 
-    // 汉堡菜单（v2）：组装单一列表 + 危险项数组；动作在 menu_popup_selected 按索引分发。
+    // 汉堡菜单（v2）：组装单一列表 + 危险项数组；动作经 action 映射分发
+    //（不依赖易错的手写索引，增删菜单项时对应关系自动保持）。仅中文，无语言切换项。
+    #[derive(Clone, Copy, PartialEq)]
+    enum MenuAction {
+        NewItem,
+        NewCategory,
+        DelCategory,
+        RenameCategory,
+        Hotkey,
+        ToggleView,
+        ToggleTheme,
+        FollowMouse,
+        AutoStart,
+        Export,
+        Import,
+        Settings,
+        About,
+        Exit,
+    }
+    let menu_actions: Rc<RefCell<Vec<Option<MenuAction>>>> = Rc::new(RefCell::new(Vec::new()));
     let state_hb = state.clone();
     let weak_ui_hb = ui.as_weak();
+    let menu_actions_hb = menu_actions.clone();
     ui.on_hamburger_clicked(move || {
         log::debug!("Hamburger menu opened");
         let ui = match weak_ui_hb.upgrade() {
@@ -651,45 +682,53 @@ pub fn wire_handler(
         let items: Vec<slint::SharedString> = {
             let st = state_hb.borrow();
             let lb = st.loc.borrow();
-            let sep = slint::SharedString::from("-");
-            let mut v: Vec<slint::SharedString> = Vec::new();
-            v.push(lb.tr("Menu_NewItem").into());
-            v.push(lb.tr("Menu_NewC").into());
-            v.push(sep.clone());
-            v.push(lb.tr("Menu_DelCurrentC").into());
-            v.push(sep.clone());
-            v.push(lb.tr("Menu_RenameCurrentC").into());
-            v.push(lb.tr("Menu_ViewHotKey").into());
-            v.push(sep.clone());
+            let mut items: Vec<slint::SharedString> = Vec::new();
+            let mut actions: Vec<Option<MenuAction>> = Vec::new();
+            let mut add = |s: slint::SharedString, a: Option<MenuAction>| {
+                items.push(s);
+                actions.push(a);
+            };
+            add(lb.tr("Menu_NewItem").into(), Some(MenuAction::NewItem));
+            add(lb.tr("Menu_NewC").into(), Some(MenuAction::NewCategory));
+            add("-".into(), None);
+            add(
+                lb.tr("Menu_DelCurrentC").into(),
+                Some(MenuAction::DelCategory),
+            );
+            add("-".into(), None);
+            add(
+                lb.tr("Menu_RenameCurrentC").into(),
+                Some(MenuAction::RenameCategory),
+            );
+            add(lb.tr("Menu_ViewHotKey").into(), Some(MenuAction::Hotkey));
+            add("-".into(), None);
             // 切换视图：当前图标视图显示"列表"，反之显示"图标"
             if icon_view {
-                v.push(lb.tr("Menu_ViewIcon1").into());
+                add(lb.tr("Menu_ViewIcon1").into(), Some(MenuAction::ToggleView));
             } else {
-                v.push(lb.tr("Menu_ViewIcon0").into());
+                add(lb.tr("Menu_ViewIcon0").into(), Some(MenuAction::ToggleView));
             }
             let theme_key = if dark { "Menu_SwitchLight" } else { "Menu_SwitchDark" };
-            v.push(lb.tr(theme_key).into());
-            v.push(sep.clone());
-            v.push(lb.tr("Menu_FollowMouse").into());
-            v.push(lb.tr("Tray_AutoStart").into());
-            v.push(sep.clone());
-            v.push("简体中文".into());
-            v.push("繁體中文".into());
-            v.push("English".into());
-            v.push(sep.clone());
-            v.push(lb.tr("Menu_ExportConfig").into());
-            v.push(lb.tr("Menu_ImportConfig").into());
-            v.push(sep.clone());
-            v.push(lb.tr("Menu_Settings").into());
-            v.push(lb.tr("Menu_About").into());
-            v.push(lb.tr("Menu_Exit").into());
-            v
+            add(lb.tr(theme_key).into(), Some(MenuAction::ToggleTheme));
+            add("-".into(), None);
+            add(lb.tr("Menu_FollowMouse").into(), Some(MenuAction::FollowMouse));
+            add(lb.tr("Tray_AutoStart").into(), Some(MenuAction::AutoStart));
+            add("-".into(), None);
+            add(lb.tr("Menu_ExportConfig").into(), Some(MenuAction::Export));
+            add(lb.tr("Menu_ImportConfig").into(), Some(MenuAction::Import));
+            add("-".into(), None);
+            add(lb.tr("Menu_Settings").into(), Some(MenuAction::Settings));
+            add(lb.tr("Menu_About").into(), Some(MenuAction::About));
+            add(lb.tr("Menu_Exit").into(), Some(MenuAction::Exit));
+            *menu_actions_hb.borrow_mut() = actions;
+            items
         };
-        // 危险项：删除当前分类(3)、退出(末位)
-        let n = items.len();
-        let mut danger: Vec<bool> = vec![false; n];
-        danger[3] = true;
-        danger[n - 1] = true;
+        // 危险项：删除当前分类、退出（由 action 映射生成，避免索引错位）
+        let danger: Vec<bool> = menu_actions
+            .borrow()
+            .iter()
+            .map(|a| matches!(a, Some(MenuAction::DelCategory) | Some(MenuAction::Exit)))
+            .collect();
         // 弹层内容总高：项 28px、分隔线 1px、上下 padding 4px——供挂载处限高滚动
         let content_h: f32 = items
             .iter()
@@ -706,16 +745,22 @@ pub fn wire_handler(
     let pcd_mps = pending_category_delete.clone();
     let pcr_mps = pending_category_rename.clone();
     let im_mps = input_mode.clone();
+    let menu_actions_mps = menu_actions.clone();
     ui.on_menu_popup_selected(move |index| {
         log::debug!("Menu popup item selected: index={}", index);
         let ui = match weak_ui_mps.upgrade() {
             Some(u) => u,
             None => return,
         };
-        match index {
-            0 => ui.invoke_new_item_clicked(),
-            1 => ui.invoke_new_category(),
-            3 => {
+        let action = menu_actions_mps
+            .borrow()
+            .get(index as usize)
+            .copied()
+            .flatten();
+        match action {
+            Some(MenuAction::NewItem) => ui.invoke_new_item_clicked(),
+            Some(MenuAction::NewCategory) => ui.invoke_new_category(),
+            Some(MenuAction::DelCategory) => {
                 // 删除当前分类：复用分类右键删除流程（确认后级联删除）
                 let state = state_mps.borrow_mut();
                 let cat_id = state.current_category_id.clone();
@@ -739,7 +784,7 @@ pub fn wire_handler(
                 ui.set_confirm_confirm_text(loc_m.borrow().tr("Btn_Del").to_string().into());
                 ui.set_confirm_dialog_visible(true);
             }
-            5 => {
+            Some(MenuAction::RenameCategory) => {
                 // 重命名当前分类：复用分类右键重命名流程（InputDialog）
                 let state = state_mps.borrow_mut();
                 let cat_id = state.current_category_id.clone();
@@ -762,38 +807,23 @@ pub fn wire_handler(
                 ui.set_input_dialog_error("".into());
                 ui.set_input_dialog_visible(true);
             }
-            6 => ui.invoke_hotkey(),
-            8 => {
+            Some(MenuAction::Hotkey) => ui.invoke_hotkey(),
+            Some(MenuAction::ToggleView) => {
                 // 视图切换（v2 单一"切换"项，无条件 toggle）
                 ui.invoke_toggle_view();
             }
-            9 => ui.invoke_toggle_theme(),
-            11 => crate::tray_ui::handle_tray_ui_action(
+            Some(MenuAction::ToggleTheme) => ui.invoke_toggle_theme(),
+            Some(MenuAction::FollowMouse) => crate::tray_ui::handle_tray_ui_action(
                 crate::tray_ui::TrayUiAction::ToggleFollowMouse,
                 &ui,
                 &state_mps,
             ),
-            12 => {
+            Some(MenuAction::AutoStart) => {
                 let _ = crate::tray::toggle_autostart();
             }
-            14 => crate::tray_ui::handle_tray_ui_action(
-                crate::tray_ui::TrayUiAction::SetLanguage("zh-CN".into()),
-                &ui,
-                &state_mps,
-            ),
-            15 => crate::tray_ui::handle_tray_ui_action(
-                crate::tray_ui::TrayUiAction::SetLanguage("zh-TW".into()),
-                &ui,
-                &state_mps,
-            ),
-            16 => crate::tray_ui::handle_tray_ui_action(
-                crate::tray_ui::TrayUiAction::SetLanguage("en-US".into()),
-                &ui,
-                &state_mps,
-            ),
-            18 => crate::handlers::config_io::export_config(&ui, &state_mps),
-            19 => crate::handlers::config_io::import_config(&ui, &state_mps),
-            21 => {
+            Some(MenuAction::Export) => crate::handlers::config_io::export_config(&ui, &state_mps),
+            Some(MenuAction::Import) => crate::handlers::config_io::import_config(&ui, &state_mps),
+            Some(MenuAction::Settings) => {
                 // 打开设置对话框：回填背景图与遮罩当前状态
                 let st = state_mps.borrow();
                 let cfg = st.manager.config();
@@ -814,18 +844,24 @@ pub fn wire_handler(
                     .get("background_dim")
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(35.0);
+                let log_index = match cfg.extra_config.get("log_level").map(|s| s.as_str()) {
+                    Some("info") => 1,
+                    Some("debug") => 2,
+                    _ => 0,
+                };
                 drop(st);
                 ui.set_settings_bg_status(status.into());
                 ui.set_settings_bg_dim_enabled(dim_enabled);
                 ui.set_settings_bg_dim_percent(dim_percent);
+                ui.set_settings_log_index(log_index);
                 ui.set_settings_dialog_visible(true);
             }
-            22 => ui.set_about_dialog_visible(true),
-            23 => {
+            Some(MenuAction::About) => ui.set_about_dialog_visible(true),
+            Some(MenuAction::Exit) => {
                 // 退出：真正结束进程（与托盘"退出"一致）；几何由主循环收尾强制落盘
                 let _ = slint::quit_event_loop();
             }
-            _ => {}
+            None => {}
         }
     });
 
@@ -942,7 +978,8 @@ pub fn wire_handler(
                     if !paths.is_empty() {
                         let mut state = state_menu.borrow_mut();
                         let cat_id = state.current_category_id.clone();
-                        let count = state.manager.handle_drop(&paths, &cat_id);
+                        let added = state.manager.handle_drop(&paths, &cat_id);
+                        let count = added.len();
                         state.save_if_modified();
                         let q = state.search_query.clone();
                         let loc_m = state.loc.clone();
@@ -1382,23 +1419,7 @@ pub fn wire_handler(
     let pcd_ok = pending_category_delete.clone();
     let pra_ok = pending_run_all.clone();
     let pra_admin_ok = pending_run_admin.clone();
-    let pet_ok = pending_external_trust.clone();
     ui.on_confirm_dialog_ok(move || {
-        // 外部配置信任导入优先（P0-8）
-        if let Some(backup) = pet_ok.borrow_mut().take() {
-            log::info!("User trusted external config, importing: {}", backup);
-            let imported = dialogs::import_external_config(&state_confirm, &weak_ui_confirm, &backup);
-            if let Some(ui) = weak_ui_confirm.upgrade() {
-                let key = if imported {
-                    "Status_ExternalImported"
-                } else {
-                    "Status_ExternalImportFail"
-                };
-                let msg = state_confirm.borrow().loc.borrow().tr(key).to_string();
-                ui_sync::show_toast(&ui, msg, true);
-            }
-            return;
-        }
         // 分类删除优先（级联删除项目 + 清理图标缓存）
         if let Some(cat_id) = pcd_ok.borrow_mut().take() {
             let mut state = state_confirm.borrow_mut();
@@ -1553,9 +1574,7 @@ pub fn wire_handler(
     let state_confirm_cancel = pending_delete.clone();
     let pra_cancel = pending_run_all.clone();
     let pra_admin_cancel = pending_run_admin.clone();
-    let pet_cancel = pending_external_trust.clone();
     ui.on_confirm_dialog_cancel(move || {
-        pet_cancel.borrow_mut().take();
         state_confirm_cancel.borrow_mut().take();
         pending_category_delete.borrow_mut().take();
         pra_cancel.borrow_mut().take();
@@ -1676,6 +1695,33 @@ pub fn wire_handler(
         log::debug!("Background clicked");
     });
 
+    // 日志档位切换（设置对话框）：持久化 + 运行时即时生效
+    let state_loglvl = state.clone();
+    let weak_ui_loglvl = ui.as_weak();
+    ui.on_settings_log_changed(move |index| {
+        let (level, level_name) = match index {
+            1 => ("info", "SI_Log_Std"),
+            2 => ("debug", "SI_Log_Dbg"),
+            _ => ("warn", "SI_Log_Min"),
+        };
+        {
+            let mut st = state_loglvl.borrow_mut();
+            st.manager
+                .config_mut()
+                .extra_config
+                .insert("log_level".into(), level.into());
+            st.save_if_modified();
+        }
+        crate::logger::apply_level(level);
+        log::info!("Log level changed to {}", level);
+        if let Some(ui) = weak_ui_loglvl.upgrade() {
+            let loc = state_loglvl.borrow().loc.clone();
+            let name = loc.borrow().tr(level_name).to_string();
+            let msg = util::tr_fill(&loc, "Status_LogLevelSet", &name);
+            ui_sync::show_toast(&ui, msg, false);
+        }
+    });
+
     // Escape：清搜索并隐藏窗口（P2 #11）
     let state_esc = state.clone();
     let weak_ui_esc = ui.as_weak();
@@ -1693,67 +1739,4 @@ pub fn wire_handler(
             let _ = ui.hide();
         }
     });
-
-    // P0-8：检测到外部/未信任配置时弹确认框，信任导入或保持隔离
-    // 先 clone 到局部变量，避免 Ref 临时值在 if-let 块结束前被借用检查器认为仍存活（E0597）
-    let pending_trust = pending_external_trust.borrow().clone();
-    if let Some(backup) = pending_trust {
-        ui.set_confirm_dialog_title(loc.borrow().tr("Tip_ExternalConfigTitle").to_string().into());
-        // P1-05：追加导入规模计数，帮助用户在盲信导入前了解数据量
-        // P0-3：进一步展示目标路径（前 10 个 + 剩余计数），让用户对导入内容知情。
-        let cfg_opt = crate::storage::Storage::new(backup).load();
-        let count_msg = cfg_opt
-            .as_ref()
-            .map(|cfg| {
-                loc.borrow()
-                    .tr("Tip_ExternalConfigCount")
-                    .replace("{0}", &cfg.data.categories.len().to_string())
-                    .replace("{1}", &cfg.data.items.len().to_string())
-            })
-            .unwrap_or_default();
-        let targets_msg = cfg_opt
-            .as_ref()
-            .and_then(|cfg| {
-                if cfg.data.items.is_empty() {
-                    return None;
-                }
-                const MAX_SHOWN: usize = 10;
-                let shown: Vec<&str> = cfg
-                    .data
-                    .items
-                    .iter()
-                    .take(MAX_SHOWN)
-                    .map(|i| i.target.as_str())
-                    .collect();
-                let mut lines = shown.join("\n");
-                let remaining = cfg.data.items.len().saturating_sub(MAX_SHOWN);
-                if remaining > 0 {
-                    lines.push('\n');
-                    lines.push_str(
-                        &loc.borrow()
-                            .tr("Tip_ExternalConfigMore")
-                            .replace("{0}", &remaining.to_string()),
-                    );
-                }
-                Some(
-                    loc.borrow()
-                        .tr("Tip_ExternalConfigTargets")
-                        .replace("{0}", &lines),
-                )
-            })
-            .unwrap_or_default();
-        let base_msg = loc.borrow().tr("Tip_ExternalConfigMsg").to_string();
-        let mut msg = if count_msg.is_empty() {
-            base_msg
-        } else {
-            format!("{}\n{}", base_msg, count_msg)
-        };
-        if !targets_msg.is_empty() {
-            msg.push('\n');
-            msg.push_str(&targets_msg);
-        }
-        ui.set_confirm_dialog_message(msg.into());
-        ui.set_confirm_confirm_text(loc.borrow().tr("Btn_TrustImport").to_string().into());
-        ui.set_confirm_dialog_visible(true);
-    }
 }

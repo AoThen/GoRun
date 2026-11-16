@@ -86,8 +86,14 @@ pub fn spawn_icon_refresh(
                     if let Some(row) = model.row_data(i) {
                         let item_id = row.id.clone();
                         if let Some(path_str) = id_to_path.get(item_id.as_str()) {
-                            let img = slint::Image::load_from_path(std::path::Path::new(path_str))
-                                .unwrap_or_default();
+                            let img = match slint::Image::load_from_path(std::path::Path::new(path_str)) {
+                                Ok(img) => img,
+                                Err(e) => {
+                                    // 加载失败必须留痕（此前静默降级为空图标，线上无从排查）
+                                    log::warn!("Failed to load cached icon {:?}: {}", path_str, e);
+                                    slint::Image::default()
+                                }
+                            };
                             if let Some(buffer) = img.to_rgba8() {
                                 if let Some(item) = id_to_item.get(item_id.as_str()) {
                                     icon_cache.store_image(item, buffer);
@@ -255,8 +261,14 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
             } else if let Some(buffer) = state.icon_cache.cached_image(item) {
                 slint::Image::from_rgba8(buffer)
             } else {
-                let img = slint::Image::load_from_path(std::path::Path::new(&icon_path))
-                    .unwrap_or_default();
+                let img = match slint::Image::load_from_path(std::path::Path::new(&icon_path)) {
+                    Ok(img) => img,
+                    Err(e) => {
+                        // 加载失败留痕：缓存路径指向的文件缺失/损坏时可见（P0 排查项）
+                        log::warn!("Failed to load icon {:?}: {}", icon_path, e);
+                        slint::Image::default()
+                    }
+                };
                 if let Some(buffer) = img.to_rgba8() {
                     state.icon_cache.store_image(item, buffer);
                 }
@@ -387,14 +399,5 @@ mod tests {
             "搜索参数含不安全命令字符，已拒绝执行"
         );
         assert_eq!(run_error_text(&loc, &RunError::Unknown), "未知错误");
-    }
-
-    #[test]
-    fn test_run_error_text_changes_with_language() {
-        // 语言切换影响输出（行为测试，非实现自证）
-        let zh = Rc::new(RefCell::new(Localization::new("zh-CN")));
-        let en = Rc::new(RefCell::new(Localization::new("en-US")));
-        assert_eq!(run_error_text(&zh, &RunError::FileNotFound), "找不到指定的文件");
-        assert_eq!(run_error_text(&en, &RunError::FileNotFound), "File not found");
     }
 }

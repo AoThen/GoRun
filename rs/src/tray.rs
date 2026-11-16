@@ -53,12 +53,6 @@ const MENU_ID_AUTOSTART: u32 = 1003;
 #[cfg(windows)]
 const MENU_ID_FOLLOW_MOUSE: u32 = 1004;
 #[cfg(windows)]
-const MENU_ID_LANG_ZHCN: u32 = 1005;
-#[cfg(windows)]
-const MENU_ID_LANG_ZHTW: u32 = 1006;
-#[cfg(windows)]
-const MENU_ID_LANG_ENUS: u32 = 1007;
-#[cfg(windows)]
 const MENU_ID_LOW_RESIDENT: u32 = 1008;
 
 #[derive(Debug, Clone)]
@@ -70,7 +64,6 @@ pub enum TrayMessage {
     ToggleAutoStart,
     ToggleFollowMouse,
     ToggleLowResident,
-    SetLanguage(String),
 }
 
 #[cfg(windows)]
@@ -105,7 +98,6 @@ struct TrayGlobals {
     taskbar_created_msg: OnceLock<u32>,
     follow_mouse: OnceLock<AtomicBool>,
     low_resident: OnceLock<AtomicBool>,
-    lang: OnceLock<Mutex<String>>,
     texts: OnceLock<Mutex<Option<TrayTexts>>>,
 }
 
@@ -120,7 +112,6 @@ impl TrayGlobals {
             taskbar_created_msg: OnceLock::new(),
             follow_mouse: OnceLock::new(),
             low_resident: OnceLock::new(),
-            lang: OnceLock::new(),
             texts: OnceLock::new(),
         }
     }
@@ -151,7 +142,7 @@ pub fn set_ui_texts(_texts: TrayTexts) {}
 
 /// 托盘菜单勾选状态同步（主线程写入，托盘弹出菜单读取）。
 #[cfg(windows)]
-pub fn set_ui_state(follow_mouse: bool, low_resident: bool, lang: &str) {
+pub fn set_ui_state(follow_mouse: bool, low_resident: bool) {
     if let Some(a) = tray().follow_mouse.get() {
         a.store(follow_mouse, Ordering::Relaxed);
     } else {
@@ -162,17 +153,10 @@ pub fn set_ui_state(follow_mouse: bool, low_resident: bool, lang: &str) {
     } else {
         let _ = tray().low_resident.set(AtomicBool::new(low_resident));
     }
-    if let Some(m) = tray().lang.get() {
-        if let Ok(mut g) = m.lock() {
-            *g = lang.to_string();
-        }
-    } else {
-        let _ = tray().lang.set(Mutex::new(lang.to_string()));
-    }
 }
 
 #[cfg(not(windows))]
-pub fn set_ui_state(_follow_mouse: bool, _low_resident: bool, _lang: &str) {}
+pub fn set_ui_state(_follow_mouse: bool, _low_resident: bool) {}
 
 /// 读取"跟随鼠标"状态（主线程显示窗口时用于定位，无需访问 AppState）。
 #[cfg(windows)]
@@ -346,9 +330,6 @@ fn popup_tray_menu(hwnd: HWND, sender: &Sender<TrayMessage>) {
         let autostart_text: Vec<u16> = format!("{}\0", texts.autostart).encode_utf16().collect();
         let follow_text: Vec<u16> = format!("{}\0", texts.follow_mouse).encode_utf16().collect();
         let low_text: Vec<u16> = format!("{}\0", texts.low_resident).encode_utf16().collect();
-        let lang_zhcn: Vec<u16> = "中文 (简体)\0".encode_utf16().collect();
-        let lang_zhtw: Vec<u16> = "中文 (繁體)\0".encode_utf16().collect();
-        let lang_enus: Vec<u16> = "English (US)\0".encode_utf16().collect();
 
         let _ = AppendMenuW(h_menu, Default::default(), MENU_ID_SHOW as usize, windows::core::PCWSTR(show_text.as_ptr()));
 
@@ -369,17 +350,6 @@ fn popup_tray_menu(hwnd: HWND, sender: &Sender<TrayMessage>) {
             .unwrap_or(false);
         let flags_low = if low_res { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(h_menu, flags_low, MENU_ID_LOW_RESIDENT as usize, windows::core::PCWSTR(low_text.as_ptr()));
-
-        let current_lang = tray().lang
-            .get()
-            .map(|m| m.lock().map(|s| s.clone()).unwrap_or_else(|_| "zh-CN".to_string()))
-            .unwrap_or_else(|| "zh-CN".to_string());
-        let flag_zhcn = if current_lang == "zh-CN" { MF_CHECKED } else { MF_UNCHECKED };
-        let flag_zhtw = if current_lang == "zh-TW" { MF_CHECKED } else { MF_UNCHECKED };
-        let flag_enus = if current_lang == "en-US" { MF_CHECKED } else { MF_UNCHECKED };
-        let _ = AppendMenuW(h_menu, flag_zhcn, MENU_ID_LANG_ZHCN as usize, windows::core::PCWSTR(lang_zhcn.as_ptr()));
-        let _ = AppendMenuW(h_menu, flag_zhtw, MENU_ID_LANG_ZHTW as usize, windows::core::PCWSTR(lang_zhtw.as_ptr()));
-        let _ = AppendMenuW(h_menu, flag_enus, MENU_ID_LANG_ENUS as usize, windows::core::PCWSTR(lang_enus.as_ptr()));
 
         let _ = AppendMenuW(h_menu, Default::default(), MENU_ID_EXIT as usize, windows::core::PCWSTR(exit_text.as_ptr()));
 
@@ -408,15 +378,6 @@ fn popup_tray_menu(hwnd: HWND, sender: &Sender<TrayMessage>) {
             }
             id if id == MENU_ID_FOLLOW_MOUSE as i32 => {
                 let _ = sender.send(TrayMessage::ToggleFollowMouse);
-            }
-            id if id == MENU_ID_LANG_ZHCN as i32 => {
-                let _ = sender.send(TrayMessage::SetLanguage("zh-CN".to_string()));
-            }
-            id if id == MENU_ID_LANG_ZHTW as i32 => {
-                let _ = sender.send(TrayMessage::SetLanguage("zh-TW".to_string()));
-            }
-            id if id == MENU_ID_LANG_ENUS as i32 => {
-                let _ = sender.send(TrayMessage::SetLanguage("en-US".to_string()));
             }
             id if id == MENU_ID_LOW_RESIDENT as i32 => {
                 let _ = sender.send(TrayMessage::ToggleLowResident);

@@ -167,10 +167,11 @@ struct RawItem {
 
 /// P0-2 完整性值：对配置内容（version/categories/items/config/排序后的 extra）做
 /// HMAC-SHA256。密钥编译进二进制（可被逆向提取，但比公开哈希门槛显著提高），
-/// 防的是"读源码即可伪造"的普通攻击者；真正信任控制点是启动确认弹窗，
-/// 此值用于把"外部/被篡改"从"仅缺标记"升级为可检测。
+/// 防的是"读源码即可伪造"的普通攻击者。处理策略（P0-2 修订）：校验失败不再弹
+/// 确认框，而是隔离备份 + 静默恢复导入 + toast 审计提示（"如非本人操作请检查"）；
+/// 程序自身迁移的旧数据在迁移时即补签名，首次启动直接通过校验。
 /// 前缀 `hmac:` 用于区分新旧格式：旧版 `fnv1a64:` 配置在升级后无法匹配，
-/// 会触发隔离 + 确认弹窗，强制用户审阅目标后重新签名（预期安全行为）。
+/// 会触发隔离 + 静默恢复（预期安全行为）。
 const INTEGRITY_KEY: &[u8] = b"GoRun-rs-HMAC-Key-v1";
 
 pub fn compute_integrity(cfg: &AppConfig) -> String {
@@ -184,8 +185,10 @@ pub fn compute_integrity(cfg: &AppConfig) -> String {
         "version": cfg.version,
         "categories": serde_json::to_value(&cfg.data.categories).unwrap_or_default(),
         "items": serde_json::to_value(&cfg.data.items).unwrap_or_default(),
+        // 不含 globalHotkey：该字段存在历史默认值迁移链（Ctrl+Alt+M/Ctrl+M → Ctrl+/），
+        // load 时会改写；纳入校验会让"自己升级自己"的配置校验失败。
+        // 热键仅影响唤起组合键，无执行面，不纳入篡改检测。
         "config": {
-            "globalHotkey": cfg.config.global_hotkey,
             "windowX": cfg.config.window_x.to_string(),
             "windowY": cfg.config.window_y.to_string(),
             "windowWidth": cfg.config.window_width.to_string(),
@@ -330,6 +333,23 @@ impl Storage {
 
 /// 把内存配置序列化为导出/落盘用的 RawFile（重编号 sortOrder，写完整性值）。
 fn build_raw(app_config: &AppConfig) -> RawFile {
+    // P0-2 修复：完整性值必须按"落盘形态"（重编号后的 sortOrder）计算。
+    // 此前按内存原值计算，而落盘 JSON 是重编号后的值——只要旧数据存在
+    // "数组序≠sortOrder 序"（C++ 迁移数据常态），save→load→verify 必然失败，
+    // 每次启动都会误判为外部配置并触发隔离/提示死循环。
+    let mut normalized = app_config.clone();
+    for (idx, cat) in normalized.data.categories.iter_mut().enumerate() {
+        cat.sort_order = idx as i32;
+    }
+    let mut norm_counters: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+    for item in normalized.data.items.iter_mut() {
+        // 先克隆 category_id 再写 sort_order，避免 entry 键借用与字段写入冲突
+        let cat = item.category_id.clone();
+        let next = norm_counters.entry(cat).or_insert(0);
+        item.sort_order = *next;
+        *next += 1;
+    }
+
     let raw_categories: Vec<RawCategory> = app_config
         .data
         .categories
@@ -392,7 +412,7 @@ fn build_raw(app_config: &AppConfig) -> RawFile {
     // P0-2：落盘前写入当前配置内容的完整性值，旧值/外部篡改在启动校验时被发现
     extra.insert(
         "config_integrity".to_string(),
-        serde_json::Value::String(compute_integrity(app_config)),
+        serde_json::Value::String(compute_integrity(&normalized)),
     );
 
     let raw_config = RawConfig {
@@ -631,6 +651,60 @@ mod tests {
     }
 
     #[test]
+    fn test_integrity_survives_disordered_sort_order() {
+        // P0-2 修复回归：C++ 迁移数据常见"数组序≠sortOrder 序"。此前 integrity
+        // 按内存原值计算、落盘却是重编号后的值，save→load→verify 必失败，
+        // 造成每次启动都误判外部配置的死循环。修复后必须往返通过。
+        let path = std::env::temp_dir()
+            .join(format!("gorun_disorder_test_{}.json", std::process::id()))
+            .to_str()
+            .unwrap()
+            .to_string();
+        let mut config = AppConfig::default();
+        config.extra_config.insert("generated_by".to_string(), "gorun-rs".to_string());
+        // 分类 sortOrder 故意逆序（数组序 0,1,2 vs sortOrder 2,1,0）
+        for (i, name) in ["C", "B", "A"].iter().enumerate() {
+            config.data.categories.push(Category {
+                id: format!("cat_{}", name),
+                name: name.to_string(),
+                sort_order: (2 - i) as i32,
+                view_type: ViewType::Icon,
+                icon_size: 48,
+            });
+        }
+        // 项目 sortOrder 在分类内也乱序
+        for (i, name) in ["i3", "i1", "i2"].iter().enumerate() {
+            config.data.items.push(Item {
+                id: format!("item_{}", name),
+                name: name.to_string(),
+                target: format!("C:\\{}.exe", name),
+                category_id: "cat_A".into(),
+                sort_order: (2 - i) as i32,
+                ..Default::default()
+            });
+        }
+
+        let storage = Storage::new(path.clone());
+        assert!(storage.save(&config));
+        let loaded = storage.load().expect("disordered config should roundtrip");
+        assert!(
+            verify_integrity(&loaded),
+            "integrity must be computed over the persisted (renumbered) form"
+        );
+        // 落盘 JSON 的 sortOrder 已按数组序重编号
+        let content = fs::read_to_string(&path).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(v["categories"][0]["sortOrder"], 0);
+        assert_eq!(v["categories"][1]["sortOrder"], 1);
+        assert_eq!(v["items"][0]["sortOrder"], 0);
+        // 二次 save→load 仍稳定（幂等）
+        assert!(storage.save(&loaded));
+        let reloaded = storage.load().unwrap();
+        assert!(verify_integrity(&reloaded));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
     fn test_compute_integrity_deterministic() {
         let mut config = AppConfig::default();
         config.data.items.push(Item {
@@ -704,7 +778,7 @@ mod tests {
         config.version = "1.0.0".to_string();
         config
             .extra_config
-            .insert("language".to_string(), "en-US".to_string());
+            .insert("custom_pref".to_string(), "keep-me".to_string());
         config
             .extra_config
             .insert("windowWidth".to_string(), "999".to_string());
@@ -713,7 +787,7 @@ mod tests {
         let content = fs::read_to_string(&path).unwrap();
         let v: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(v["config"]["windowWidth"], "800");
-        assert_eq!(v["config"]["language"], "en-US");
+        assert_eq!(v["config"]["custom_pref"], "keep-me");
         let _ = fs::remove_file(&path);
     }
 

@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
 
 export component ConfirmDialog {
     in-out property <bool> dialog-visible;
@@ -21,14 +21,15 @@ export component ConfirmDialog {
         height: 100%;
         background: #00000060;
 
-        // 垂直居中容器：卡片高度由内容自适应撑起（修复长消息溢出卡片、
-        // 与背景内容视觉堆叠的问题；短消息仍受 min-height 兜底）。
+        // 垂直居中容器：卡片固定高度，消息区用 ScrollView 滚动——
+        // 长消息（如外部配置目标列表）不再把卡片撑出屏幕/与背景堆叠，
+        // 短消息时留白但布局稳定。
         VerticalLayout {
             alignment: center;
 
             Rectangle {
                 width: 340px;
-                min-height: 160px;
+                height: 280px;
                 cross-axis-self-alignment: center;
                 background: Theme.bg-2;
                 border-radius: Theme.radius-lg;
@@ -46,11 +47,15 @@ export component ConfirmDialog {
                     font-weight: 700;
                 }
 
-                Text {
-                    text: root.message;
-                    color: Theme.text-2;
-                    font-size: 13px;
-                    wrap: word-wrap;
+                ScrollView {
+                    vertical-stretch: 1;
+
+                    Text {
+                        text: root.message;
+                        color: Theme.text-2;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
                 }
 
                 HorizontalBox {

@@ -1,7 +1,7 @@
-import { VerticalBox, HorizontalBox, Button, CheckBox, Slider } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, Button, CheckBox, Slider, ComboBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
-// 设置对话框（V1：背景图）。模式同 AboutDialog：普通覆盖层组件，
+// 设置对话框（V1：背景图 + 日志档位）。模式同 AboutDialog：普通覆盖层组件，
 // visible 由 main_window 的 settings-dialog-visible 驱动，Esc/关闭按钮收起。
 export component SettingsDialog {
     in-out property <bool> dialog-visible;
@@ -11,6 +11,9 @@ export component SettingsDialog {
     in property <string> bg-select-text: "Choose image...";
     in property <string> bg-clear-text: "Clear";
     in property <string> bg-dim-label: "Dim overlay";
+    in property <string> log-label: "Log level";
+    in property <[string]> log-level-model: [];
+    in property <int> log-level-index: 0;
     in property <bool> has-background: false;
     in property <bool> bg-dim-enabled: true;
     in property <float> bg-dim-percent: 35;
@@ -19,6 +22,7 @@ export component SettingsDialog {
     callback clear-background();
     callback dim-toggled(enabled: bool);
     callback dim-changed(percent: float);
+    callback log-level-changed(index: int);
     callback close();
 
     visible: root.dialog-visible;
@@ -32,7 +36,7 @@ export component SettingsDialog {
 
         Rectangle {
             width: 420px;
-            height: 250px;
+            height: 310px;
             background: Theme.bg-2;
             border-radius: Theme.radius-lg;
             border-width: 1px;
@@ -100,6 +104,25 @@ export component SettingsDialog {
                         enabled: root.bg-dim-enabled;
                         changed(value) => {
                             root.dim-changed(value);
+                        }
+                    }
+                }
+
+                HorizontalBox {
+                    spacing: Theme.spacing-md;
+                    Text {
+                        text: root.log-label;
+                        color: Theme.text-1;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                    }
+                    ComboBox {
+                        min-width: 160px;
+                        horizontal-stretch: 1;
+                        model: root.log-level-model;
+                        current-index: root.log-level-index;
+                        selected(index) => {
+                            root.log-level-changed(index);
                         }
                     }
                 }

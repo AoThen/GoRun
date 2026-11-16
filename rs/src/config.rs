@@ -95,6 +95,25 @@ pub fn migrate_legacy_from(old: &Path, current: &Path) {
         }
     }
 
+    // 迁移即签名（P0-2 修订）：程序自己迁移的旧版数据直接补信任标记并按当前
+    // 格式重签名落盘——首次启动即可通过完整性校验，不再弹"外部配置"确认框。
+    // 解析失败（损坏/非 JSON）时保留原样，交由启动信任检查兜底处理。
+    let migrated_path = current.join("config.json");
+    if migrated_path.exists() {
+        let storage = crate::storage::Storage::new(migrated_path.to_string_lossy().to_string());
+        if let Some(mut cfg) = storage.load() {
+            cfg.extra_config
+                .insert("generated_by".to_string(), "gorun-rs".to_string());
+            if storage.save(&cfg) {
+                log::info!("Migrated legacy config re-signed for trust");
+            } else {
+                log::warn!("Failed to re-sign migrated config; startup trust check will handle it");
+            }
+        } else {
+            log::warn!("Migrated config failed to parse; left as-is for startup trust check");
+        }
+    }
+
     let old_icons = old.join("icons");
     if old_icons.exists() {
         let new_icons = current.join("icons");
@@ -173,6 +192,41 @@ mod tests {
         assert!(old.join("config.json").exists());
         assert!(old.join("icons").join("abc.png").exists());
 
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
+    fn test_migrate_re_signs_legacy_config() {
+        // 迁移即签名：旧版数据迁移后应带 generated_by + integrity，
+        // 首次启动直接通过信任校验（不再弹"外部配置"确认框）
+        let old = std::env::temp_dir().join("gorun_migrate_old_sign");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_sign");
+        let _ = std::fs::create_dir_all(&old);
+        let _ = std::fs::create_dir_all(&cur);
+        // 旧 C++ 格式：含条目、无 generated_by、sortOrder 与数组序不一致
+        let legacy = r#"{
+            "version": "1.0.0",
+            "categories": [
+                {"id":"cat_b","name":"B","sortOrder":1,"viewType":0,"iconSize":48},
+                {"id":"cat_a","name":"A","sortOrder":0,"viewType":0,"iconSize":48}
+            ],
+            "items": [
+                {"id":"item_1","name":"N1","target":"C:\\a.exe","categoryId":"cat_a","sortOrder":3}
+            ],
+            "config": {"globalHotkey":"Ctrl+/","windowX":100,"windowY":100,"windowWidth":800,"windowHeight":600}
+        }"#;
+        std::fs::write(old.join("config.json"), legacy).unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        let storage =
+            crate::storage::Storage::new(cur.join("config.json").to_string_lossy().to_string());
+        let cfg = storage.load().expect("迁移后的配置应可解析");
+        assert!(
+            crate::storage::verify_integrity(&cfg),
+            "迁移后的配置应直接通过信任校验（迁移即签名）"
+        );
         let _ = std::fs::remove_dir_all(&old);
         let _ = std::fs::remove_dir_all(&cur);
     }

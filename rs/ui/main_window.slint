@@ -16,8 +16,9 @@ export { CategoryModel, ItemModel }
 
 export component MainWindow inherits Window {
     title: "GoRun";
-    min-width: 800px;
-    min-height: 600px;
+    // 最小尺寸 360×240：允许自由缩小窗口（原 800×600 下限导致"不能调节大小"）
+    min-width: 360px;
+    min-height: 240px;
     preferred-width: 800px;
     preferred-height: 600px;
 
@@ -126,6 +127,11 @@ export component MainWindow inherits Window {
     in property <string> settings-bg-clear: "Clear";
     in property <string> settings-bg-dim-label: "Dim overlay";
     in property <string> settings-close: "Close";
+    // 日志档位（设置项）：文案/选项由 Rust 本地化注入，切换即时生效并持久化
+    in property <string> settings-log-label: "Log level";
+    in property <[string]> settings-log-model: [];
+    in-out property <int> settings-log-index: 0;
+    callback settings-log-changed(index: int);
     // 背景图当前状态与遮罩设置（Rust 侧回填/持久化）
     in-out property <string> settings-bg-status: "";
     in-out property <bool> settings-bg-dim-enabled: true;
@@ -450,6 +456,9 @@ export component MainWindow inherits Window {
             bg-clear-text: root.settings-bg-clear;
             bg-dim-label: root.settings-bg-dim-label;
             close-text: root.settings-close;
+            log-label: root.settings-log-label;
+            log-level-model: root.settings-log-model;
+            log-level-index: root.settings-log-index;
             has-background: root.has-bg-image;
             bg-dim-enabled: root.settings-bg-dim-enabled;
             bg-dim-percent: root.settings-bg-dim-percent;
@@ -466,6 +475,10 @@ export component MainWindow inherits Window {
             dim-changed(v) => {
                 root.settings-bg-dim-percent = v;
                 root.settings-dim-changed(v);
+            }
+            log-level-changed(i) => {
+                root.settings-log-index = i;
+                root.settings-log-changed(i);
             }
             close() => {
                 root.settings-dialog-visible = false;

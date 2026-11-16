@@ -66,6 +66,7 @@ pub fn setup_edit_dialog_new_category(
 
 /// 信任导入外部配置：从隔离备份恢复分类与项目数据，补写 generated_by 标记并落盘。
 /// 仅导入数据（categories/items/version），保留当前窗口/热键/语言等会话偏好。
+/// P0-2 修订：不再需要用户确认，启动即自动调用；结果以 toast 审计提示。
 pub fn import_external_config(
     state: &Rc<RefCell<AppState>>,
     weak_ui: &slint::Weak<MainWindow>,
@@ -75,9 +76,19 @@ pub fn import_external_config(
         Some(cfg) => cfg,
         None => {
             log::error!("Failed to parse external config backup: {}", backup);
+            if let Some(ui) = weak_ui.upgrade() {
+                let loc = state.borrow().loc.clone();
+                let msg = loc.borrow().tr("Tip_ExternalRestoreFailed").to_string();
+                crate::ui_sync::show_toast(&ui, msg, true);
+            }
             return false;
         }
     };
+    let stats = format!(
+        "{} categories, {} items",
+        imported.data.categories.len(),
+        imported.data.items.len()
+    );
     let new_current = imported
         .data
         .categories
@@ -114,7 +125,11 @@ pub fn import_external_config(
     if let Some(ui) = weak_ui.upgrade() {
         crate::ui_sync::refresh_categories_ui(&ui, &state.borrow());
         crate::ui_sync::refresh_items_ui(&ui, &state.borrow(), &cur, "");
+        // 静默恢复的审计提示：数据已导入，提醒用户核验来源
+        let loc = state.borrow().loc.clone();
+        let msg = loc.borrow().tr("Tip_ExternalRestored").to_string();
+        crate::ui_sync::show_toast(&ui, msg, false);
     }
-    log::info!("External config imported: {}", backup);
+    log::info!("External config imported ({}): {}", stats, backup);
     true
 }

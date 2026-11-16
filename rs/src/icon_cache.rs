@@ -402,7 +402,9 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
         );
 
         // 32bpp 图标色板 alpha 常为全 0（透明信息存于 AND mask），需从 mask 重建 alpha，
-        // 否则保存后图标完全透明不可见。仅检查 GetDIBits 实际返回的行。
+        // 否则保存后图标完全透明不可见。alpha 带噪声（近全透明）时同样按无效处理，
+        // 否则 mask 重建被跳过、保存出的 PNG 接近全透明（用户看到"空白方框"）。
+        // 仅检查 GetDIBits 实际返回的行。
         let mut mask_bits: Vec<u8> = Vec::new();
         let mut mask_row: usize = 0;
         let mask_needed = if lines != 0 && bmp.bmBitsPixel >= 32 {
@@ -410,7 +412,9 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
                 .saturating_mul(width as usize)
                 .saturating_mul(4)
                 .min(pixels.len());
-            pixels[..valid_len].chunks_exact(4).all(|c| c[3] == 0)
+            let total = valid_len / 4;
+            let opaque = pixels[..valid_len].chunks_exact(4).filter(|c| c[3] >= 8).count();
+            total == 0 || (opaque as f64) < (total as f64) * 0.02
         } else {
             false
         };
@@ -462,6 +466,18 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
                 let byte = mask_bits[row * mask_row + col / 8];
                 chunk[3] = if (byte >> (7 - col % 8)) & 1 == 0 { 255 } else { 0 };
             }
+        }
+
+        // 兜底自检：处理后的像素若仍无任何可见像素（alpha 噪声致 mask 重建未覆盖、
+        // mask 数据缺失等边角情况），强制不透明，保证图标可见，避免"空白方框"。
+        if !pixels.chunks_exact(4).any(|c| c[3] >= 8) {
+            for chunk in pixels.chunks_exact_mut(4) {
+                chunk[3] = 255;
+            }
+            log::warn!(
+                "Icon pixels fully transparent after alpha pass; forced opaque: {:?}",
+                path
+            );
         }
 
         let tmp_path = path.with_extension("png.tmp");

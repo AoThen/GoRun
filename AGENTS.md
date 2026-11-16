@@ -245,7 +245,7 @@ cargo test
 | serde_json | 1.x | JSON 解析 |
 | dirs | 5.x | 系统目录 |
 | image | 0.25 | 图像处理 |
-| log | 0.4 | 日志（release 最高级别 Warn） |
+| log | 0.4 | 日志（运行时档位可调：Warn 默认/Info/Debug，设置项 `log_level`） |
 | chrono | 0.4 | 日期时间 |
 | pinyin | 0.10 | 中文拼音转换（搜索） |
 | raw-window-handle | 0.6 | 窗口句柄 |
@@ -330,15 +330,11 @@ GoRun 支持 Windows 环境变量以及以下内置参数变量：
 
 ---
 
-## 多语言支持
+## 文案（仅简体中文）
 
-语言文件位于 `resources/lang/` 目录，使用 JSON 格式存储：
+v2 决策：仅保留简体中文，不再支持多语言切换。文案文件为 `resources/lang/zh-CN.json`（编译期嵌入，`Localization::tr()` 取键值，缺键回退键名）。
 
-- `zh-CN.json` - 简体中文（默认）
-- `zh-TW.json` - 繁体中文
-- `en-US.json` - 英文
-
-### 语言文件结构
+### 文案文件结构
 
 ```json
 {

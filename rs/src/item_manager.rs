@@ -422,8 +422,13 @@ impl ItemManager {
         self.modified = false;
     }
 
-    pub fn handle_drop(&mut self, files: &[std::path::PathBuf], category_id: &str) -> usize {
-        let mut count = 0;
+    /// 拖入/粘贴新增条目，返回新增条目的 id 列表（供调用方同步提取图标）。
+    pub fn handle_drop(
+        &mut self,
+        files: &[std::path::PathBuf],
+        category_id: &str,
+    ) -> Vec<String> {
+        let mut added: Vec<String> = Vec::new();
         for path in files {
             let name = path
                 .file_stem()
@@ -446,8 +451,9 @@ impl ItemManager {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
+            let item_id = crate::model::generate_id("item");
             let item = Item {
-                id: crate::model::generate_id("item"),
+                id: item_id.clone(),
                 name,
                 target,
                 working_dir,
@@ -456,10 +462,10 @@ impl ItemManager {
             };
 
             if self.add_item(item) {
-                count += 1;
+                added.push(item_id);
             }
         }
-        count
+        added
     }
 
     pub fn get_item(&self, id: &str) -> Option<&Item> {
@@ -865,8 +871,9 @@ mod tests {
             ..Default::default()
         });
         let paths = vec![std::path::PathBuf::from("C:\\Tools\\foo.exe")];
-        let n = m.handle_drop(&paths, "c1");
-        assert_eq!(n, 1);
+        let added = m.handle_drop(&paths, "c1");
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0], m.config.data.items[0].id);
         assert_eq!(m.config.data.items.len(), 1);
         assert_eq!(m.config.data.items[0].category_id, "c1");
     }

@@ -675,24 +675,3 @@ fn test_tray_toggle_low_resident_updates_flag_and_config() {
         "extra_config.low_resident 应写 1（初始 false）"
     );
 }
-
-/// SetLanguage：写入 extra_config.language 且 loc 实例被替换。
-#[test]
-fn test_tray_set_language_updates_config_and_loc() {
-    let (cats, items) = sample_data();
-    let state = setup_app_state(cats, items);
-    let ui = setup_ui_with_data(vec![], vec![]);
-
-    crate::tray_ui::handle_tray_ui_action(
-        crate::tray_ui::TrayUiAction::SetLanguage("en-US".into()),
-        &ui,
-        &state,
-    );
-    let st = state.borrow();
-    assert_eq!(
-        st.manager.config().extra_config.get("language").map(|s| s.as_str()),
-        Some("en-US"),
-        "language 应写入 extra_config"
-    );
-    assert_eq!(st.loc.borrow().language_code(), "en-US", "loc 实例应切换为 en-US");
-}

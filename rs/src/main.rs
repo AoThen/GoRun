@@ -112,17 +112,18 @@ fn main() {
     };
 
     log::info!("Config loaded from: {:?}", config::config_path());
-    // 信任边界（P0-2）：非首启、含条目且未通过完整性校验 → 视为外部/未信任配置。
+    // 信任边界（P0-2 修订）：非首启、含条目且未通过完整性校验 → 视为外部/未信任配置。
     // 校验 = generated_by 标记值精确匹配 + 内容完整性值（config_integrity）匹配，
-    // 仅伪造标记无法通过。默认拒绝执行，将原文件备份为 config.json.external，
-    // 重建默认配置加载，避免任意外部 target 被双击/run_all 批量执行。
+    // 仅伪造标记无法通过。处理策略由"确认弹窗"改为"静默恢复 + toast 审计提示"：
+    // 原文件隔离为 config.json.external，先用默认配置启动，ui 就绪后自动导入
+    // 备份数据并提示用户核验（保留"如非本人操作请检查"警示）。
     let mut external_blocked = false;
     let mut external_backup_path: Option<String> = None;
     let external_config =
         !first_run && !app_config.data.items.is_empty() && !storage::verify_integrity(&app_config);
     if external_config {
         log::warn!(
-            "External/untrusted config detected, refusing to execute: {:?}",
+            "External/untrusted config detected, quarantining: {:?}",
             config_path
         );
         let external_backup = format!("{}.external", config_path.display());
@@ -145,13 +146,17 @@ fn main() {
         external_blocked = true;
     }
 
-    let hotkey_str = app_config.config.global_hotkey.clone();
-    // 语言/跟随鼠标初始状态（决策⑤：默认 zh-CN；UI 文本切换延后，仅持久化）
-    let lang_code = app_config
+    // 日志档位（设置项）：默认最少（Warn），可选标准 Info/调试 Debug，运行时即时生效
+    let log_level = app_config
         .extra_config
-        .get("language")
+        .get("log_level")
         .cloned()
-        .unwrap_or_else(|| "zh-CN".to_string());
+        .unwrap_or_default();
+    logger::apply_level(&log_level);
+
+    let hotkey_str = app_config.config.global_hotkey.clone();
+    // 仅中文（v2 决策）：固定简体中文，不再支持多语言切换
+    let lang_code = "zh-CN";
     let follow_mouse = app_config
         .extra_config
         .get("follow_mouse")
@@ -194,10 +199,30 @@ fn main() {
             }
         }
     }
+    // P0-2 修订：静默恢复待办——
+    // 场景 A：本次启动检测到未信任配置并已隔离 → ui 就绪后从 .external 恢复；
+    // 场景 B：历史隔离残留（当前无项目且至多 1 个分类（隔离后重建的默认分类）
+    //         且存在 .external 备份）→ 一并恢复，解决"数据被隔离后未确认、
+    //         第二次打开无法找回"的旧问题。
+    // 条件从严：用户已有多个分类/项目时绝不恢复，避免覆盖在用数据。
+    let external_backup_file = format!("{}.external", config_path.display());
+    let pending_restore = if external_backup_path.is_some() {
+        external_backup_path.clone()
+    } else if !first_run
+        && app_config.data.items.is_empty()
+        && app_config.data.categories.len() <= 1
+        && std::path::Path::new(&external_backup_file).exists()
+    {
+        Some(external_backup_file.clone())
+    } else {
+        None
+    };
+    // 隔离失败（无法备份）时的降级提示：使用空配置启动，原文件保留未动
+    let quarantine_failed = external_blocked && external_backup_path.is_none();
     let manager = ItemManager::new(app_config);
     let icon_cache = icon_cache::IconCache::new();
     let (tray_icon, rx) = tray::TrayIcon::create(0, "GoRun");
-    tray::set_ui_state(follow_mouse, low_resident, &lang_code);
+    tray::set_ui_state(follow_mouse, low_resident);
     // 托盘菜单文本由 apply_localized_texts（窗口初始化后、事件循环前）统一设置，
     // 避免重复设置；见 main.rs 的 tray_ui::apply_localized_texts 调用。
     let tray_ui: std::sync::Arc<std::sync::Mutex<Vec<tray_ui::TrayUiAction>>> =
@@ -253,8 +278,8 @@ fn main() {
     let mut pending_window_size: Option<(u32, u32)> = None;
     {
         let cfg = state.borrow().manager.config().config.clone();
-        if cfg.window_width >= 400
-            && cfg.window_height >= 300
+        if cfg.window_width >= 360
+            && cfg.window_height >= 240
             && util::window_on_screen(
                 cfg.window_x,
                 cfg.window_y,
@@ -309,7 +334,7 @@ fn main() {
             move || {
                 if let Some(ui) = weak_geo.upgrade() {
                     // P3/P5 低驻留：窗口隐藏时跳过几何/图标/保存（省 CPU），
-                    // 仅保留托盘动作消费（托盘 SetLanguage/FollowMouse 依赖本 Timer）。
+                    // 仅保留托盘动作消费（托盘 FollowMouse 依赖本 Timer）。
                     // 运行时读 state.low_resident（托盘开关可实时切换）。
                     let resident_active =
                         state_geo.borrow().low_resident.get() && !ui.window().is_visible();
@@ -481,14 +506,6 @@ fn main() {
 
     ui_sync::refresh_items_ui(&ui, &state.borrow(), &current_category_id, "");
 
-    if external_blocked {
-        let msg = format!(
-            "{}: {}",
-            loc.borrow().tr("Tip_ExternalBackup"),
-            config_path.display()
-        );
-        ui_sync::show_toast(&ui, msg, true);
-    }
     if let Some(corrupt_path) = &corrupt_quarantined {
         let msg = loc
             .borrow()
@@ -497,14 +514,18 @@ fn main() {
         ui_sync::show_toast(&ui, msg, true);
     }
 
-    handlers::wire_handler(
-        &ui,
-        state.clone(),
-        &loc,
-        hotkey_mgr.clone(),
-        hk_tx_shared,
-        external_backup_path,
-    );
+    handlers::wire_handler(&ui, state.clone(), &loc, hotkey_mgr.clone(), hk_tx_shared);
+
+    // P0-2 修订：静默恢复外部/隔离配置（无确认弹窗）。import 内部完成签名落盘、
+    // 备份清理、UI 刷新与结果 toast（Tip_ExternalRestored / 失败提示）。
+    if let Some(backup) = pending_restore {
+        log::info!("Silently restoring external config from: {}", backup);
+        handlers::dialogs::import_external_config(&state, &ui.as_weak(), &backup);
+    } else if quarantine_failed {
+        // 隔离失败（无法备份原文件）：使用空配置启动并明确告知，原文件保留未动
+        let msg = loc.borrow().tr("Tip_ExternalQuarantineFailed").to_string();
+        ui_sync::show_toast(&ui, msg, true);
+    }
 
     // 窗口就绪后统一装配：尺寸恢复 + 拖放 + 标题栏图标。
     // winit 窗口在事件循环 Resumed/ensure_window 时才真正创建，在此之前

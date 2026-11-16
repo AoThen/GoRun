@@ -1,7 +1,11 @@
-// 本地化：语言文件编译期嵌入（resources/lang/*.json），tr() 取键值；
-// 语言切换时构造新实例重新解析。UI 文本接线：菜单栏 + 空状态（最小版）。
+// 本地化：语言文件编译期嵌入（resources/lang/zh-CN.json），tr() 取键值。
+// v2 决策：仅保留简体中文，不再支持多语言切换（lang_code 参数保留以兼容调用点，
+// 无论传何值均加载 zh-CN 资源）。UI 文本接线：菜单 + 空状态 + 对话框。
 
 use std::collections::HashMap;
+
+/// 编译期嵌入的唯一语言资源（简体中文）。
+const ZH_CN_JSON: &str = include_str!("../../resources/lang/zh-CN.json");
 
 pub struct Localization {
     strings: HashMap<String, String>,
@@ -21,22 +25,13 @@ impl Localization {
 
     fn load(&mut self) {
         // 绿色软件：语言文件编译期嵌入，无需运行时外部文件
-        let content = match self.lang_code.as_str() {
-            "zh-TW" => include_str!("../../resources/lang/zh-TW.json"),
-            "en-US" => include_str!("../../resources/lang/en-US.json"),
-            _ => include_str!("../../resources/lang/zh-CN.json"),
-        };
-        match serde_json::from_str::<HashMap<String, String>>(content) {
+        match serde_json::from_str::<HashMap<String, String>>(ZH_CN_JSON) {
             Ok(json) => {
-                log::info!(
-                    "Language file loaded: {}, {} strings",
-                    self.lang_code,
-                    json.len()
-                );
+                log::info!("Language file loaded: zh-CN, {} strings", json.len());
                 self.strings = json;
             }
             Err(_) => {
-                log::error!("Failed to parse language JSON: {}", self.lang_code);
+                log::error!("Failed to parse language JSON: zh-CN");
             }
         }
     }
@@ -62,29 +57,88 @@ mod tests {
 
     #[test]
     fn test_missing_key_returns_key() {
-        let loc = Localization::new("nonexistent_lang");
+        let loc = Localization::new("zh-CN");
         assert_eq!(loc.tr("SomeKey"), "SomeKey");
     }
 
     #[test]
     fn test_tr_hit_returns_translation() {
-        let loc = Localization::new("en-US");
-        assert_eq!(loc.tr("LANG_NAME"), "English");
-        assert_eq!(loc.tr("RunErr_FNF"), "File Not Found");
+        let loc = Localization::new("zh-CN");
+        assert_eq!(loc.tr("LANG_NAME"), "简体中文");
+        assert_eq!(loc.tr("Menu_Settings"), "设置…");
     }
 
     #[test]
-    fn test_language_code_roundtrip() {
+    fn test_any_lang_code_loads_zh_cn_resource() {
+        // 仅中文：无论传什么 lang_code，都加载 zh-CN 资源；lang_code 保留原值
+        assert_eq!(Localization::new("zh-CN").language_code(), "zh-CN");
         assert_eq!(Localization::new("en-US").language_code(), "en-US");
-        assert_eq!(Localization::new("zh-TW").language_code(), "zh-TW");
-        // 未知语言回退 zh-CN 资源，但 lang_code 保留原值
-        assert_eq!(Localization::new("fr").language_code(), "fr");
+        let loc = Localization::new("xx-unknown");
+        assert!(!loc.tr("LANG_NAME").is_empty(), "资源应非空");
+        assert_ne!(loc.tr("LANG_NAME"), "LANG_NAME", "应命中 zh-CN 译文而非键");
     }
 
     #[test]
-    fn test_unknown_lang_falls_back_to_zh_cn_resource() {
-        let loc = Localization::new("xx-unknown");
-        assert!(!loc.tr("LANG_NAME").is_empty(), "回退资源应非空");
-        assert_ne!(loc.tr("LANG_NAME"), "LANG_NAME", "应命中 zh-CN 译文而非键");
+    fn test_zh_cn_contains_essential_keys() {
+        // 守卫：关键文案 key 缺失会显示原始键名（回归防护）
+        let loc = Localization::new("zh-CN");
+        let essential = [
+            "LANG_NAME",
+            "Default_Category",
+            "Menu_NewItem",
+            "Menu_NewC",
+            "Menu_DelCurrentC",
+            "Menu_RenameCurrentC",
+            "Menu_ViewHotKey",
+            "Menu_ViewIcon0",
+            "Menu_ViewIcon1",
+            "Menu_SwitchLight",
+            "Menu_SwitchDark",
+            "Menu_FollowMouse",
+            "Menu_ExportConfig",
+            "Menu_ImportConfig",
+            "Menu_Settings",
+            "Menu_About",
+            "Menu_Exit",
+            "Title_ConfirmDelete",
+            "Tip_DelCate",
+            "Btn_Del",
+            "Btn_Cancel",
+            "Status_SaveFailed",
+            "Status_RunFail",
+            "Dlg_Settings_Title",
+            "Dlg_BG_Label",
+            "Dlg_BG_Select",
+            "Dlg_BG_Clear",
+            "Dlg_BG_Dim",
+            "Dlg_Close",
+            "Dlg_Log_Level",
+            "SI_Log_Min",
+            "SI_Log_Std",
+            "SI_Log_Dbg",
+            "Tip_ExternalRestored",
+            "Tip_ExternalRestoreFailed",
+            "Tip_ExternalQuarantineFailed",
+            "Status_LogLevelSet",
+            "Tip_NeedOneCategory",
+            "Status_Pasted",
+            "Tip_RunAll",
+            "Tip_DelItem",
+            "Tray_ShowHide",
+            "Tray_AutoStart",
+            "Tray_LowResident",
+            "Tray_Exit",
+            "About_Version",
+            "About_Desc",
+            "Btn_OK",
+            "Tip_Search",
+            "Tip_NoItems",
+            "Tip_DropToAdd",
+            "STR_Category",
+            "Title_EditItem",
+        ];
+        for key in essential {
+            assert_ne!(loc.tr(key), key, "zh-CN.json 缺少关键文案 key: {}", key);
+        }
     }
 }

@@ -13,7 +13,6 @@ use slint::ComponentHandle;
 pub enum TrayUiAction {
     ToggleFollowMouse,
     ToggleLowResident,
-    SetLanguage(String),
 }
 
 pub fn start_tray_handler(
@@ -80,11 +79,6 @@ pub fn start_tray_handler(
                         q.push(TrayUiAction::ToggleLowResident);
                     }
                 }
-                TrayMessage::SetLanguage(lang) => {
-                    if let Ok(mut q) = tray_ui.lock() {
-                        q.push(TrayUiAction::SetLanguage(lang));
-                    }
-                }
                 TrayMessage::Quit => {
                     log::info!("Tray: Quit requested");
                     let _ = slint::quit_event_loop();
@@ -117,15 +111,8 @@ pub fn handle_tray_ui_action(
                 .extra_config
                 .insert("follow_mouse".into(), if new { "1".into() } else { "0".into() });
             s.save_if_modified();
-            let lang = s
-                .manager
-                .config()
-                .extra_config
-                .get("language")
-                .cloned()
-                .unwrap_or_else(|| "zh-CN".into());
             let low_res = s.low_resident.get();
-            crate::tray::set_ui_state(new, low_res, &lang);
+            crate::tray::set_ui_state(new, low_res);
             log::info!("Follow mouse toggled: {}", new);
         }
         TrayUiAction::ToggleLowResident => {
@@ -144,42 +131,8 @@ pub fn handle_tray_ui_action(
                 .get("follow_mouse")
                 .map(|v| v == "1")
                 .unwrap_or(false);
-            let lang = s
-                .manager
-                .config()
-                .extra_config
-                .get("language")
-                .cloned()
-                .unwrap_or_else(|| "zh-CN".into());
-            crate::tray::set_ui_state(follow, new, &lang);
+            crate::tray::set_ui_state(follow, new);
             log::info!("Low resident toggled: {}", new);
-        }
-        TrayUiAction::SetLanguage(lang) => {
-            let mut s = state.borrow_mut();
-            s.manager
-                .config_mut()
-                .extra_config
-                .insert("language".into(), lang.clone());
-            s.save_if_modified();
-            let follow = s
-                .manager
-                .config()
-                .extra_config
-                .get("follow_mouse")
-                .map(|v| v == "1")
-                .unwrap_or(false);
-            let low_res = s.low_resident.get();
-            drop(s);
-            // P2：先更新菜单文本（tray().texts）再写 checkmark（tray().lang）。
-            // 竞态窗口下用户看到"旧 checkmark + 新文本"，比"新 checkmark + 旧文本"更不易察觉。
-            let new_loc = {
-                let st = state.borrow();
-                *st.loc.borrow_mut() = Localization::new(&lang);
-                st.loc.clone()
-            };
-            apply_localized_texts(ui, &new_loc, ui.get_is_dark_theme());
-            crate::tray::set_ui_state(follow, low_res, &lang);
-            log::info!("Language set to {}", lang);
         }
     }
 }
@@ -204,13 +157,20 @@ pub fn apply_localized_texts(
     ui.set_sidebar_add_category_text(lb.tr("Menu_NewC").into());
     ui.set_input_dialog_confirm_text(lb.tr("Btn_OK").into());
     ui.set_input_dialog_cancel_text(lb.tr("Btn_Cancel").into());
-    // 设置对话框（V1：背景图）
+    // 设置对话框（V1：背景图 + 日志档位）
     ui.set_settings_title(lb.tr("Dlg_Settings_Title").into());
     ui.set_settings_bg_label(lb.tr("Dlg_BG_Label").into());
     ui.set_settings_bg_select(lb.tr("Dlg_BG_Select").into());
     ui.set_settings_bg_clear(lb.tr("Dlg_BG_Clear").into());
     ui.set_settings_bg_dim_label(lb.tr("Dlg_BG_Dim").into());
     ui.set_settings_close(lb.tr("Dlg_Close").into());
+    ui.set_settings_log_label(lb.tr("Dlg_Log_Level").into());
+    let log_model = Rc::new(slint::VecModel::from(vec![
+        lb.tr("SI_Log_Min").to_string().into(),
+        lb.tr("SI_Log_Std").to_string().into(),
+        lb.tr("SI_Log_Dbg").to_string().into(),
+    ]));
+    ui.set_settings_log_model(slint::ModelRc::from(log_model));
     #[cfg(windows)]
     crate::tray::set_ui_texts(crate::tray::TrayTexts {
         show: lb.tr("Tray_ShowHide").to_string(),

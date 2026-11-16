@@ -157,11 +157,6 @@ mod tests {
             tr_fill(&l, "Tip_DelItemFormat", "Notepad"),
             "确定要删除 Notepad 吗？"
         );
-        let le = loc("en-US");
-        assert_eq!(
-            tr_fill(&le, "Tip_DelItemFormat", "Notepad"),
-            "Are you sure you want to delete Notepad?"
-        );
     }
 
     #[test]

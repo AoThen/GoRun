@@ -151,6 +151,19 @@ pub fn init(debug_to_console: bool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// 运行时日志档位（设置项）：warn=最少（默认）/ info=标准 / debug=调试。
+/// 编译期 feature 已放宽到 release_max_level_debug，运行时按本设置过滤，
+/// 修改后立即生效（无需重启）。未知值回退 Warn。
+pub fn apply_level(level: &str) {
+    let filter = match level {
+        "debug" => LevelFilter::Debug,
+        "info" => LevelFilter::Info,
+        _ => LevelFilter::Warn,
+    };
+    log::set_max_level(filter);
+    log::info!("Log level applied: {}", filter.as_str());
+}
+
 pub fn set_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
@@ -192,5 +205,22 @@ mod tests {
     fn test_log_path_under_base() {
         let p = Path::new("x/gorun_debug.log");
         assert_eq!(p.with_extension("log.old").to_string_lossy(), "x/gorun_debug.log.old");
+    }
+
+    #[test]
+    fn test_apply_level_mapping() {
+        // 三档映射 + 未知值回退 Warn；全局 max_level 即时切换
+        apply_level("debug");
+        assert_eq!(log::max_level(), LevelFilter::Debug);
+        apply_level("info");
+        assert_eq!(log::max_level(), LevelFilter::Info);
+        apply_level("warn");
+        assert_eq!(log::max_level(), LevelFilter::Warn);
+        apply_level("nonsense");
+        assert_eq!(log::max_level(), LevelFilter::Warn);
+        apply_level("");
+        assert_eq!(log::max_level(), LevelFilter::Warn);
+        // 还原，避免影响其他依赖全局级别的测试
+        apply_level("debug");
     }
 }
