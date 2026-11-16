@@ -115,7 +115,10 @@ pub fn spawn_icon_refresh(
 }
 /// 把后台提取出的图标缓存路径回写到项目模型并落盘（P0）。
 /// 必须调用方持有主线程状态；提取线程只负责产出路径，写模型留在事件循环内。
+/// 有回写时整表重建条目模型：软件渲染器对 set_row_data 的图片更新可能不重绘
+/// （slint ImageCacheMixin 缺陷族 #13568），全量刷新保证异步提取后图标必现。
 pub fn persist_cached_icons(
+    ui: &MainWindow,
     slot: &std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
     state: &Rc<RefCell<AppState>>,
 ) {
@@ -129,15 +132,21 @@ pub fn persist_cached_icons(
         }
         map.drain().collect()
     };
-    let mut st = state.borrow_mut();
-    let mut changed = false;
-    for (item_id, path) in updates {
-        if st.manager.set_cached_icon(&item_id, &path) {
-            changed = true;
+    let (changed, cat_id, query) = {
+        let mut st = state.borrow_mut();
+        let mut changed = false;
+        for (item_id, path) in updates {
+            if st.manager.set_cached_icon(&item_id, &path) {
+                changed = true;
+            }
         }
-    }
+        if changed {
+            st.save_if_modified();
+        }
+        (changed, st.current_category_id.clone(), st.search_query.clone())
+    };
     if changed {
-        st.save_if_modified();
+        refresh_items_ui(ui, &state.borrow(), &cat_id, &query);
     }
 }
 

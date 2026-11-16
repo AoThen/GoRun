@@ -342,8 +342,9 @@ fn main() {
                         geometry::save_window_geometry(&ui, &state_geo);
                         // P0：把后台提取到的图标缓存路径回写模型并落盘，
                         // 否则重启后自动提取的图标全部丢失。
+                        // 有回写时顺带整表重建条目模型（见 persist_cached_icons 文档）。
                         let pending_icons = state_geo.borrow().pending_icon_paths.clone();
-                        ui_sync::persist_cached_icons(&pending_icons, &state_geo);
+                        ui_sync::persist_cached_icons(&ui, &pending_icons, &state_geo);
                         // P1-5：几何去抖窗口到期才真正写盘
                         state_geo.borrow_mut().flush_geometry_if_due(false);
                         // P2-05：保存失败一次性状态栏提示（避免静默丢数据）；显示后复位，
