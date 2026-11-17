@@ -175,11 +175,7 @@ impl ItemManager {
         self.config.data.items.retain(|i| i.category_id != id);
         self.config.data.categories.retain(|c| c.id != id);
         self.modified = true;
-        log::info!(
-            "Category deleted: id={}, cascaded_items={}",
-            id,
-            removed
-        );
+        log::info!("Category deleted: id={}, cascaded_items={}", id, removed);
         true
     }
 
@@ -359,7 +355,12 @@ impl ItemManager {
             items[slot] = item;
         }
         self.modified = true;
-        log::info!("Item reordered in category {}: from={} to={}", category_id, from, to);
+        log::info!(
+            "Item reordered in category {}: from={} to={}",
+            category_id,
+            from,
+            to
+        );
         true
     }
 
@@ -372,16 +373,19 @@ impl ItemManager {
         let cat = items[idx].category_id.clone();
         // 向前/向后找同分类的最近兄弟（跳过其他分类的项）
         let target = if up {
-            (0..idx)
-                .rev()
-                .find(|&j| items[j].category_id == cat)
+            (0..idx).rev().find(|&j| items[j].category_id == cat)
         } else {
             ((idx + 1)..items.len()).find(|&j| items[j].category_id == cat)
         };
         if let Some(j) = target {
             items.swap(idx, j);
             self.modified = true;
-            log::info!("Item moved {} at {}, target {}", if up { "up" } else { "down" }, idx, j);
+            log::info!(
+                "Item moved {} at {}, target {}",
+                if up { "up" } else { "down" },
+                idx,
+                j
+            );
             true
         } else {
             log::debug!("Item {} already at boundary", item_id);
@@ -423,11 +427,7 @@ impl ItemManager {
     }
 
     /// 拖入/粘贴新增条目，返回新增条目的 id 列表（供调用方同步提取图标）。
-    pub fn handle_drop(
-        &mut self,
-        files: &[std::path::PathBuf],
-        category_id: &str,
-    ) -> Vec<String> {
+    pub fn handle_drop(&mut self, files: &[std::path::PathBuf], category_id: &str) -> Vec<String> {
         let mut added: Vec<String> = Vec::new();
         for path in files {
             let name = path
@@ -595,8 +595,7 @@ pub fn normalize_drop_target(path: &std::path::Path) -> String {
         .map(|e| e.eq_ignore_ascii_case("url"))
         .unwrap_or(false)
     {
-        read_url_from_internet_shortcut(path)
-            .unwrap_or_else(|| path.to_string_lossy().to_string())
+        read_url_from_internet_shortcut(path).unwrap_or_else(|| path.to_string_lossy().to_string())
     } else {
         path.to_string_lossy().to_string()
     }
@@ -784,9 +783,21 @@ mod tests {
     #[test]
     fn test_move_category_to_index_reorders() {
         let mut m = make_manager(vec![]);
-        m.add_category(Category { id: "c1".into(), name: "C1".into(), ..Default::default() });
-        m.add_category(Category { id: "c2".into(), name: "C2".into(), ..Default::default() });
-        m.add_category(Category { id: "c3".into(), name: "C3".into(), ..Default::default() });
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c3".into(),
+            name: "C3".into(),
+            ..Default::default()
+        });
         assert!(m.move_category_to_index(0, 2));
         let ids: Vec<String> = m.categories().iter().map(|c| c.id.clone()).collect();
         assert_eq!(ids, vec!["c2", "c3", "c1"]);
@@ -795,7 +806,11 @@ mod tests {
     #[test]
     fn test_move_category_to_index_bounds_rejected() {
         let mut m = make_manager(vec![]);
-        m.add_category(Category { id: "c1".into(), name: "C1".into(), ..Default::default() });
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
         assert!(!m.move_category_to_index(0, 0));
         assert!(!m.move_category_to_index(0, 1));
         assert_eq!(m.categories().len(), 1);
@@ -1052,10 +1067,7 @@ mod tests {
 
     #[test]
     fn test_read_url_from_shortcut_parses_url_line() {
-        let path = std::env::temp_dir().join(format!(
-            "gorun_url_test_{}.url",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("gorun_url_test_{}.url", std::process::id()));
         std::fs::write(&path, "[InternetShortcut]\nURL=https://example.com/\n").unwrap();
         assert_eq!(
             read_url_from_internet_shortcut(&path).as_deref(),
@@ -1066,10 +1078,7 @@ mod tests {
 
     #[test]
     fn test_read_url_from_shortcut_case_insensitive_key() {
-        let path = std::env::temp_dir().join(format!(
-            "gorun_url_lower_{}.url",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("gorun_url_lower_{}.url", std::process::id()));
         std::fs::write(&path, "url=ftp://host/file\n").unwrap();
         assert_eq!(
             read_url_from_internet_shortcut(&path).as_deref(),
@@ -1086,10 +1095,7 @@ mod tests {
 
     #[test]
     fn test_read_url_from_shortcut_no_url_line_returns_none() {
-        let path = std::env::temp_dir().join(format!(
-            "gorun_url_nourl_{}.url",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("gorun_url_nourl_{}.url", std::process::id()));
         std::fs::write(&path, "[InternetShortcut]\nIconFile=x.ico\n").unwrap();
         assert!(read_url_from_internet_shortcut(&path).is_none());
         std::fs::remove_file(&path).ok();
@@ -1097,10 +1103,7 @@ mod tests {
 
     #[test]
     fn test_read_url_from_shortcut_empty_url_returns_none() {
-        let path = std::env::temp_dir().join(format!(
-            "gorun_url_empty_{}.url",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("gorun_url_empty_{}.url", std::process::id()));
         std::fs::write(&path, "URL=\n").unwrap();
         assert!(read_url_from_internet_shortcut(&path).is_none());
         std::fs::remove_file(&path).ok();
@@ -1108,24 +1111,15 @@ mod tests {
 
     #[test]
     fn test_normalize_drop_target_uses_url_for_internet_shortcut() {
-        let path = std::env::temp_dir().join(format!(
-            "gorun_norm_{}.url",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("gorun_norm_{}.url", std::process::id()));
         std::fs::write(&path, "URL=https://example.com/page\n").unwrap();
-        assert_eq!(
-            normalize_drop_target(&path),
-            "https://example.com/page"
-        );
+        assert_eq!(normalize_drop_target(&path), "https://example.com/page");
         std::fs::remove_file(&path).ok();
     }
 
     #[test]
     fn test_normalize_drop_target_keeps_plain_path() {
-        let path = std::env::temp_dir().join(format!(
-            "gorun_plain_{}.exe",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("gorun_plain_{}.exe", std::process::id()));
         // 非 .url 文件：原样返回路径（无需真实存在）
         let out = normalize_drop_target(&path);
         assert_eq!(out, path.to_string_lossy().to_string());

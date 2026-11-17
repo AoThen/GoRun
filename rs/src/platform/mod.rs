@@ -91,8 +91,6 @@ impl Drop for DropHandler {
 unsafe impl Send for DropHandler {}
 
 /// 安装拖放，返回 (生命周期守卫, 消息接收端)。
-pub fn setup_dragdrop(
-    hwnd: isize,
-) -> (DropHandler, std::sync::mpsc::Receiver<DropMessage>) {
+pub fn setup_dragdrop(hwnd: isize) -> (DropHandler, std::sync::mpsc::Receiver<DropMessage>) {
     DropHandler::new(hwnd)
 }

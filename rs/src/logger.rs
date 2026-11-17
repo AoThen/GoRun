@@ -206,7 +206,10 @@ mod tests {
     #[test]
     fn test_log_path_under_base() {
         let p = Path::new("x/gorun_debug.log");
-        assert_eq!(p.with_extension("log.old").to_string_lossy(), "x/gorun_debug.log.old");
+        assert_eq!(
+            p.with_extension("log.old").to_string_lossy(),
+            "x/gorun_debug.log.old"
+        );
     }
 
     #[test]

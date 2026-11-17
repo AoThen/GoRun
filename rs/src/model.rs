@@ -197,7 +197,11 @@ mod tests {
         let parts: Vec<&str> = id.split('_').collect();
         assert_eq!(parts.len(), 3, "id 应含三段: {}", id);
         assert_eq!(parts[0], "cat");
-        assert!(parts[1].parse::<u128>().is_ok(), "中段应为毫秒时间戳: {}", id);
+        assert!(
+            parts[1].parse::<u128>().is_ok(),
+            "中段应为毫秒时间戳: {}",
+            id
+        );
         assert!(parts[2].parse::<u64>().is_ok(), "末段应为序号: {}", id);
     }
 
@@ -274,7 +278,10 @@ mod tests {
         // serde 缺失 icon_size 字段 → default_icon_size()=48
         let json = r#"{"id":"c","name":"Apps"}"#;
         let cat: Category = serde_json::from_str(json).unwrap();
-        assert_eq!(cat.icon_size, 48, "serde 缺失字段应回退到 default_icon_size()=48");
+        assert_eq!(
+            cat.icon_size, 48,
+            "serde 缺失字段应回退到 default_icon_size()=48"
+        );
     }
 
     #[test]

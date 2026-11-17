@@ -143,7 +143,11 @@ pub fn persist_cached_icons(
         if changed {
             st.save_if_modified();
         }
-        (changed, st.current_category_id.clone(), st.search_query.clone())
+        (
+            changed,
+            st.current_category_id.clone(),
+            st.search_query.clone(),
+        )
     };
     if changed {
         refresh_items_ui(ui, &state.borrow(), &cat_id, &query);
@@ -199,7 +203,11 @@ pub fn run_item_at_index(
     } else {
         log::error!("Failed to launch {}: {}", item.name, result.error_message);
         let err_text = run_error_text(&loc, &result.error);
-        let msg = util::tr_fill(&loc, "Status_RunFail", &format!("{}: {}", item.name, err_text));
+        let msg = util::tr_fill(
+            &loc,
+            "Status_RunFail",
+            &format!("{}: {}", item.name, err_text),
+        );
         let weak2 = weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(ui) = weak2.upgrade() {
@@ -392,7 +400,10 @@ pub fn sync_item_hotkeys(state: &AppState) {
         .map(|i| (i.id.clone(), i.hotkey.clone()))
         .collect();
     let tx = state.item_hotkey_tx.clone();
-    let ok = state.item_hotkey_mgr.borrow_mut().register_all(&hotkeys, tx);
+    let ok = state
+        .item_hotkey_mgr
+        .borrow_mut()
+        .register_all(&hotkeys, tx);
     if !ok {
         log::warn!("Item hotkey registration reported failure (partial)");
     }
@@ -406,8 +417,14 @@ mod tests {
     fn test_run_error_text_maps_each_error_to_localized_key() {
         let loc = Rc::new(RefCell::new(Localization::new("zh-CN")));
         assert_eq!(run_error_text(&loc, &RunError::None), "成功");
-        assert_eq!(run_error_text(&loc, &RunError::FileNotFound), "找不到指定的文件");
-        assert_eq!(run_error_text(&loc, &RunError::PathNotFound), "找不到指定的路径");
+        assert_eq!(
+            run_error_text(&loc, &RunError::FileNotFound),
+            "找不到指定的文件"
+        );
+        assert_eq!(
+            run_error_text(&loc, &RunError::PathNotFound),
+            "找不到指定的路径"
+        );
         assert_eq!(run_error_text(&loc, &RunError::AccessDenied), "访问被拒绝");
         assert_eq!(run_error_text(&loc, &RunError::OutOfMemory), "内存不足");
         assert_eq!(

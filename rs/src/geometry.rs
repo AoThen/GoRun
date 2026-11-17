@@ -20,11 +20,7 @@ pub fn flush_window_geometry(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
 /// 停下超过该时长才落盘，避免高频 I/O 冲掉备份链里的数据快照。
 pub const GEOMETRY_SAVE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(2000);
 
-fn save_window_geometry_with(
-    ui: &MainWindow,
-    state: &Rc<RefCell<AppState>>,
-    force: bool,
-) {
+fn save_window_geometry_with(ui: &MainWindow, state: &Rc<RefCell<AppState>>, force: bool) {
     // 必须在事件循环内/窗口销毁前调用；position()/size() 返回物理像素（与 C++ GetWindowRect 一致）
     let pos = ui.window().position();
     // P2-04：最小化时 GetWindowRect 返回约 (-32000,-32000)，直接落盘会污染配置。
@@ -47,7 +43,14 @@ fn save_window_geometry_with(
     // 日志无对应变化，说明尺寸事件未到达 slint 层，需查 winit/OS 命中测试）
     log::debug!(
         "Window geometry change: pos ({},{}) -> ({},{}), size {}x{} -> {}x{}",
-        cx, cy, pos.x, pos.y, cw, ch, w, h
+        cx,
+        cy,
+        pos.x,
+        pos.y,
+        cw,
+        ch,
+        w,
+        h
     );
     let mut state = state.borrow_mut();
     // P1-2：窗口几何属于高频非关键写，使用 storage.save() 直接落盘，
@@ -87,7 +90,9 @@ pub fn when_window_ready(
     }
     #[cfg(windows)]
     {
-        let callback = Rc::new(RefCell::new(Some(Box::new(on_ready) as WindowReadyCallback)));
+        let callback = Rc::new(RefCell::new(
+            Some(Box::new(on_ready) as WindowReadyCallback),
+        ));
         probe_window_ready(ui_weak, callback, 0);
     }
 }
@@ -191,8 +196,14 @@ pub fn position_menu_at_cursor(ui: &MainWindow, x: f32, y: f32, item_count: usiz
             let pos = ui.window().position();
             // v2：菜单项高 22→28px（context_menu.slint），高度系数同步，否则底缘 clamp 失效弹层被裁切
             let (lx, ly) = clamp_menu_pos(
-                pt.x, pt.y, pos.x, pos.y, sf,
-                size.width as f32 / sf, size.height as f32 / sf, item_count,
+                pt.x,
+                pt.y,
+                pos.x,
+                pos.y,
+                sf,
+                size.width as f32 / sf,
+                size.height as f32 / sf,
+                item_count,
             );
             ui.set_context_menu_x(lx);
             ui.set_context_menu_y(ly);
@@ -217,7 +228,7 @@ pub fn bring_to_front(ui: &MainWindow) {
     {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::{
-            IsIconic, SetForegroundWindow, ShowWindow, SW_SHOW, SW_RESTORE,
+            IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOW,
         };
         if let Some(hwnd) = crate::drop_handler::try_get_hwnd(ui) {
             unsafe {

@@ -1,4 +1,3 @@
-
 //! GoRun 可执行入口。
 //!
 //! 所有实现都在 lib（`GoRun` crate）内，这里只做模块转导出 + `main`。
@@ -38,10 +37,14 @@ fn main() {
 
     #[cfg(windows)]
     {
-        use windows::Win32::Foundation::{GetLastError, HANDLE, ERROR_ALREADY_EXISTS};
+        use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
         use windows::Win32::System::Threading::CreateMutexW;
         let handle = unsafe {
-            CreateMutexW(None, false, windows::core::w!("Local\\GoRun_SingleInstance"))
+            CreateMutexW(
+                None,
+                false,
+                windows::core::w!("Local\\GoRun_SingleInstance"),
+            )
         }
         .unwrap_or(HANDLE::default());
         if handle.is_invalid() {
@@ -58,12 +61,7 @@ fn main() {
 
     let config_path = config::config_path();
     let first_run = !std::path::Path::new(&config_path).exists();
-    let storage = Storage::new(
-        config_path
-            .to_str()
-            .unwrap_or("config.json")
-            .to_string(),
-    );
+    let storage = Storage::new(config_path.to_str().unwrap_or("config.json").to_string());
 
     // P2-05：区分"文件不存在"与"文件损坏"。损坏且无可用备份时隔离坏文件留证，
     // 避免后续保存覆盖坏数据/污染备份链；有可用备份时 load_from_backup 已自愈。
@@ -73,8 +71,7 @@ fn main() {
     } else {
         None
     };
-    let corrupt_no_backup =
-        !first_run && loaded.is_none() && restored.is_none();
+    let corrupt_no_backup = !first_run && loaded.is_none() && restored.is_none();
     let mut app_config = loaded.or(restored).unwrap_or_default();
     // P2-3：记录是否自动创建了默认分类，供后续用当前语言重命名（外部隔离分支会置 true）
     let mut created_default_cat = app_config.data.categories.is_empty();
@@ -131,7 +128,9 @@ fn main() {
             log::info!("External config quarantined to: {}", external_backup);
             external_backup_path = Some(external_backup);
         } else {
-            log::error!("Failed to backup external config, will fallback to default in memory only");
+            log::error!(
+                "Failed to backup external config, will fallback to default in memory only"
+            );
         }
         app_config = AppConfig::default();
         app_config.data.categories.push(Category {
@@ -250,7 +249,9 @@ fn main() {
         edit_dialog: None,
         loc: loc.clone(),
         save_fail_notified: false,
-        pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        )),
         drop_handler: None,
         geometry_dirty: false,
         last_geometry_change: None,
@@ -288,7 +289,8 @@ fn main() {
             )
         {
             use slint::PhysicalPosition;
-            ui.window().set_position(PhysicalPosition::new(cfg.window_x, cfg.window_y));
+            ui.window()
+                .set_position(PhysicalPosition::new(cfg.window_x, cfg.window_y));
             // 历史版本 DPI 漂移可能留下超过屏幕的超大尺寸：等比缩回虚拟屏 80% 以内
             let (w, h) = util::clamp_size_to_virtual_screen(cfg.window_width, cfg.window_height);
             // 创建前以"物理尺寸 ÷ 所在屏缩放"的逻辑尺寸预设，首帧即为目标尺寸；
@@ -297,11 +299,18 @@ fn main() {
             // 首帧可能仍有偏差，由 when_window_ready 的兜底恢复校准到目标尺寸。
             match util::monitor_scale_at(cfg.window_x, cfg.window_y) {
                 Some(scale) => {
-                    log::info!("Pre-setting window to {}x{} physical (scale {:.2})", w, h, scale);
+                    log::info!(
+                        "Pre-setting window to {}x{} physical (scale {:.2})",
+                        w,
+                        h,
+                        scale
+                    );
                     ui.window()
                         .set_size(slint::LogicalSize::new(w as f32 / scale, h as f32 / scale));
                 }
-                None => log::info!("Monitor scale unavailable; size restore deferred to window-ready"),
+                None => {
+                    log::info!("Monitor scale unavailable; size restore deferred to window-ready")
+                }
             }
             pending_window_size = Some((w as u32, h as u32));
         }
@@ -377,7 +386,10 @@ fn main() {
     let hk_tx_shared: Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>> =
         Rc::new(RefCell::new(Some(hk_tx.clone())));
     {
-        if hotkey_mgr.borrow_mut().register_with_notifier(&hotkey_str, hk_tx) {
+        if hotkey_mgr
+            .borrow_mut()
+            .register_with_notifier(&hotkey_str, hk_tx)
+        {
             log::info!("Global hotkey registered: {}", hotkey_str);
         } else {
             log::warn!("Failed to register global hotkey: {}", hotkey_str);
@@ -578,4 +590,3 @@ fn main() {
     // 清空拖放子类化（窗口仍在时按序移除，避免回调读到已释放 refdata）
     state.drop_handler = None;
 }
-

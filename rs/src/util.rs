@@ -7,10 +7,7 @@ use crate::localization::Localization;
 
 /// 翻译键值并填充 {0}/%s 占位符（本地化扩展）
 pub fn tr_fill(loc: &Rc<RefCell<Localization>>, key: &str, arg: &str) -> String {
-    loc.borrow()
-        .tr(key)
-        .replace("{0}", arg)
-        .replace("%s", arg)
+    loc.borrow().tr(key).replace("{0}", arg).replace("%s", arg)
 }
 
 /// 日志注入防护：折叠控制字符，避免破坏日志行结构。
@@ -147,7 +144,10 @@ mod tests {
     #[test]
     fn test_tr_fill_brace_placeholder() {
         let l = loc("zh-CN");
-        assert_eq!(tr_fill(&l, "Status_RunFail", "Notepad"), "运行失败：Notepad");
+        assert_eq!(
+            tr_fill(&l, "Status_RunFail", "Notepad"),
+            "运行失败：Notepad"
+        );
     }
 
     #[test]
@@ -197,7 +197,9 @@ mod tests {
 
     #[test]
     fn test_rect_fully_inside_normal() {
-        assert!(rect_fully_inside_virtual_screen(100, 100, 800, 600, VX, VY, VW, VH));
+        assert!(rect_fully_inside_virtual_screen(
+            100, 100, 800, 600, VX, VY, VW, VH
+        ));
     }
 
     #[test]
@@ -219,66 +221,44 @@ mod tests {
     fn test_rect_partially_offscreen_rejected() {
         // 窗口右边超出屏幕 → 拒绝（原实现只查左上角会误恢复）
         assert!(!rect_fully_inside_virtual_screen(
-            1500,
-            100,
-            800,
-            600,
-            VX,
-            VY,
-            VW,
-            VH
+            1500, 100, 800, 600, VX, VY, VW, VH
         ));
     }
 
     #[test]
     fn test_rect_fully_offscreen_rejected() {
         assert!(!rect_fully_inside_virtual_screen(
-            3000,
-            3000,
-            800,
-            600,
-            VX,
-            VY,
-            VW,
-            VH
+            3000, 3000, 800, 600, VX, VY, VW, VH
         ));
     }
 
     #[test]
     fn test_rect_negative_left_offscreen_rejected() {
         // 左上角在虚拟屏左边之外
-        assert!(!rect_fully_inside_virtual_screen(-50, 100, 800, 600, VX, VY, VW, VH));
+        assert!(!rect_fully_inside_virtual_screen(
+            -50, 100, 800, 600, VX, VY, VW, VH
+        ));
     }
 
     #[test]
     fn test_rect_zero_size_rejected() {
         // 零/负尺寸不恢复（防御）
-        assert!(!rect_fully_inside_virtual_screen(100, 100, 0, 600, VX, VY, VW, VH));
-        assert!(!rect_fully_inside_virtual_screen(100, 100, 800, -1, VX, VY, VW, VH));
+        assert!(!rect_fully_inside_virtual_screen(
+            100, 100, 0, 600, VX, VY, VW, VH
+        ));
+        assert!(!rect_fully_inside_virtual_screen(
+            100, 100, 800, -1, VX, VY, VW, VH
+        ));
     }
 
     #[test]
     fn test_rect_secondary_monitor_negative_coords() {
         // 副屏在左侧（虚拟屏起点为负）：如主屏 (0,0)-(1920,1080)，副屏 (-1280,0)-(0,1080)
         assert!(rect_fully_inside_virtual_screen(
-            -1000,
-            100,
-            800,
-            600,
-            -1280,
-            0,
-            3200,
-            1080
+            -1000, 100, 800, 600, -1280, 0, 3200, 1080
         ));
         assert!(!rect_fully_inside_virtual_screen(
-            -1000,
-            100,
-            800,
-            600,
-            0,
-            0,
-            1920,
-            1080
+            -1000, 100, 800, 600, 0, 0, 1920, 1080
         ));
     }
 

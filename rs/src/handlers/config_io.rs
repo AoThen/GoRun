@@ -36,10 +36,8 @@ pub(crate) fn filter_session_prefs(
 
 /// Settings 菜单 → 导出配置：用户选目标文件，写当前配置 JSON。
 pub fn export_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
-    let Some(path) = crate::fileops::save_file_dialog(
-        "Export Config",
-        "Config (*.json)\0*.json\0",
-    ) else {
+    let Some(path) = crate::fileops::save_file_dialog("Export Config", "Config (*.json)\0*.json\0")
+    else {
         return;
     };
     let st = state.borrow();
@@ -55,10 +53,9 @@ pub fn export_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
 /// Settings 菜单 → 导入配置：用户选配置文件，整体替换数据与行为设置，
 /// 保留语言/跟随鼠标/自动隐藏等会话偏好；成功后刷新侧栏与条目。
 pub fn import_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
-    let Some(path) = crate::fileops::browse_file_dialog(
-        "Import Config",
-        "Config (*.json)\0*.json\0",
-    ) else {
+    let Some(path) =
+        crate::fileops::browse_file_dialog("Import Config", "Config (*.json)\0*.json\0")
+    else {
         return;
     };
     let imported = match crate::storage::Storage::new(path.clone()).load() {
@@ -142,7 +139,10 @@ mod tests {
         assert_eq!(kept.get("follow_mouse").unwrap(), "1");
         assert_eq!(kept.get("auto_hide").unwrap(), "0");
         assert!(!kept.contains_key("theme"), "theme 非会话偏好应被丢弃");
-        assert!(!kept.contains_key("windowWidth"), "windowWidth 非会话偏好应被丢弃");
+        assert!(
+            !kept.contains_key("windowWidth"),
+            "windowWidth 非会话偏好应被丢弃"
+        );
     }
 
     #[test]

@@ -7,37 +7,37 @@
 //!   自动隐藏（普通鼠标离开窗口即触发，与是否处于拖放会话无关）。
 
 #[cfg(windows)]
-use std::path::PathBuf;
+use super::DropMessage;
 #[cfg(windows)]
-use std::sync::mpsc::Sender;
+use std::path::PathBuf;
 #[cfg(windows)]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(windows)]
-use std::sync::Arc;
+use std::sync::mpsc::Sender;
 #[cfg(windows)]
-use super::DropMessage;
+use std::sync::Arc;
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINTL, WPARAM};
 #[cfg(windows)]
-use windows::Win32::System::Com::{DVASPECT_CONTENT, FORMATETC, IDataObject, TYMED_HGLOBAL};
+use windows::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
 // OLE 拖放 API 在 System::Ole（非 UI::Shell）；CF_HDROP 为 CLIPBOARD_FORMAT(u16)。
 #[cfg(windows)]
 use windows::Win32::System::Ole::{
-    RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop, CF_HDROP, DROPEFFECT_COPY, IDropTarget,
-    IDropTarget_Impl,
+    IDropTarget, IDropTarget_Impl, RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop, CF_HDROP,
+    DROPEFFECT_COPY,
 };
 // grfkeystate 参数类型 MODIFIERKEYS_FLAGS 位于 SystemServices（0.57 实签）。
 #[cfg(windows)]
 use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
 #[cfg(windows)]
-use windows::Win32::UI::Input::KeyboardAndMouse::{TrackMouseEvent, TRACKMOUSEEVENT, TME_LEAVE};
+use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 #[cfg(windows)]
-use windows::Win32::UI::Shell::{DefSubclassProc, DragQueryFileW, HDROP, RemoveWindowSubclass};
+use windows::Win32::UI::Input::KeyboardAndMouse::{TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT};
+#[cfg(windows)]
+use windows::Win32::UI::Shell::{DefSubclassProc, DragQueryFileW, RemoveWindowSubclass, HDROP};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{MINMAXINFO, WM_GETMINMAXINFO, WM_MOUSEMOVE};
-#[cfg(windows)]
-use windows::Win32::UI::Controls::WM_MOUSELEAVE;
 
 /// 鼠标离开状态（F7 自动隐藏）：置位表示已发过 MouseLeft（光标在窗口外），
 /// 下次 WM_MOUSEMOVE（回到窗口）时发 MouseEnter 取消隐藏。单窗口单实例。
@@ -85,8 +85,8 @@ unsafe extern "system" fn mouse_subclass_proc(
         // （本子类先于 winit 收到消息，不透传会读到系统默认值而非 winit 设置值）。
         let r = DefSubclassProc(hwnd, umsg, wparam, lparam);
         let mm = unsafe { &*(lparam.0 as *const MINMAXINFO) };
-        let packed = ((mm.ptMaxTrackSize.x as u32 as u64) << 32)
-            | (mm.ptMaxTrackSize.y as u32 as u64);
+        let packed =
+            ((mm.ptMaxTrackSize.x as u32 as u64) << 32) | (mm.ptMaxTrackSize.y as u32 as u64);
         if LAST_MAX_TRACK.swap(packed, Ordering::Relaxed) != packed {
             log::debug!(
                 "Window minmax track: min=({}, {}) max=({}, {})",
@@ -113,7 +113,10 @@ pub fn setup_mouse_tracking(hwnd: isize, sender_ptr: usize) {
         let _ = RemoveWindowSubclass(hwnd, Some(mouse_subclass_proc), 0);
         let ok = SetWindowSubclass(hwnd, Some(mouse_subclass_proc), 0, sender_ptr);
         if ok.as_bool() {
-            log::debug!("Mouse tracking subclass installed on hwnd={}", hwnd.0 as usize);
+            log::debug!(
+                "Mouse tracking subclass installed on hwnd={}",
+                hwnd.0 as usize
+            );
         } else {
             log::warn!("SetWindowSubclass failed for hwnd={}", hwnd.0 as usize);
         }
@@ -124,7 +127,11 @@ pub fn setup_mouse_tracking(hwnd: isize, sender_ptr: usize) {
 #[cfg(windows)]
 pub fn remove_mouse_tracking(hwnd: isize) {
     unsafe {
-        let result = RemoveWindowSubclass(HWND(hwnd as *mut std::ffi::c_void), Some(mouse_subclass_proc), 0);
+        let result = RemoveWindowSubclass(
+            HWND(hwnd as *mut std::ffi::c_void),
+            Some(mouse_subclass_proc),
+            0,
+        );
         if !result.as_bool() {
             log::debug!("RemoveWindowSubclass failed for hwnd={}", hwnd);
         }
@@ -229,10 +236,7 @@ impl IDropTarget_Impl for OleDropTarget_Impl {
 /// 注册 OLE 拖放目标。成功时返回 COM 包装，调用方必须保持其存活
 /// （RegisterDragDrop 不增加引用计数，对象失效后系统回调将踩空）。
 #[cfg(windows)]
-pub fn register_ole_drop(
-    hwnd: isize,
-    sender: Arc<Sender<DropMessage>>,
-) -> Option<IDropTarget> {
+pub fn register_ole_drop(hwnd: isize, sender: Arc<Sender<DropMessage>>) -> Option<IDropTarget> {
     unsafe {
         // 幂等：先撤销旧注册再注册
         let _ = RevokeDragDrop(HWND(hwnd as *mut std::ffi::c_void));

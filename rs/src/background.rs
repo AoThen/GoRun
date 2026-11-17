@@ -102,7 +102,15 @@ mod tests {
         assert_eq!(decoded.height, 48);
         // 首像素与写入像素一致（未缩放时像素应精确）
         let px = decoded.buffer.make_mut_slice();
-        assert_eq!(px[0], Rgba8Pixel { r: 255, g: 128, b: 0, a: 255 });
+        assert_eq!(
+            px[0],
+            Rgba8Pixel {
+                r: 255,
+                g: 128,
+                b: 0,
+                a: 255
+            }
+        );
         fs::remove_file(&path).ok();
     }
 
@@ -137,10 +145,8 @@ mod tests {
 
     #[test]
     fn decode_corrupt_returns_none() {
-        let path = std::env::temp_dir().join(format!(
-            "gorun_bg_corrupt_{}.png",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("gorun_bg_corrupt_{}.png", std::process::id()));
         fs::write(&path, b"not a real png").unwrap();
         assert!(decode(path.to_str().unwrap()).is_none());
         fs::remove_file(&path).ok();

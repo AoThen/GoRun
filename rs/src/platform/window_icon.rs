@@ -14,7 +14,7 @@ fn apply_impl(hwnd: isize) {
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetSystemMetrics, LoadImageW, SendMessageW, HICON, IMAGE_ICON, ICON_BIG, ICON_SMALL,
+        GetSystemMetrics, LoadImageW, SendMessageW, HICON, ICON_BIG, ICON_SMALL, IMAGE_ICON,
         LR_DEFAULTSIZE, LR_SHARED, SM_CXICON, SM_CXSMICON, SM_CYICON, SM_CYSMICON, WM_SETICON,
     };
 

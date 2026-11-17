@@ -3,11 +3,11 @@
 /// 系统文件选择对话框。取消或非 Windows 平台返回 None。
 #[cfg(windows)]
 pub fn browse_file_dialog(title: &str, filter: &str) -> Option<String> {
+    use windows::core::{PCWSTR, PWSTR};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Controls::Dialogs::{
-        GetOpenFileNameW, OPENFILENAMEW, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST,
+        GetOpenFileNameW, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST, OPENFILENAMEW,
     };
-    use windows::core::{PCWSTR, PWSTR};
 
     let title_w: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
     let filter_w: Vec<u16> = filter.encode_utf16().chain(std::iter::once(0)).collect();
@@ -47,11 +47,11 @@ pub fn browse_file_dialog(_title: &str, _filter: &str) -> Option<String> {
 /// 系统保存文件对话框。取消或非 Windows 平台返回 None。
 #[cfg(windows)]
 pub fn save_file_dialog(title: &str, filter: &str) -> Option<String> {
+    use windows::core::{PCWSTR, PWSTR};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Controls::Dialogs::{
-        GetSaveFileNameW, OPENFILENAMEW, OFN_EXPLORER, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST,
+        GetSaveFileNameW, OFN_EXPLORER, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST, OPENFILENAMEW,
     };
-    use windows::core::{PCWSTR, PWSTR};
 
     let title_w: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
     let filter_w: Vec<u16> = filter.encode_utf16().chain(std::iter::once(0)).collect();
@@ -93,9 +93,7 @@ pub fn show_properties(path: &str) {
     use std::mem;
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
-    use windows::Win32::UI::Shell::{
-        ShellExecuteExW, SEE_MASK_INVOKEIDLIST, SHELLEXECUTEINFOW,
-    };
+    use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_INVOKEIDLIST, SHELLEXECUTEINFOW};
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
 
     if path.trim().is_empty() {
@@ -216,9 +214,7 @@ pub fn open_folder(path: &str) {
         path.to_string()
     } else {
         match Path::new(path).parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => {
-                parent.to_string_lossy().into_owned()
-            }
+            Some(parent) if !parent.as_os_str().is_empty() => parent.to_string_lossy().into_owned(),
             _ => {
                 log::warn!("Open folder: no parent for path: {}", path);
                 return;

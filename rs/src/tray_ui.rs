@@ -90,11 +90,7 @@ pub fn start_tray_handler(
 }
 
 /// 处理需要 AppState 的托盘动作（主线程 Timer 回调内执行）。
-pub fn handle_tray_ui_action(
-    action: TrayUiAction,
-    ui: &MainWindow,
-    state: &Rc<RefCell<AppState>>,
-) {
+pub fn handle_tray_ui_action(action: TrayUiAction, ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
     match action {
         TrayUiAction::ToggleFollowMouse => {
             let mut s = state.borrow_mut();
@@ -106,10 +102,10 @@ pub fn handle_tray_ui_action(
                 .map(|v| v == "1")
                 .unwrap_or(false);
             let new = !cur;
-            s.manager
-                .config_mut()
-                .extra_config
-                .insert("follow_mouse".into(), if new { "1".into() } else { "0".into() });
+            s.manager.config_mut().extra_config.insert(
+                "follow_mouse".into(),
+                if new { "1".into() } else { "0".into() },
+            );
             s.save_if_modified();
             let low_res = s.low_resident.get();
             crate::tray::set_ui_state(new, low_res);
@@ -119,10 +115,10 @@ pub fn handle_tray_ui_action(
             let mut s = state.borrow_mut();
             let new = !s.low_resident.get();
             s.low_resident.set(new);
-            s.manager
-                .config_mut()
-                .extra_config
-                .insert("low_resident".into(), if new { "1".into() } else { "0".into() });
+            s.manager.config_mut().extra_config.insert(
+                "low_resident".into(),
+                if new { "1".into() } else { "0".into() },
+            );
             s.save_if_modified();
             let follow = s
                 .manager
@@ -138,11 +134,7 @@ pub fn handle_tray_ui_action(
 }
 
 /// 写入全部本地化 UI 文本（启动初始化与语言切换共用）。
-pub fn apply_localized_texts(
-    ui: &MainWindow,
-    loc: &Rc<RefCell<Localization>>,
-    _dark_theme: bool,
-) {
+pub fn apply_localized_texts(ui: &MainWindow, loc: &Rc<RefCell<Localization>>, _dark_theme: bool) {
     let lb = loc.borrow();
     ui.set_about_version_text(lb.tr("About_Version").into());
     ui.set_about_desc_text(lb.tr("About_Desc").into());

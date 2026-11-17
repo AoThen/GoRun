@@ -1,34 +1,32 @@
 #[cfg(windows)]
-use std::sync::OnceLock;
-#[cfg(windows)]
 use std::mem::size_of;
 #[cfg(windows)]
 use std::sync::mpsc::{channel, Receiver, Sender};
+#[cfg(windows)]
+use std::sync::OnceLock;
 
 #[cfg(windows)]
 use log::{info, warn};
 
 #[cfg(windows)]
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM, HINSTANCE, POINT};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyMenu, LoadCursorW, LoadIconW, LoadImageW,
-    RegisterClassExW, RegisterWindowMessageW, AppendMenuW, CreatePopupMenu, GetCursorPos,
-    SetForegroundWindow, TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT,
-    HICON, IDC_ARROW, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_SHARED, MF_CHECKED,
-    MF_UNCHECKED, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_DESTROY, WM_LBUTTONDBLCLK,
-    WM_RBUTTONUP, WNDCLASSEXW,
+    AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, GetCursorPos,
+    LoadCursorW, LoadIconW, LoadImageW, RegisterClassExW, RegisterWindowMessageW,
+    SetForegroundWindow, TrackPopupMenu, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HICON, IDC_ARROW,
+    IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_SHARED, MF_CHECKED, MF_UNCHECKED, TPM_NONOTIFY,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSEXW,
 };
 
 #[cfg(windows)]
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW,
-    RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE,
-    REG_SZ,
+    RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
+    HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
 };
 
 #[cfg(windows)]
@@ -169,7 +167,8 @@ pub fn set_ui_state(_follow_mouse: bool, _low_resident: bool) {}
 /// 读取"跟随鼠标"状态（主线程显示窗口时用于定位，无需访问 AppState）。
 #[cfg(windows)]
 pub fn is_follow_mouse() -> bool {
-    tray().follow_mouse
+    tray()
+        .follow_mouse
         .get()
         .map(|a| a.load(Ordering::Relaxed))
         .unwrap_or(false)
@@ -188,8 +187,8 @@ impl TrayIcon {
         unsafe {
             let _ = tray().sender.set(tx.clone());
 
-            let h_instance = windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
-                .unwrap_or_default();
+            let h_instance =
+                windows::Win32::System::LibraryLoader::GetModuleHandleW(None).unwrap_or_default();
 
             let class_name = windows::core::w!("GoRunTrayWindow");
 
@@ -279,10 +278,7 @@ impl TrayIcon {
                 warn!("TrayIcon: Shell_NotifyIconW(NIM_ADD) failed");
             }
 
-            let tray = TrayIcon {
-                hwnd,
-                sender: tx,
-            };
+            let tray = TrayIcon { hwnd, sender: tx };
 
             (tray, rx)
         }
@@ -324,7 +320,8 @@ fn popup_tray_menu(hwnd: HWND, sender: &Sender<TrayMessage>) {
         }
 
         // 本地化文案（默认英文兜底；主线程 set_ui_texts 注入）
-        let texts = tray().texts
+        let texts = tray()
+            .texts
             .get()
             .and_then(|m| m.lock().ok().and_then(|g| g.clone()))
             .unwrap_or(TrayTexts {
@@ -340,27 +337,54 @@ fn popup_tray_menu(hwnd: HWND, sender: &Sender<TrayMessage>) {
         let follow_text: Vec<u16> = format!("{}\0", texts.follow_mouse).encode_utf16().collect();
         let low_text: Vec<u16> = format!("{}\0", texts.low_resident).encode_utf16().collect();
 
-        let _ = AppendMenuW(h_menu, Default::default(), MENU_ID_SHOW as usize, windows::core::PCWSTR(show_text.as_ptr()));
+        let _ = AppendMenuW(
+            h_menu,
+            Default::default(),
+            MENU_ID_SHOW as usize,
+            windows::core::PCWSTR(show_text.as_ptr()),
+        );
 
         let autostart = is_autostart_enabled();
         let flags_auto = if autostart { MF_CHECKED } else { MF_UNCHECKED };
-        let _ = AppendMenuW(h_menu, flags_auto, MENU_ID_AUTOSTART as usize, windows::core::PCWSTR(autostart_text.as_ptr()));
+        let _ = AppendMenuW(
+            h_menu,
+            flags_auto,
+            MENU_ID_AUTOSTART as usize,
+            windows::core::PCWSTR(autostart_text.as_ptr()),
+        );
 
-        let follow = tray().follow_mouse
+        let follow = tray()
+            .follow_mouse
             .get()
             .map(|a| a.load(Ordering::Relaxed))
             .unwrap_or(false);
         let flags_follow = if follow { MF_CHECKED } else { MF_UNCHECKED };
-        let _ = AppendMenuW(h_menu, flags_follow, MENU_ID_FOLLOW_MOUSE as usize, windows::core::PCWSTR(follow_text.as_ptr()));
+        let _ = AppendMenuW(
+            h_menu,
+            flags_follow,
+            MENU_ID_FOLLOW_MOUSE as usize,
+            windows::core::PCWSTR(follow_text.as_ptr()),
+        );
 
-        let low_res = tray().low_resident
+        let low_res = tray()
+            .low_resident
             .get()
             .map(|a| a.load(Ordering::Relaxed))
             .unwrap_or(false);
         let flags_low = if low_res { MF_CHECKED } else { MF_UNCHECKED };
-        let _ = AppendMenuW(h_menu, flags_low, MENU_ID_LOW_RESIDENT as usize, windows::core::PCWSTR(low_text.as_ptr()));
+        let _ = AppendMenuW(
+            h_menu,
+            flags_low,
+            MENU_ID_LOW_RESIDENT as usize,
+            windows::core::PCWSTR(low_text.as_ptr()),
+        );
 
-        let _ = AppendMenuW(h_menu, Default::default(), MENU_ID_EXIT as usize, windows::core::PCWSTR(exit_text.as_ptr()));
+        let _ = AppendMenuW(
+            h_menu,
+            Default::default(),
+            MENU_ID_EXIT as usize,
+            windows::core::PCWSTR(exit_text.as_ptr()),
+        );
 
         let mut pos = POINT::default();
         let _ = GetCursorPos(&mut pos);
@@ -412,11 +436,25 @@ const AUTOSTART_VALUE: &str = "GoRun";
 fn is_autostart_enabled() -> bool {
     unsafe {
         let mut key = HKEY::default();
-        let key_w: Vec<u16> = AUTOSTART_KEY.encode_utf16().chain(std::iter::once(0)).collect();
-        if RegOpenKeyExW(HKEY_CURRENT_USER, windows::core::PCWSTR(key_w.as_ptr()), Some(0), KEY_READ, &mut key).is_err() {
+        let key_w: Vec<u16> = AUTOSTART_KEY
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            windows::core::PCWSTR(key_w.as_ptr()),
+            Some(0),
+            KEY_READ,
+            &mut key,
+        )
+        .is_err()
+        {
             return false;
         }
-        let value_w: Vec<u16> = AUTOSTART_VALUE.encode_utf16().chain(std::iter::once(0)).collect();
+        let value_w: Vec<u16> = AUTOSTART_VALUE
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         let mut data = [0u8; 1024];
         let mut data_len = data.len() as u32;
         let result = RegQueryValueExW(
@@ -438,7 +476,10 @@ pub fn toggle_autostart() -> bool {
     unsafe {
         let enabled = is_autostart_enabled();
         let mut key = HKEY::default();
-        let key_w: Vec<u16> = AUTOSTART_KEY.encode_utf16().chain(std::iter::once(0)).collect();
+        let key_w: Vec<u16> = AUTOSTART_KEY
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         if RegCreateKeyExW(
             HKEY_CURRENT_USER,
             windows::core::PCWSTR(key_w.as_ptr()),
@@ -454,7 +495,10 @@ pub fn toggle_autostart() -> bool {
         {
             return enabled;
         }
-        let value_w: Vec<u16> = AUTOSTART_VALUE.encode_utf16().chain(std::iter::once(0)).collect();
+        let value_w: Vec<u16> = AUTOSTART_VALUE
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         if enabled {
             let _ = RegDeleteValueW(key, windows::core::PCWSTR(value_w.as_ptr()));
         } else {
@@ -468,7 +512,11 @@ pub fn toggle_autostart() -> bool {
             let exe = String::from_utf16_lossy(&exe_buf[..len as usize]);
             // 含空格路径加引号包裹，防同名影子二进制劫持（对齐 C++ 修正项）
             let exe_quoted = format!("\"{}\"", exe);
-            let data: Vec<u8> = exe_quoted.encode_utf16().chain(std::iter::once(0)).flat_map(|c| c.to_le_bytes()).collect();
+            let data: Vec<u8> = exe_quoted
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .flat_map(|c| c.to_le_bytes())
+                .collect();
             let _ = RegSetValueExW(
                 key,
                 windows::core::PCWSTR(value_w.as_ptr()),
@@ -518,9 +566,11 @@ unsafe extern "system" fn tray_wnd_proc(
 ) -> LRESULT {
     // TaskbarCreated：Explorer 重启后托盘重建，重新添加图标
     if tray().taskbar_created_msg.get().is_some_and(|m| *m == msg) {
-        if let (Some(hwnd), Some(h_icon), Some(tip)) =
-            (tray().hwnd.get(), tray().icon_handle.get(), tray().tip.get())
-        {
+        if let (Some(hwnd), Some(h_icon), Some(tip)) = (
+            tray().hwnd.get(),
+            tray().icon_handle.get(),
+            tray().tip.get(),
+        ) {
             let mut nid = NOTIFYICONDATAW {
                 cbSize: size_of::<NOTIFYICONDATAW>() as u32,
                 hWnd: *hwnd,

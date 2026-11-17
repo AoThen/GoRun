@@ -301,10 +301,13 @@ fn test_empty_hint_text_property() {
 #[test]
 fn test_context_menu_danger_property() {
     let ui = setup_ui_with_data(vec![], vec![]);
-    ui.set_context_menu_items(Rc::new(slint::VecModel::from(vec![
-        slint::SharedString::from("Edit"),
-        slint::SharedString::from("Delete"),
-    ])).into());
+    ui.set_context_menu_items(
+        Rc::new(slint::VecModel::from(vec![
+            slint::SharedString::from("Edit"),
+            slint::SharedString::from("Delete"),
+        ]))
+        .into(),
+    );
     ui.set_context_menu_danger(Rc::new(slint::VecModel::from(vec![false, true])).into());
     let danger = ui.get_context_menu_danger();
     assert_eq!(danger.row_count(), 2);
@@ -374,17 +377,21 @@ fn setup_app_state(categories: Vec<Category>, items: Vec<Item>) -> Rc<RefCell<Ap
     let (ihk_tx, _ihk_rx) = mpsc::channel::<String>();
     let state = Rc::new(RefCell::new(AppState {
         manager,
-        storage: Storage::new(std::env::temp_dir()
-            .join("gorun_gui_test_config.json")
-            .to_string_lossy()
-            .to_string()),
+        storage: Storage::new(
+            std::env::temp_dir()
+                .join("gorun_gui_test_config.json")
+                .to_string_lossy()
+                .to_string(),
+        ),
         icon_cache: IconCache::new(),
         current_category_id: String::new(),
         search_query: String::new(),
         edit_dialog: None,
         loc: Rc::new(RefCell::new(Localization::new("en"))),
         save_fail_notified: false,
-        pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        )),
         drop_handler: None,
         geometry_dirty: false,
         last_geometry_change: None,
@@ -407,13 +414,39 @@ fn setup_app_state(categories: Vec<Category>, items: Vec<Item>) -> Rc<RefCell<Ap
 
 fn sample_data() -> (Vec<Category>, Vec<Item>) {
     let categories = vec![
-        Category { id: "cat_1".into(), name: "Programs".into(), ..Default::default() },
-        Category { id: "cat_2".into(), name: "Games".into(), ..Default::default() },
+        Category {
+            id: "cat_1".into(),
+            name: "Programs".into(),
+            ..Default::default()
+        },
+        Category {
+            id: "cat_2".into(),
+            name: "Games".into(),
+            ..Default::default()
+        },
     ];
     let items = vec![
-        Item { id: "i1".into(), name: "Notepad".into(), target: "C:\\notepad.exe".into(), category_id: "cat_1".into(), ..Default::default() },
-        Item { id: "i2".into(), name: "Notepad++".into(), target: "C:\\notepadpp.exe".into(), category_id: "cat_1".into(), ..Default::default() },
-        Item { id: "i3".into(), name: "Minesweeper".into(), target: "C:\\mine.exe".into(), category_id: "cat_2".into(), ..Default::default() },
+        Item {
+            id: "i1".into(),
+            name: "Notepad".into(),
+            target: "C:\\notepad.exe".into(),
+            category_id: "cat_1".into(),
+            ..Default::default()
+        },
+        Item {
+            id: "i2".into(),
+            name: "Notepad++".into(),
+            target: "C:\\notepadpp.exe".into(),
+            category_id: "cat_1".into(),
+            ..Default::default()
+        },
+        Item {
+            id: "i3".into(),
+            name: "Minesweeper".into(),
+            target: "C:\\mine.exe".into(),
+            category_id: "cat_2".into(),
+            ..Default::default()
+        },
     ];
     (categories, items)
 }
@@ -431,7 +464,10 @@ fn test_refresh_items_ui_filters_by_category() {
     let model = ui.get_items();
     assert_eq!(model.row_count(), 2, "cat_1 应含 2 个项目");
     assert_eq!(model.row_data(0).unwrap().name.as_str(), "Notepad");
-    assert!(!model.row_data(0).unwrap().search_active, "非搜索态 search_active=false");
+    assert!(
+        !model.row_data(0).unwrap().search_active,
+        "非搜索态 search_active=false"
+    );
 
     {
         let st = state.borrow();
@@ -454,13 +490,20 @@ fn test_refresh_items_ui_search_across_categories() {
     }
     let model = ui.get_items();
     assert_eq!(model.row_count(), 2, "搜索 notepad 应命中 2 项");
-    assert!(model.row_data(0).unwrap().search_active, "搜索态 search_active=true");
+    assert!(
+        model.row_data(0).unwrap().search_active,
+        "搜索态 search_active=true"
+    );
 
     {
         let st = state.borrow();
         crate::ui_sync::refresh_items_ui(&ui, &st, "cat_1", "zzz_no_match");
     }
-    assert_eq!(ui.get_items().row_count(), 0, "无命中应为空列表（空态场景）");
+    assert_eq!(
+        ui.get_items().row_count(),
+        0,
+        "无命中应为空列表（空态场景）"
+    );
 }
 
 /// show_toast：成功/错误文案与 error 标志正确写入（v2 替代 StatusBar 的提示链路）。
@@ -489,7 +532,10 @@ fn test_dialog_properties_roundtrip() {
     ui.set_confirm_dialog_visible(true);
     assert!(ui.get_confirm_dialog_visible());
     assert_eq!(ui.get_confirm_dialog_title().as_str(), "Delete Item");
-    assert_eq!(ui.get_confirm_dialog_message().as_str(), "Delete \"Notepad\"?");
+    assert_eq!(
+        ui.get_confirm_dialog_message().as_str(),
+        "Delete \"Notepad\"?"
+    );
     ui.set_confirm_dialog_visible(false);
     assert!(!ui.get_confirm_dialog_visible());
     // 输入对话框
@@ -546,14 +592,24 @@ fn test_e2e_add_search_delete_persist_roundtrip() {
         name: "Tools".into(),
         ..Default::default()
     });
-    let tools_id = state.borrow().manager.categories().last().unwrap().id.clone();
+    let tools_id = state
+        .borrow()
+        .manager
+        .categories()
+        .last()
+        .unwrap()
+        .id
+        .clone();
     let vscode = Item {
         name: "VS Code".into(),
         target: "C:\\vscode.exe".into(),
         category_id: tools_id.clone(),
         ..Default::default()
     };
-    assert!(state.borrow_mut().manager.add_item(vscode), "添加项目应成功");
+    assert!(
+        state.borrow_mut().manager.add_item(vscode),
+        "添加项目应成功"
+    );
 
     // 2) 初始刷新：3 个项目（sample_data）
     {
@@ -578,7 +634,12 @@ fn test_e2e_add_search_delete_persist_roundtrip() {
     let loaded = storage.load().expect("load 应返回配置");
     assert_eq!(loaded.data.items.len(), cfg.data.items.len());
     assert_eq!(loaded.data.categories.len(), cfg.data.categories.len());
-    let vs = loaded.data.items.iter().find(|i| i.name == "VS Code").expect("VS Code 应在持久化数据中");
+    let vs = loaded
+        .data
+        .items
+        .iter()
+        .find(|i| i.name == "VS Code")
+        .expect("VS Code 应在持久化数据中");
     assert_eq!(vs.target, "C:\\vscode.exe");
     assert_eq!(vs.category_id, tools_id);
     let _ = std::fs::remove_file(&path);
@@ -592,16 +653,25 @@ fn test_e2e_delete_item_and_category_cascade() {
     let ui = MainWindow::new().unwrap();
 
     // 删除 i1（cat_1 2项 → 1项）
-    assert!(state.borrow_mut().manager.delete_item("i1"), "删除项目应成功");
+    assert!(
+        state.borrow_mut().manager.delete_item("i1"),
+        "删除项目应成功"
+    );
     {
         let st = state.borrow();
         crate::ui_sync::refresh_items_ui(&ui, &st, "cat_1", "");
     }
     assert_eq!(ui.get_items().row_count(), 1, "删除后 cat_1 剩 1 项");
-    assert_eq!(ui.get_items().row_data(0).unwrap().name.as_str(), "Notepad++");
+    assert_eq!(
+        ui.get_items().row_data(0).unwrap().name.as_str(),
+        "Notepad++"
+    );
 
     // 删除 cat_2（级联删 i3）
-    assert!(state.borrow_mut().manager.delete_category("cat_2"), "删除分类应成功");
+    assert!(
+        state.borrow_mut().manager.delete_category("cat_2"),
+        "删除分类应成功"
+    );
     {
         let st = state.borrow();
         crate::ui_sync::refresh_categories_ui(&ui, &st);
@@ -615,7 +685,6 @@ fn test_e2e_delete_item_and_category_cascade() {
     }
     assert_eq!(ui.get_items().row_count(), 0, "级联删除的项目不应再被搜到");
 }
-
 
 // ===== tray_ui 动作分发补测（headless 可测部分） =====
 
@@ -634,7 +703,11 @@ fn test_tray_toggle_follow_mouse_updates_config() {
     );
     let st = state.borrow();
     assert_eq!(
-        st.manager.config().extra_config.get("follow_mouse").map(|s| s.as_str()),
+        st.manager
+            .config()
+            .extra_config
+            .get("follow_mouse")
+            .map(|s| s.as_str()),
         Some("1"),
         "首次翻转 follow_mouse 应置 1"
     );
@@ -648,7 +721,11 @@ fn test_tray_toggle_follow_mouse_updates_config() {
     );
     let st = state.borrow();
     assert_eq!(
-        st.manager.config().extra_config.get("follow_mouse").map(|s| s.as_str()),
+        st.manager
+            .config()
+            .extra_config
+            .get("follow_mouse")
+            .map(|s| s.as_str()),
         Some("0"),
         "二次翻转 follow_mouse 应回 0"
     );
@@ -670,7 +747,11 @@ fn test_tray_toggle_low_resident_updates_flag_and_config() {
     let st = state.borrow();
     assert_eq!(st.low_resident.get(), !before, "low_resident 应翻转");
     assert_eq!(
-        st.manager.config().extra_config.get("low_resident").map(|s| s.as_str()),
+        st.manager
+            .config()
+            .extra_config
+            .get("low_resident")
+            .map(|s| s.as_str()),
         Some("1"),
         "extra_config.low_resident 应写 1（初始 false）"
     );

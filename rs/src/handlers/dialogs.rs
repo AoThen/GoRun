@@ -110,7 +110,10 @@ pub fn import_external_config(
     let cur = st.current_category_id.clone();
     drop(st);
     if !saved {
-        log::error!("Failed to save imported external config, backup kept: {}", backup);
+        log::error!(
+            "Failed to save imported external config, backup kept: {}",
+            backup
+        );
         if let Some(ui) = weak_ui.upgrade() {
             let loc = state.borrow().loc.clone();
             let msg = loc.borrow().tr("Status_SaveFailed").to_string();

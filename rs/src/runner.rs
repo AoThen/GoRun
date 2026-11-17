@@ -162,10 +162,12 @@ pub fn resolve_bare_name(target: &str) -> Option<String> {
                 .collect()
         })
         .unwrap_or_else(|| {
-            [".COM", ".EXE", ".BAT", ".CMD"].iter().map(|s| s.to_string()).collect()
+            [".COM", ".EXE", ".BAT", ".CMD"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         });
-    find_in_path_dirs(target, &dirs, &pathext)
-        .map(|p| p.to_string_lossy().to_string())
+    find_in_path_dirs(target, &dirs, &pathext).map(|p| p.to_string_lossy().to_string())
 }
 
 /// F8：相对路径 → 绝对路径（基于配置基准目录）。
@@ -241,23 +243,17 @@ fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
     // .lnk 解析（P1-8）：解析快捷方式真实目标/参数/工作目录；失败则回退
     // ShellExecute 自身处理 .lnk。仅对存在且以 .lnk 结尾的本地目标解析。
     let resolved = resolve_link_if_lnk(&target);
-    let final_target: &str = resolved
-        .as_ref()
-        .map(|r| r.0.as_str())
-        .unwrap_or(&target);
+    let final_target: &str = resolved.as_ref().map(|r| r.0.as_str()).unwrap_or(&target);
 
     // 参数模板：快捷方式参数优先（覆盖项目参数），否则项目参数（先展开 mp/mr/env，
     // 搜索参数延迟到注入检查通过后再替换）。
-    let args_template: Option<String> = resolved
-        .as_ref()
-        .and_then(|r| r.1.clone())
-        .or_else(|| {
-            if item.arguments.is_empty() {
-                None
-            } else {
-                Some(expand_pre(&item.arguments, &base_target))
-            }
-        });
+    let args_template: Option<String> = resolved.as_ref().and_then(|r| r.1.clone()).or_else(|| {
+        if item.arguments.is_empty() {
+            None
+        } else {
+            Some(expand_pre(&item.arguments, &base_target))
+        }
+    });
 
     // %so% 注入防护（P0-1）：shell 型目标/脚本宿主将搜索参数替换进任意字段时，
     // 搜索参数含 shell 元字符则拒绝执行，防止 cmd /c %so% 类配置被注入。
@@ -287,21 +283,23 @@ fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
         };
     }
     let final_args = args_template.map(|t| expand_search(&t, search_param));
-    let final_dir = resolved
-        .as_ref()
-        .and_then(|r| r.2.clone())
-        .or_else(|| {
-            if item.working_dir.is_empty() {
-                None
-            } else {
-                Some(expand_search(
-                    &expand_pre(&item.working_dir, &base_target),
-                    search_param,
-                ))
-            }
-        });
+    let final_dir = resolved.as_ref().and_then(|r| r.2.clone()).or_else(|| {
+        if item.working_dir.is_empty() {
+            None
+        } else {
+            Some(expand_search(
+                &expand_pre(&item.working_dir, &base_target),
+                search_param,
+            ))
+        }
+    });
 
-    shell_execute(final_target, final_args.as_deref(), final_dir.as_deref(), admin)
+    shell_execute(
+        final_target,
+        final_args.as_deref(),
+        final_dir.as_deref(),
+        admin,
+    )
 }
 
 /// shell 型目标判定：%so% 注入防护仅对会二次解释参数的解释器生效。
@@ -317,11 +315,7 @@ pub enum ShellKind {
 
 pub fn shell_kind(target: &str) -> ShellKind {
     let name = target.to_lowercase();
-    let file_name = name
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(&name)
-        .trim();
+    let file_name = name.rsplit(['/', '\\']).next().unwrap_or(&name).trim();
     if file_name == "cmd.exe"
         || file_name == "cmd"
         || file_name.ends_with(".bat")
@@ -385,8 +379,8 @@ fn resolve_lnk(path: &str) -> Option<(String, Option<String>, Option<String>)> {
     use windows::core::Interface;
     use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
-        COINIT_APARTMENTTHREADED, IPersistFile, STGM_READ,
+        CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, STGM_READ,
     };
     use windows::Win32::UI::Shell::IShellLinkW;
 
@@ -397,8 +391,7 @@ fn resolve_lnk(path: &str) -> Option<(String, Option<String>, Option<String>)> {
         let result = (|| {
             // CLSID_ShellLink = {00021401-0000-0000-C000-000000000046}（windows 0.57 未导出该常量，用 GUID 字面量）
             let clsid = windows::core::GUID::from_u128(0x0002140100000000C000000000000046);
-            let link: IShellLinkW =
-                CoCreateInstance(&clsid, None, CLSCTX_INPROC_SERVER).ok()?;
+            let link: IShellLinkW = CoCreateInstance(&clsid, None, CLSCTX_INPROC_SERVER).ok()?;
             let persist: IPersistFile = link.cast().ok()?;
             let path_wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
             persist
@@ -449,10 +442,7 @@ fn read_shell_link_string(mut read: impl FnMut(&mut [u16])) -> Option<String> {
             Some(end) => return Some(String::from_utf16_lossy(&buf[..end])),
             // 满缓冲无 NUL：最后一档记警告返回截断值，否则扩容重试
             None if cap == CAPS[CAPS.len() - 1] => {
-                log::warn!(
-                    "Shell link string exceeded {} chars, truncated",
-                    cap
-                );
+                log::warn!("Shell link string exceeded {} chars, truncated", cap);
                 return Some(String::from_utf16_lossy(&buf));
             }
             None => {}
@@ -678,7 +668,10 @@ mod tests {
 
     #[test]
     fn test_get_error_message() {
-        assert_eq!(get_error_message(&RunError::FileNotFound), "找不到指定的文件");
+        assert_eq!(
+            get_error_message(&RunError::FileNotFound),
+            "找不到指定的文件"
+        );
         assert_eq!(get_error_message(&RunError::None), "成功");
     }
 
@@ -712,9 +705,18 @@ mod tests {
         assert_eq!(shell_kind("C:\\x\\pwsh.exe"), ShellKind::PowerShell);
         assert_eq!(shell_kind("C:\\x\\script.ps1"), ShellKind::PowerShell);
         // 脚本宿主（P1-01）：mshta/wscript/cscript + 常见脚本扩展名
-        assert_eq!(shell_kind("C:\\Windows\\System32\\mshta.exe"), ShellKind::ScriptHost);
-        assert_eq!(shell_kind("C:\\Windows\\System32\\wscript.exe"), ShellKind::ScriptHost);
-        assert_eq!(shell_kind("C:\\Windows\\System32\\cscript.exe"), ShellKind::ScriptHost);
+        assert_eq!(
+            shell_kind("C:\\Windows\\System32\\mshta.exe"),
+            ShellKind::ScriptHost
+        );
+        assert_eq!(
+            shell_kind("C:\\Windows\\System32\\wscript.exe"),
+            ShellKind::ScriptHost
+        );
+        assert_eq!(
+            shell_kind("C:\\Windows\\System32\\cscript.exe"),
+            ShellKind::ScriptHost
+        );
         assert_eq!(shell_kind("C:\\x\\evil.vbs"), ShellKind::ScriptHost);
         assert_eq!(shell_kind("C:\\x\\evil.js"), ShellKind::ScriptHost);
         assert_eq!(shell_kind("C:\\x\\evil.jse"), ShellKind::ScriptHost);
@@ -815,7 +817,10 @@ mod tests {
         std::fs::write(&exe, b"x").unwrap();
         let dirs = vec![dir.clone()];
         // 精确名命中
-        assert_eq!(find_in_path_dirs("mytool", &dirs, &[]), Some(dir.join("mytool")));
+        assert_eq!(
+            find_in_path_dirs("mytool", &dirs, &[]),
+            Some(dir.join("mytool"))
+        );
         // 无扩展名输入按后缀命中（Windows 大小写不敏感用 .EXE 验证；Linux 大小写敏感用 .exe）
         let ext = if cfg!(windows) { ".EXE" } else { ".exe" };
         let exts = vec![ext.to_string()];
@@ -846,9 +851,24 @@ mod tests {
     fn test_run_all_returns_per_item_results() {
         // 逐项结果条数与输入对齐（失败项亦计入，便于调用方统计成功/失败）
         let items = vec![
-            Item { id: "a".into(), name: "A".into(), target: "Z:\\__nonexistent__.exe".into(), ..Default::default() },
-            Item { id: "b".into(), name: "B".into(), target: "Z:\\__nonexistent__.exe".into(), ..Default::default() },
-            Item { id: "c".into(), name: "C".into(), target: "Z:\\__nonexistent__.exe".into(), ..Default::default() },
+            Item {
+                id: "a".into(),
+                name: "A".into(),
+                target: "Z:\\__nonexistent__.exe".into(),
+                ..Default::default()
+            },
+            Item {
+                id: "b".into(),
+                name: "B".into(),
+                target: "Z:\\__nonexistent__.exe".into(),
+                ..Default::default()
+            },
+            Item {
+                id: "c".into(),
+                name: "C".into(),
+                target: "Z:\\__nonexistent__.exe".into(),
+                ..Default::default()
+            },
         ];
         let results = run_all(&items, "q");
         assert_eq!(results.len(), items.len());

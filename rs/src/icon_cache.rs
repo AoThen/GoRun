@@ -39,10 +39,7 @@ impl IconCache {
 
     /// 从内存缓存取已解码像素；未命中返回 None（调用方再读盘并回填）。
     /// 返回 SharedPixelBuffer 的轻量克隆，调用方包装成 slint::Image。
-    pub fn cached_image(
-        &self,
-        item: &Item,
-    ) -> Option<slint::SharedPixelBuffer<slint::Rgba8Pixel>> {
+    pub fn cached_image(&self, item: &Item) -> Option<slint::SharedPixelBuffer<slint::Rgba8Pixel>> {
         let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
         self.images
             .lock()
@@ -52,11 +49,7 @@ impl IconCache {
     }
 
     /// 回填内存缓存（读盘解码成功后调用）。
-    pub fn store_image(
-        &self,
-        item: &Item,
-        buffer: slint::SharedPixelBuffer<slint::Rgba8Pixel>,
-    ) {
+    pub fn store_image(&self, item: &Item, buffer: slint::SharedPixelBuffer<slint::Rgba8Pixel>) {
         let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
         self.images
             .lock()
@@ -205,7 +198,7 @@ fn extract_hicon(
     icon_index: i32,
 ) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::UI::WindowsAndMessaging::{HICON, PrivateExtractIconsW};
+    use windows::Win32::UI::WindowsAndMessaging::{PrivateExtractIconsW, HICON};
 
     // 图标视图显示 48px（theme.icon-size）；此前 ExtractIconExW 只能取系统大图标
     // （SM_CXICON=32px），放大 1.5x 显示发虚。PrivateExtractIconsW 支持指定精确尺寸，
@@ -219,7 +212,11 @@ fn extract_hicon(
     // PrivateExtractIconsW 要求路径缓冲区定长 [u16; 260]（MAX_PATH）；
     // 超长路径直接失败，避免截断后无 NUL 终止导致 FFI 越界读。
     if wide.len() > 260 {
-        log::debug!("Icon path too long ({}), skipping: {}", wide.len(), icon_path);
+        log::debug!(
+            "Icon path too long ({}), skipping: {}",
+            wide.len(),
+            icon_path
+        );
         return None;
     }
     let mut path_buf = [0u16; 260];
@@ -277,7 +274,10 @@ fn extract_hicon_from_target(
         if count > 0 && !icon.is_invalid() {
             return Some(icon);
         }
-        log::debug!("PrivateExtractIconsW fallback to SHGetFileInfoW for: {}", target);
+        log::debug!(
+            "PrivateExtractIconsW fallback to SHGetFileInfoW for: {}",
+            target
+        );
     }
 
     let mut file_info = windows::Win32::UI::Shell::SHFILEINFOW::default();
@@ -345,8 +345,8 @@ fn get_default_icon() -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> 
 #[cfg(windows)]
 fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path: &Path) -> bool {
     use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetObjectW, ReleaseDC,
-        BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetDIBits,
+        CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC,
+        BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
     };
     use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
 
@@ -359,7 +359,12 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
 
         let mut bmp = BITMAP::default();
         let bmp_size = std::mem::size_of::<BITMAP>() as i32;
-        if GetObjectW(icon_info.hbmColor.into(), bmp_size, Some(&mut bmp as *mut BITMAP as *mut std::ffi::c_void)) == 0 {
+        if GetObjectW(
+            icon_info.hbmColor.into(),
+            bmp_size,
+            Some(&mut bmp as *mut BITMAP as *mut std::ffi::c_void),
+        ) == 0
+        {
             log::warn!("GetObjectW failed for icon bitmap");
             let _ = DeleteObject(icon_info.hbmColor.into());
             let _ = DeleteObject(icon_info.hbmMask.into());
@@ -412,7 +417,10 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
                 .saturating_mul(4)
                 .min(pixels.len());
             let total = valid_len / 4;
-            let opaque = pixels[..valid_len].chunks_exact(4).filter(|c| c[3] >= 8).count();
+            let opaque = pixels[..valid_len]
+                .chunks_exact(4)
+                .filter(|c| c[3] >= 8)
+                .count();
             total == 0 || (opaque as f64) < (total as f64) * 0.02
         } else {
             false
@@ -463,7 +471,11 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
                 let row = i / w;
                 let col = i % w;
                 let byte = mask_bits[row * mask_row + col / 8];
-                chunk[3] = if (byte >> (7 - col % 8)) & 1 == 0 { 255 } else { 0 };
+                chunk[3] = if (byte >> (7 - col % 8)) & 1 == 0 {
+                    255
+                } else {
+                    0
+                };
             }
         }
 
@@ -618,7 +630,10 @@ mod restore_tests {
         // 命中：临时真实文件
         let real = std::env::temp_dir().join("gorun_icon_hit_test.png");
         std::fs::write(&real, b"fake-png-bytes").unwrap();
-        let mut item = Item { id: "r1".into(), ..Default::default() };
+        let mut item = Item {
+            id: "r1".into(),
+            ..Default::default()
+        };
         item.cached_icon = real.to_string_lossy().to_string();
         let cache = IconCache::new();
         assert_eq!(cache.restored_icon_path(&item), Some(real.clone()));
@@ -635,7 +650,10 @@ mod restore_tests {
     #[test]
     fn test_get_icon_path_after_cache_file_created() {
         let cache = IconCache::new();
-        let item = Item { id: "r2".into(), ..Default::default() };
+        let item = Item {
+            id: "r2".into(),
+            ..Default::default()
+        };
         assert!(cache.get_icon_path(&item).is_none(), "初始无缓存");
         // 手动在 cache_path 落一个文件，模拟提取完成
         let p = cache.cache_path(&item);
@@ -644,14 +662,20 @@ mod restore_tests {
         assert_eq!(cache.get_icon_path(&item), Some(p.clone()));
         // 删除后恢复 None
         cache.delete_cache(&item);
-        assert!(cache.get_icon_path(&item).is_none(), "delete_cache 后应无缓存");
+        assert!(
+            cache.get_icon_path(&item).is_none(),
+            "delete_cache 后应无缓存"
+        );
     }
 
     /// 同一 item 的 cache_path 稳定；编辑 icon_path 后键变化（缓存失效语义）。
     #[test]
     fn test_cache_path_changes_on_icon_edit() {
         let cache = IconCache::new();
-        let mut item = Item { id: "r3".into(), ..Default::default() };
+        let mut item = Item {
+            id: "r3".into(),
+            ..Default::default()
+        };
         let p1 = cache.cache_path(&item);
         item.icon_path = "C:\\new_icon.ico".into();
         let p2 = cache.cache_path(&item);

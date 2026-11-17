@@ -5,9 +5,9 @@
 //! - `edit_dialog`：新建/编辑项目对话框的共享展示逻辑
 //! - `wire_handler`：主窗口事件回调注册（D3 自 main.rs 迁入）
 
+pub mod config_io;
 pub mod dialogs;
 pub mod edit_dialog;
-pub mod config_io;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -16,9 +16,7 @@ use std::rc::Rc;
 use crate::app_state::AppState;
 use crate::localization::Localization;
 use crate::model::{Category, ViewType};
-use crate::{
-    clipboard, fileops, geometry, hotkey, model, ui_sync, util, EditDialog, MainWindow,
-};
+use crate::{clipboard, fileops, geometry, hotkey, model, ui_sync, util, EditDialog, MainWindow};
 use slint::ComponentHandle;
 
 /// 应用背景图到 UI 并持久化路径。解码失败返回 false（调用方 Toast 提示，UI 保持现状）。
@@ -84,7 +82,9 @@ pub fn wire_handler(
         let path = PathBuf::from(target.to_string());
         let mut state = state_file.borrow_mut();
         let cat_id = state.current_category_id.clone();
-        let added_ids = state.manager.handle_drop(std::slice::from_ref(&path), &cat_id);
+        let added_ids = state
+            .manager
+            .handle_drop(std::slice::from_ref(&path), &cat_id);
         state.save_if_modified();
         // P0：小批量拖入同步提取图标（对齐 C++ 的即时显示体验，拖入即见图标）；
         // 大批量仍走 refresh_items_ui 的异步提取队列兜底，避免阻塞 UI 线程。
@@ -264,7 +264,13 @@ pub fn wire_handler(
     ui.on_hotkey(move || {
         input_mode_hk.set(2);
         if let Some(ui) = weak_ui_hk.upgrade() {
-            let hk = state_hk.borrow().manager.config().config.global_hotkey.clone();
+            let hk = state_hk
+                .borrow()
+                .manager
+                .config()
+                .config
+                .global_hotkey
+                .clone();
             let title = state_hk.borrow().loc.borrow().tr("STR_HotKey").to_string();
             ui.set_input_dialog_title(title.into());
             ui.set_input_dialog_text(hk.into());
@@ -334,13 +340,10 @@ pub fn wire_handler(
             };
             ui.set_bg_dim_enabled(enabled);
             let mut st = state_bg.borrow_mut();
-            st.manager
-                .config_mut()
-                .extra_config
-                .insert(
-                    "background_dim_enabled".into(),
-                    if enabled { "1".into() } else { "0".into() },
-                );
+            st.manager.config_mut().extra_config.insert(
+                "background_dim_enabled".into(),
+                if enabled { "1".into() } else { "0".into() },
+            );
             st.save_if_modified();
         });
     }
@@ -354,13 +357,10 @@ pub fn wire_handler(
             };
             ui.set_bg_dim((percent / 100.0).clamp(0.0, 1.0));
             let mut st = state_bg.borrow_mut();
-            st.manager
-                .config_mut()
-                .extra_config
-                .insert(
-                    "background_dim".into(),
-                    (percent.round() as i32).clamp(0, 100).to_string(),
-                );
+            st.manager.config_mut().extra_config.insert(
+                "background_dim".into(),
+                (percent.round() as i32).clamp(0, 100).to_string(),
+            );
         });
     }
     // 设置页关闭：把拖动中暂存的遮罩浓度统一落盘
@@ -559,7 +559,12 @@ pub fn wire_handler(
         // 搜索态排序语义与全局向量不一致，隐藏 Move Up/Down（建议④）
         let st = state_search_menu.borrow();
         let searching = !st.search_query.is_empty();
-        let cat_names: Vec<String> = st.manager.categories().iter().map(|c| c.name.clone()).collect();
+        let cat_names: Vec<String> = st
+            .manager
+            .categories()
+            .iter()
+            .map(|c| c.name.clone())
+            .collect();
         let loc_m = st.loc.clone();
         drop(st);
         let lb = loc_m.borrow();
@@ -736,10 +741,17 @@ pub fn wire_handler(
             } else {
                 add(lb.tr("Menu_ViewIcon0").into(), Some(MenuAction::ToggleView));
             }
-            let theme_key = if dark { "Menu_SwitchLight" } else { "Menu_SwitchDark" };
+            let theme_key = if dark {
+                "Menu_SwitchLight"
+            } else {
+                "Menu_SwitchDark"
+            };
             add(lb.tr(theme_key).into(), Some(MenuAction::ToggleTheme));
             add("-".into(), None);
-            add(lb.tr("Menu_FollowMouse").into(), Some(MenuAction::FollowMouse));
+            add(
+                lb.tr("Menu_FollowMouse").into(),
+                Some(MenuAction::FollowMouse),
+            );
             add(lb.tr("Tray_AutoStart").into(), Some(MenuAction::AutoStart));
             add("-".into(), None);
             add(lb.tr("Menu_ExportConfig").into(), Some(MenuAction::Export));
@@ -1644,7 +1656,13 @@ pub fn wire_handler(
                 return;
             }
             // 当前已注册快捷键（改键失败时回滚用）
-            let old_hk = state_input.borrow().manager.config().config.global_hotkey.clone();
+            let old_hk = state_input
+                .borrow()
+                .manager
+                .config()
+                .config
+                .global_hotkey
+                .clone();
             // 重注册需保留 notifier：unregister 后复用原 Sender 重新 spawn pump
             let ok = {
                 let mut mgr = hotkey_mgr.borrow_mut();

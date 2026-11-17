@@ -204,7 +204,10 @@ pub fn compute_integrity(cfg: &AppConfig) -> String {
         Hmac::<Sha256>::new_from_slice(INTEGRITY_KEY).expect("HMAC key length must be valid");
     mac.update(payload.to_string().as_bytes());
     let tag = mac.finalize().into_bytes();
-    format!("hmac:{}", tag.iter().map(|b| format!("{:02x}", b)).collect::<String>())
+    format!(
+        "hmac:{}",
+        tag.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+    )
 }
 
 /// P0-2 信任校验：标记值精确匹配 + 内容完整性匹配，两者缺一即视为未信任。
@@ -335,106 +338,107 @@ impl Storage {
         })
     }
 
-/// 把内存配置序列化为导出/落盘用的 RawFile（重编号 sortOrder，写完整性值）。
-fn build_raw(app_config: &AppConfig) -> RawFile {
-    // P0-2 修复：完整性值必须按"落盘形态"（重编号后的 sortOrder）计算。
-    // 此前按内存原值计算，而落盘 JSON 是重编号后的值——只要旧数据存在
-    // "数组序≠sortOrder 序"（C++ 迁移数据常态），save→load→verify 必然失败，
-    // 每次启动都会误判为外部配置并触发隔离/提示死循环。
-    let mut normalized = app_config.clone();
-    for (idx, cat) in normalized.data.categories.iter_mut().enumerate() {
-        cat.sort_order = idx as i32;
-    }
-    let mut norm_counters: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-    for item in normalized.data.items.iter_mut() {
-        // 先克隆 category_id 再写 sort_order，避免 entry 键借用与字段写入冲突
-        let cat = item.category_id.clone();
-        let next = norm_counters.entry(cat).or_insert(0);
-        item.sort_order = *next;
-        *next += 1;
-    }
-
-    let raw_categories: Vec<RawCategory> = app_config
-        .data
-        .categories
-        .iter()
-        .enumerate()
-        .map(|(idx, c)| RawCategory {
-            id: c.id.clone(),
-            name: c.name.clone(),
-            sort_order: idx as i32,
-            view_type: c.view_type.clone() as i32,
-            icon_size: c.icon_size,
-        })
-        .collect();
-
-    let mut cat_counters: HashMap<&str, i32> = HashMap::new();
-    let raw_items: Vec<RawItem> = app_config
-        .data
-        .items
-        .iter()
-        .map(|i| {
-            let so = cat_counters.entry(i.category_id.as_str()).or_insert(0);
-            let cur = *so;
-            *so += 1;
-            RawItem {
-                id: i.id.clone(),
-                name: i.name.clone(),
-                target: i.target.clone(),
-                arguments: i.arguments.clone(),
-                working_dir: i.working_dir.clone(),
-                icon_path: i.icon_path.clone(),
-                cached_icon: i.cached_icon.clone(),
-                icon_index: i.icon_index,
-                run_as_admin: i.run_as_admin,
-                run_count: i.run_count,
-                keywords: i.keywords.clone(),
-                remark: i.remark.clone(),
-                category_id: i.category_id.clone(),
-                sort_order: cur,
-                hotkey: i.hotkey.clone(),
-            }
-        })
-        .collect();
-
-    let mut extra = HashMap::new();
-    // 此剔除列表必须与 RawConfig 显式字段集合保持同步，否则 serde flatten 会输出重复键
-    for (k, v) in &app_config.extra_config {
-        if matches!(
-            k.as_str(),
-            "globalHotkey"
-                | "windowX"
-                | "windowY"
-                | "windowWidth"
-                | "windowHeight"
-                | "config_integrity"
-        ) {
-            continue;
+    /// 把内存配置序列化为导出/落盘用的 RawFile（重编号 sortOrder，写完整性值）。
+    fn build_raw(app_config: &AppConfig) -> RawFile {
+        // P0-2 修复：完整性值必须按"落盘形态"（重编号后的 sortOrder）计算。
+        // 此前按内存原值计算，而落盘 JSON 是重编号后的值——只要旧数据存在
+        // "数组序≠sortOrder 序"（C++ 迁移数据常态），save→load→verify 必然失败，
+        // 每次启动都会误判为外部配置并触发隔离/提示死循环。
+        let mut normalized = app_config.clone();
+        for (idx, cat) in normalized.data.categories.iter_mut().enumerate() {
+            cat.sort_order = idx as i32;
         }
-        extra.insert(k.clone(), serde_json::Value::String(v.clone()));
-    }
-    // P0-2：落盘前写入当前配置内容的完整性值，旧值/外部篡改在启动校验时被发现
-    extra.insert(
-        "config_integrity".to_string(),
-        serde_json::Value::String(compute_integrity(&normalized)),
-    );
+        let mut norm_counters: std::collections::HashMap<String, i32> =
+            std::collections::HashMap::new();
+        for item in normalized.data.items.iter_mut() {
+            // 先克隆 category_id 再写 sort_order，避免 entry 键借用与字段写入冲突
+            let cat = item.category_id.clone();
+            let next = norm_counters.entry(cat).or_insert(0);
+            item.sort_order = *next;
+            *next += 1;
+        }
 
-    let raw_config = RawConfig {
-        global_hotkey: app_config.config.global_hotkey.clone(),
-        window_x: app_config.config.window_x,
-        window_y: app_config.config.window_y,
-        window_width: app_config.config.window_width,
-        window_height: app_config.config.window_height,
-        extra,
-    };
+        let raw_categories: Vec<RawCategory> = app_config
+            .data
+            .categories
+            .iter()
+            .enumerate()
+            .map(|(idx, c)| RawCategory {
+                id: c.id.clone(),
+                name: c.name.clone(),
+                sort_order: idx as i32,
+                view_type: c.view_type.clone() as i32,
+                icon_size: c.icon_size,
+            })
+            .collect();
 
-    RawFile {
-        version: app_config.version.clone(),
-        categories: raw_categories,
-        items: raw_items,
-        config: raw_config,
+        let mut cat_counters: HashMap<&str, i32> = HashMap::new();
+        let raw_items: Vec<RawItem> = app_config
+            .data
+            .items
+            .iter()
+            .map(|i| {
+                let so = cat_counters.entry(i.category_id.as_str()).or_insert(0);
+                let cur = *so;
+                *so += 1;
+                RawItem {
+                    id: i.id.clone(),
+                    name: i.name.clone(),
+                    target: i.target.clone(),
+                    arguments: i.arguments.clone(),
+                    working_dir: i.working_dir.clone(),
+                    icon_path: i.icon_path.clone(),
+                    cached_icon: i.cached_icon.clone(),
+                    icon_index: i.icon_index,
+                    run_as_admin: i.run_as_admin,
+                    run_count: i.run_count,
+                    keywords: i.keywords.clone(),
+                    remark: i.remark.clone(),
+                    category_id: i.category_id.clone(),
+                    sort_order: cur,
+                    hotkey: i.hotkey.clone(),
+                }
+            })
+            .collect();
+
+        let mut extra = HashMap::new();
+        // 此剔除列表必须与 RawConfig 显式字段集合保持同步，否则 serde flatten 会输出重复键
+        for (k, v) in &app_config.extra_config {
+            if matches!(
+                k.as_str(),
+                "globalHotkey"
+                    | "windowX"
+                    | "windowY"
+                    | "windowWidth"
+                    | "windowHeight"
+                    | "config_integrity"
+            ) {
+                continue;
+            }
+            extra.insert(k.clone(), serde_json::Value::String(v.clone()));
+        }
+        // P0-2：落盘前写入当前配置内容的完整性值，旧值/外部篡改在启动校验时被发现
+        extra.insert(
+            "config_integrity".to_string(),
+            serde_json::Value::String(compute_integrity(&normalized)),
+        );
+
+        let raw_config = RawConfig {
+            global_hotkey: app_config.config.global_hotkey.clone(),
+            window_x: app_config.config.window_x,
+            window_y: app_config.config.window_y,
+            window_width: app_config.config.window_width,
+            window_height: app_config.config.window_height,
+            extra,
+        };
+
+        RawFile {
+            version: app_config.version.clone(),
+            categories: raw_categories,
+            items: raw_items,
+            config: raw_config,
+        }
     }
-}
 
     pub fn save(&self, app_config: &AppConfig) -> bool {
         // P2-03：保存前按数组顺序重编号 sortOrder（0..n-1 / 分类内 0..m-1），
@@ -612,7 +616,9 @@ mod tests {
     #[test]
     fn test_integrity_roundtrip_and_tamper_detection() {
         let mut config = AppConfig::default();
-        config.extra_config.insert("generated_by".to_string(), "gorun-rs".to_string());
+        config
+            .extra_config
+            .insert("generated_by".to_string(), "gorun-rs".to_string());
         config.data.items.push(Item {
             id: "item_x".into(),
             name: "Foo".into(),
@@ -649,7 +655,9 @@ mod tests {
     fn test_verify_rejects_forged_generated_by() {
         // 仅伪造 generated_by 标记（无完整性值）不能通过校验（P0-2）
         let mut config = AppConfig::default();
-        config.extra_config.insert("generated_by".to_string(), "gorun-rs".to_string());
+        config
+            .extra_config
+            .insert("generated_by".to_string(), "gorun-rs".to_string());
         config.data.items.push(Item {
             id: "item_x".into(),
             name: "Foo".into(),
@@ -670,7 +678,9 @@ mod tests {
             .unwrap()
             .to_string();
         let mut config = AppConfig::default();
-        config.extra_config.insert("generated_by".to_string(), "gorun-rs".to_string());
+        config
+            .extra_config
+            .insert("generated_by".to_string(), "gorun-rs".to_string());
         // 分类 sortOrder 故意逆序（数组序 0,1,2 vs sortOrder 2,1,0）
         for (i, name) in ["C", "B", "A"].iter().enumerate() {
             config.data.categories.push(Category {
@@ -734,8 +744,13 @@ mod tests {
         // 同时证明"仅重算公开哈希（旧 FNV 攻击）"无法伪造 HMAC——产出值仍以 `fnv1a64:` 开头，
         // 与 `hmac:` 前缀不匹配，校验必失败。
         let mut config = AppConfig::default();
-        config.extra_config.insert("generated_by".to_string(), "gorun-rs".to_string());
-        config.extra_config.insert("config_integrity".to_string(), "fnv1a64:0123456789abcdef".to_string());
+        config
+            .extra_config
+            .insert("generated_by".to_string(), "gorun-rs".to_string());
+        config.extra_config.insert(
+            "config_integrity".to_string(),
+            "fnv1a64:0123456789abcdef".to_string(),
+        );
         config.data.items.push(Item {
             id: "item_x".into(),
             name: "Foo".into(),
@@ -803,10 +818,8 @@ mod tests {
     #[test]
     fn test_cached_icon_roundtrip() {
         // P0：自动提取的图标缓存路径必须落盘（cachedIcon），否则重启后图标丢失
-        let path = std::env::temp_dir().join(format!(
-            "gorun_cached_icon_{}.json",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("gorun_cached_icon_{}.json", std::process::id()));
         let path_str = path.to_str().unwrap().to_string();
         let mut config = AppConfig::default();
         config.data.items.push(Item {
@@ -828,7 +841,10 @@ mod tests {
         );
 
         let loaded = storage.load().unwrap();
-        assert_eq!(loaded.data.items[0].cached_icon, "C:\\GoRun\\icons\\deadbeef.png");
+        assert_eq!(
+            loaded.data.items[0].cached_icon,
+            "C:\\GoRun\\icons\\deadbeef.png"
+        );
         let _ = fs::remove_file(&path);
     }
 
@@ -844,7 +860,9 @@ mod tests {
             r#"{"version":"1.0.0","categories":[],"items":[{"id":"i","name":"n","target":"t"}],"config":{}}"#,
         )
         .unwrap();
-        let loaded = Storage::new(path.to_str().unwrap().to_string()).load().unwrap();
+        let loaded = Storage::new(path.to_str().unwrap().to_string())
+            .load()
+            .unwrap();
         assert!(loaded.data.items[0].cached_icon.is_empty());
         let _ = fs::remove_file(&path);
     }
@@ -898,7 +916,10 @@ mod edge_tests {
         assert!(storage.export_to(&out.to_string_lossy(), &cfg));
         let text = std::fs::read_to_string(&out).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&text).expect("导出文件应是合法 JSON");
-        assert!(parsed.get("categories").is_some(), "导出格式为 categories 顶层键");
+        assert!(
+            parsed.get("categories").is_some(),
+            "导出格式为 categories 顶层键"
+        );
         assert!(parsed.get("items").is_some(), "应含 items 字段");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -933,10 +954,7 @@ mod edge_tests {
 
     #[test]
     fn test_save_with_backup_creates_bak1() {
-        let dir = std::env::temp_dir().join(format!(
-            "gorun_backup_test_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gorun_backup_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
         let path_str = path.to_string_lossy().to_string();
@@ -960,10 +978,7 @@ mod edge_tests {
 
     #[test]
     fn test_load_from_backup_restores_config() {
-        let dir = std::env::temp_dir().join(format!(
-            "gorun_backup_restore_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gorun_backup_restore_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
         let path_str = path.to_string_lossy().to_string();
@@ -986,10 +1001,7 @@ mod edge_tests {
 
     #[test]
     fn test_load_from_backup_no_backup_returns_none() {
-        let dir = std::env::temp_dir().join(format!(
-            "gorun_backup_none_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gorun_backup_none_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
         let storage = Storage::new(path.to_string_lossy().to_string());
@@ -1004,10 +1016,7 @@ mod edge_tests {
 
     #[test]
     fn test_save_with_backup_cleans_legacy_bak_files() {
-        let dir = std::env::temp_dir().join(format!(
-            "gorun_backup_legacy_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gorun_backup_legacy_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
         let path_str = path.to_string_lossy().to_string();

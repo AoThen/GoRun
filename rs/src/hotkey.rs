@@ -169,11 +169,7 @@ impl HotkeyManager {
         }
     }
 
-    pub fn register_with_notifier(
-        &mut self,
-        hotkey_str: &str,
-        sender: Sender<()>,
-    ) -> bool {
+    pub fn register_with_notifier(&mut self, hotkey_str: &str, sender: Sender<()>) -> bool {
         let hk = match parse_hotkey_string(hotkey_str) {
             Some(h) => h,
             None => {
@@ -200,8 +196,8 @@ impl HotkeyManager {
                         RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS,
                     };
                     use windows::Win32::UI::WindowsAndMessaging::{
-                        DispatchMessageW, MsgWaitForMultipleObjects, PeekMessageW, QS_ALLINPUT,
-                        MSG, PM_NOREMOVE, PM_REMOVE, WM_HOTKEY,
+                        DispatchMessageW, MsgWaitForMultipleObjects, PeekMessageW, MSG,
+                        PM_NOREMOVE, PM_REMOVE, QS_ALLINPUT, WM_HOTKEY,
                     };
 
                     let mut msg: MSG = std::mem::zeroed();
@@ -241,8 +237,7 @@ impl HotkeyManager {
                             _ => {
                                 // 有消息（WAIT_OBJECT_0 等）：排空消息队列并分发
                                 while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE) == TRUE {
-                                    if msg.message == WM_HOTKEY
-                                        && msg.wParam.0 as u32 == hotkey_id
+                                    if msg.message == WM_HOTKEY && msg.wParam.0 as u32 == hotkey_id
                                     {
                                         let _ = sender.send(());
                                     }
@@ -263,7 +258,9 @@ impl HotkeyManager {
                     let _ = hotkey_id;
                     // 必须回送结果，否则主线程 result_rx.recv() 永久阻塞
                     let _ = result_tx.send(false);
-                    log::warn!("HotkeyManager: hotkey notifier thread not supported on this platform");
+                    log::warn!(
+                        "HotkeyManager: hotkey notifier thread not supported on this platform"
+                    );
                 }
             });
 
@@ -382,11 +379,7 @@ impl ItemHotkeyManager {
 
     /// 注册全部条目热键（`(item_id, hotkey_str)`）。空列表视为成功（无条目热键）。
     /// 触发时向 `sender` 发送被按下的条目 `item_id`。失败（解析/注册错误）不阻断其他项。
-    pub fn register_all(
-        &mut self,
-        hotkeys: &[(String, String)],
-        sender: Sender<String>,
-    ) -> bool {
+    pub fn register_all(&mut self, hotkeys: &[(String, String)], sender: Sender<String>) -> bool {
         self.unregister();
         if hotkeys.is_empty() {
             self.registered = true;
@@ -509,10 +502,7 @@ impl ItemHotkeyManager {
                 ok
             }
             Err(e) => {
-                log::error!(
-                    "ItemHotkeyManager: failed to start pump thread: {}",
-                    e
-                );
+                log::error!("ItemHotkeyManager: failed to start pump thread: {}", e);
                 false
             }
         }
@@ -609,5 +599,4 @@ mod tests {
         let mgr: HotkeyManager = Default::default();
         assert!(!mgr.is_registered());
     }
-
 }

@@ -21,7 +21,8 @@ pub struct AppState {
     /// 保存失败标志：置位后由周期 Timer 一次性写状态栏提示，避免静默丢数据。
     pub save_fail_notified: bool,
     /// 后台提取出的图标缓存路径（item_id -> png 路径），由 Timer 回写模型并落盘（P0）。
-    pub pending_icon_paths: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+    pub pending_icon_paths:
+        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
     /// OLE/子类化拖放处理器：必须随应用存活，Drop 时移除子类化并释放 refdata。
     pub drop_handler: Option<DropHandler>,
     /// 窗口几何已变化但尚未落盘（P1-5 去抖）。
@@ -113,7 +114,9 @@ mod tests {
             edit_dialog: None,
             loc: Rc::new(RefCell::new(Localization::new("zh-CN"))),
             save_fail_notified: false,
-            pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+            pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
             drop_handler: None,
             geometry_dirty: false,
             last_geometry_change: None,

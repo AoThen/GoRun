@@ -8,7 +8,10 @@ pub fn base_dir_from(exe_dir: &Path, probe: &dyn Fn(&Path) -> bool) -> PathBuf {
         exe_dir.to_path_buf()
     } else {
         let fallback = app_data_fallback();
-        log::warn!("Exe dir not writable (or missing), fallback to AppData: {:?}", fallback);
+        log::warn!(
+            "Exe dir not writable (or missing), fallback to AppData: {:?}",
+            fallback
+        );
         fallback
     }
 }
@@ -19,7 +22,11 @@ pub fn default_writable_probe(dir: &Path) -> bool {
     match std::fs::File::create(&probe_file) {
         Ok(_) => {
             if let Err(e) = std::fs::remove_file(&probe_file) {
-                log::warn!("Failed to remove writability probe file {:?}: {}", probe_file, e);
+                log::warn!(
+                    "Failed to remove writability probe file {:?}: {}",
+                    probe_file,
+                    e
+                );
             }
             true
         }
@@ -94,7 +101,12 @@ pub fn migrate_legacy_from(old: &Path, current: &Path) {
     log::info!("Migrating legacy data from {:?} to {:?}", old, current);
     let mut any_fail = false;
 
-    for name in ["config.json", "config.json.bak1", "config.json.bak2", "config.json.bak3"] {
+    for name in [
+        "config.json",
+        "config.json.bak1",
+        "config.json.bak2",
+        "config.json.bak3",
+    ] {
         let src = old.join(name);
         if !src.exists() {
             continue;
@@ -306,7 +318,12 @@ mod tests {
 
         migrate_legacy_from(&old, &cur);
 
-        for f in ["config.json", "config.json.bak1", "config.json.bak2", "config.json.bak3"] {
+        for f in [
+            "config.json",
+            "config.json.bak1",
+            "config.json.bak2",
+            "config.json.bak3",
+        ] {
             assert!(cur.join(f).exists(), "{} 应被复制", f);
         }
         assert!(cur.join("icons").join("a.png").exists());
@@ -357,10 +374,7 @@ mod tests {
 
         migrate_legacy_from(&old, &cur);
 
-        assert!(
-            !cur.join("config.json").exists(),
-            "空占位配置不应被迁移"
-        );
+        assert!(!cur.join("config.json").exists(), "空占位配置不应被迁移");
         let _ = std::fs::remove_dir_all(&old);
         let _ = std::fs::remove_dir_all(&cur);
     }
