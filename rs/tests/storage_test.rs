@@ -169,8 +169,8 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&bak1);
-        let _ = std::fs::remove_file(&format!("{}.bak2", path));
-        let _ = std::fs::remove_file(&format!("{}.bak3", path));
+        let _ = std::fs::remove_file(format!("{}.bak2", path));
+        let _ = std::fs::remove_file(format!("{}.bak3", path));
     }
 
     #[test]
@@ -197,9 +197,9 @@ mod tests {
         assert_eq!(recovered.version, "A");
 
         let _ = std::fs::remove_file(&path);
-        let _ = std::fs::remove_file(&format!("{}.bak1", path));
-        let _ = std::fs::remove_file(&format!("{}.bak2", path));
-        let _ = std::fs::remove_file(&format!("{}.bak3", path));
+        let _ = std::fs::remove_file(format!("{}.bak1", path));
+        let _ = std::fs::remove_file(format!("{}.bak2", path));
+        let _ = std::fs::remove_file(format!("{}.bak3", path));
     }
 
     #[test]

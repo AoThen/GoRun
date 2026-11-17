@@ -192,10 +192,8 @@ fn main() {
             if storage.save(&app_config) {
                 log::info!("First run: config file created");
             }
-        } else if external_backup_path.is_some() {
-            if storage.save(&app_config) {
-                log::info!("Default config recreated after external config quarantine");
-            }
+        } else if external_backup_path.is_some() && storage.save(&app_config) {
+            log::info!("Default config recreated after external config quarantine");
         }
     }
     // P0-2 修订：静默恢复待办——
