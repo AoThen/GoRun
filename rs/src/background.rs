@@ -3,11 +3,19 @@
 //! 1080p 壁纸约 8MB。解码用项目 image crate（png/jpeg/ico/bmp），像素转入
 //! SharedPixelBuffer 后由调用方以 Image::from_rgba8 包装（同 icon_cache 模式，
 //! 避免在非 UI 线程持有 slint::Image 的线程边界问题）。
+//! 防御：解码前先读尺寸（不解码像素），异常大的图直接拒绝——image crate
+//! 的解码模型须把整张图解压为像素后才有缩图操作，无法"先缩后解码"，
+//! 硬上限拒绝可避免极端图在解码阶段耗尽内存或长时间卡死。
 
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
 /// 解码后最长边上限。
 const MAX_EDGE: u32 = 2560;
+
+/// 解码前拒绝的边长硬上限（MAX_EDGE 的 4 倍 = 10240）。
+/// 正常 4K（3840）/8K（7680）壁纸均远低于此，仅异常大的图被拒绝，
+/// 防止解码阶段整图展开导致 OOM 或长时间卡死。
+const MAX_DECODE_EDGE: u32 = MAX_EDGE * 4;
 
 pub struct DecodedBackground {
     pub buffer: SharedPixelBuffer<Rgba8Pixel>,
@@ -16,8 +24,18 @@ pub struct DecodedBackground {
 }
 
 /// 解码图片文件为 RGBA8 像素缓冲；超过 MAX_EDGE 时等比缩小。
-/// 失败（路径不存在/文件损坏/格式不符）返回 None，调用方降级为纯色背景。
+/// 失败（路径不存在/文件损坏/格式不符/尺寸异常大）返回 None，调用方降级为纯色背景。
 pub fn decode(path: &str) -> Option<DecodedBackground> {
+    // 先读尺寸（不解码像素）：异常大的图直接拒绝，避免解码阶段 OOM/卡死。
+    let reader = image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?;
+    let (dw, dh) = reader.into_dimensions().ok()?;
+    if dw == 0 || dh == 0 || dw.max(dh) > MAX_DECODE_EDGE {
+        return None;
+    }
+
     let img = image::open(path).ok()?.to_rgba8();
     let (w, h) = (img.width(), img.height());
     if w == 0 || h == 0 {
@@ -104,6 +122,17 @@ mod tests {
     fn decode_nonexistent_returns_none() {
         let path = std::env::temp_dir().join("gorun_bg_definitely_missing.png");
         assert!(decode(path.to_str().unwrap()).is_none());
+    }
+
+    #[test]
+    fn decode_oversized_returns_none() {
+        // 边长超过 MAX_DECODE_EDGE（10240）的图在解码前即被拒绝，不进入解码阶段
+        let path = temp_png("huge", MAX_DECODE_EDGE + 1, 64, [1, 2, 3, 255]);
+        assert!(
+            decode(path.to_str().unwrap()).is_none(),
+            "超硬上限的图应返回 None"
+        );
+        fs::remove_file(&path).ok();
     }
 
     #[test]

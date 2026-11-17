@@ -9,6 +9,10 @@ use sha2::Sha256;
 
 use crate::model::{AppConfig, AppData, Category, Config, Item, ViewType};
 
+/// 临时文件命名计数器：与进程 id 组合成唯一后缀，避免同进程多次保存
+/// （或未来重入/多线程）相互覆盖 `.tmp.<pid>` 文件。
+static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Serialize, Deserialize)]
 struct RawFile {
     #[serde(default = "default_version")]
@@ -450,7 +454,12 @@ fn build_raw(app_config: &AppConfig) -> RawFile {
             let _ = fs::create_dir_all(parent);
         }
 
-        let tmp_path = format!("{}.tmp.{}", self.path, std::process::id());
+        let tmp_path = format!(
+            "{}.tmp.{}.{}",
+            self.path,
+            std::process::id(),
+            TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
         let write_result = (|| -> std::io::Result<()> {
             let mut file = fs::File::create(&tmp_path)?;
             file.write_all(json.as_bytes())?;

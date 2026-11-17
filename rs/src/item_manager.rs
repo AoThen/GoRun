@@ -39,7 +39,7 @@ impl ItemManager {
         &mut self.config
     }
 
-    pub fn categories(&self) -> &Vec<Category> {
+    pub fn categories(&self) -> &[Category] {
         &self.config.data.categories
     }
 

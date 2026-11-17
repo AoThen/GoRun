@@ -526,10 +526,17 @@ fn shell_execute(
             }
 
             let run_error = map_error(error_code.0);
+            // 附原始 Win32 错误码，避免 map_error 未覆盖的错误码退化为"未知错误"后
+            // 排障时无任何线索（如 ERROR_INVALID_NAME/ERROR_BAD_EXE_FORMAT）。
+            let error_message = format!(
+                "{} (Win32 error {})",
+                get_error_message(&run_error),
+                error_code.0
+            );
             RunResult {
                 success: false,
-                error: run_error.clone(),
-                error_message: get_error_message(&run_error),
+                error: run_error,
+                error_message,
             }
         }
     }

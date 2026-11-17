@@ -10,8 +10,16 @@ use crate::MainWindow;
 
 /// 导入配置时保留的会话偏好键（语言/跟随鼠标/自动隐藏/信任标记/低驻留）。
 /// 这些属于当前会话运行状态，不应被导入文件整体覆盖。
-pub(crate) fn session_pref_keys() -> [&'static str; 5] {
-    ["language", "follow_mouse", "auto_hide", "generated_by", "low_resident"]
+const SESSION_PREF_KEYS: [&str; 5] = [
+    "language",
+    "follow_mouse",
+    "auto_hide",
+    "generated_by",
+    "low_resident",
+];
+
+pub(crate) fn session_pref_keys() -> &'static [&'static str] {
+    &SESSION_PREF_KEYS
 }
 
 /// 从 extra_config 中筛出需保留的会话偏好（纯逻辑，可单测）。

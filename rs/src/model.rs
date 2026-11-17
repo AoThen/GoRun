@@ -7,7 +7,7 @@ pub enum ViewType {
     List = 1,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Category {
     #[serde(default)]
     pub id: String,

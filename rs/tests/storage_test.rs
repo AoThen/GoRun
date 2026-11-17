@@ -214,8 +214,23 @@ mod tests {
         let storage = Storage::new(path.clone());
         assert!(storage.save(&config));
 
-        let tmp = format!("{}.tmp.{}", path, std::process::id());
-        assert!(!std::path::Path::new(&tmp).exists());
+        // tmp 文件命名含递增序号（.tmp.<pid>.<seq>）：断言目录中无任何 .tmp. 前缀残留
+        let dir = std::path::Path::new(&path).parent().unwrap();
+        let prefix = format!("{}.tmp.", path);
+        let leftover: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name();
+                let name = name.to_string_lossy();
+                name.starts_with(&prefix)
+            })
+            .collect();
+        assert!(
+            leftover.is_empty(),
+            "save 后不应残留 .tmp. 文件: {:?}",
+            leftover
+        );
 
         let _ = std::fs::remove_file(&path);
     }
