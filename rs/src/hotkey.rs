@@ -382,17 +382,20 @@ impl ItemHotkeyManager {
     }
 
     /// 注册全部条目热键（`(item_id, hotkey_str)`）。空列表视为成功（无条目热键）。
-    /// 触发时向 `sender` 发送被按下的条目 `item_id`。失败（解析/注册错误）不阻断其他项。
-    pub fn register_all(&mut self, hotkeys: &[(String, String)], sender: Sender<String>) -> bool {
+    /// 触发时向 `sender` 发送被按下的条目 `item_id`。单个失败（解析/注册错误）不阻断其他项。
+    /// 返回注册失败的热键字符串列表（按输入顺序去重；空 = 全部成功）。
+    /// 与全局热键/其他程序冲突的项同样计入失败（RegisterHotKey 系统层失败）。
+    /// 非 Windows 平台不支持条目热键，返回空列表（不视为失败，避免误报）。
+    pub fn register_all(&mut self, hotkeys: &[(String, String)], sender: Sender<String>) -> Vec<String> {
         self.unregister();
         if hotkeys.is_empty() {
             self.registered = true;
-            return true;
+            return Vec::new();
         }
 
         let (kill_tx, kill_rx) = channel::<()>();
         self.kill_sender = Some(kill_tx);
-        let (result_tx, result_rx) = channel::<bool>();
+        let (result_tx, result_rx) = channel::<Vec<String>>();
         let hotkeys_owned: Vec<(String, String)> = hotkeys.to_vec();
 
         let handle = thread::Builder::new()
@@ -416,7 +419,7 @@ impl ItemHotkeyManager {
 
                     // id 从 0xC100 起，避免与全局热键 HOTKEY_ID(0xC001) 冲突
                     let mut id_map: HashMap<u32, String> = HashMap::new();
-                    let mut any_ok = false;
+                    let mut failed: Vec<String> = Vec::new();
                     for (i, (item_id, hk_str)) in hotkeys_owned.iter().enumerate() {
                         let hkid = 0xC100 + i as u32;
                         match parse_hotkey_string(hk_str) {
@@ -429,12 +432,14 @@ impl ItemHotkeyManager {
                                 );
                                 if r.is_ok() {
                                     id_map.insert(hkid, item_id.clone());
-                                    any_ok = true;
                                 } else {
                                     log::error!(
                                         "ItemHotkeyManager: RegisterHotKey failed for '{}' (id=0x{:X}): {:?}",
                                         hk_str, hkid, r.err()
                                     );
+                                    if !failed.contains(hk_str) {
+                                        failed.push(hk_str.clone());
+                                    }
                                 }
                             }
                             None => {
@@ -442,11 +447,14 @@ impl ItemHotkeyManager {
                                     "ItemHotkeyManager: invalid hotkey string: '{}'",
                                     hk_str
                                 );
+                                if !failed.contains(hk_str) {
+                                    failed.push(hk_str.clone());
+                                }
                             }
                         }
                     }
-                    let _ = result_tx.send(any_ok);
-                    if !any_ok {
+                    let _ = result_tx.send(failed);
+                    if id_map.is_empty() {
                         log::warn!(
                             "ItemHotkeyManager: no item hotkey registered, pump exiting"
                         );
@@ -488,7 +496,8 @@ impl ItemHotkeyManager {
                     let _ = &sender;
                     let _ = &kill_rx;
                     let _ = &hotkeys_owned;
-                    let _ = result_tx.send(false);
+                    // 平台不支持：不算失败（无失败反馈），避免调用方误判配置错误
+                    let _ = result_tx.send(Vec::new());
                     log::warn!(
                         "ItemHotkeyManager: item hotkeys not supported on this platform"
                     );
@@ -498,16 +507,41 @@ impl ItemHotkeyManager {
         match handle {
             Ok(h) => {
                 self.thread_handle = Some(h);
-                let ok = result_rx
+                // 超时保守视为全部失败（与旧 bool 语义一致：拿不到结果不报成功）
+                let failed = result_rx
                     .recv_timeout(std::time::Duration::from_secs(5))
-                    .unwrap_or(false);
-                self.registered = ok;
-                self.pump_active = ok;
-                ok
+                    .unwrap_or_else(|_| {
+                        log::error!("ItemHotkeyManager: register result timeout");
+                        hotkeys
+                            .iter()
+                            .map(|(_, hk)| hk.clone())
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .fold(Vec::new(), |mut acc, hk| {
+                                if !acc.contains(&hk) {
+                                    acc.push(hk);
+                                }
+                                acc
+                            })
+                    });
+                let any_ok = failed.len() < hotkeys.len();
+                self.registered = any_ok || hotkeys.is_empty();
+                self.pump_active = any_ok;
+                failed
             }
             Err(e) => {
                 log::error!("ItemHotkeyManager: failed to start pump thread: {}", e);
-                false
+                hotkeys
+                    .iter()
+                    .map(|(_, hk)| hk.clone())
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .fold(Vec::new(), |mut acc, hk| {
+                        if !acc.contains(&hk) {
+                            acc.push(hk);
+                        }
+                        acc
+                    })
             }
         }
     }

@@ -17,19 +17,22 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 jobs:
   rust-build-windows:
     runs-on: windows-latest
+    # delete-workflow-runs 需要 actions:write 删除本仓库历史 run
+    permissions:
+      contents: read
+      actions: write
     defaults:
       run:
         working-directory: rs
 
     steps:
       - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
+        uses: Mattraks/delete-workflow-runs@0cf693bc9909e5e867ee8f27b813224ba862939c # v2
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -46,6 +49,10 @@ jobs:
             ~/.cargo/git
             rs/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      # 带 backend-testing feature 使 gui_integration_test.rs 参与编译检查
+      - name: Run clippy (lints)
+        run: cargo clippy --all-targets --features backend-testing -- -D warnings
 
       - name: Build (debug)
         run: cargo build
@@ -135,6 +142,8 @@ jobs:
     needs: rust-build-windows
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

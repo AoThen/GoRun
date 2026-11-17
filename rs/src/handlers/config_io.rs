@@ -36,33 +36,49 @@ pub(crate) fn filter_session_prefs(
 
 /// Settings 菜单 → 导出配置：用户选目标文件，写当前配置 JSON。
 pub fn export_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
-    let Some(path) = crate::fileops::save_file_dialog("Export Config", "Config (*.json)\0*.json\0")
-    else {
+    let loc = state.borrow().loc.clone();
+    let (title, filter) = {
+        let lb = loc.borrow();
+        (
+            lb.tr("Title_ExportConfig").to_string(),
+            format!("{}\0*.json\0\0", lb.tr("STR_FilterConfig")),
+        )
+    };
+    let Some(path) = crate::fileops::save_file_dialog(&title, &filter) else {
         return;
     };
     let st = state.borrow();
     if st.storage.export_to(&path, st.manager.config()) {
         log::info!("Exported config to {}", path);
-        crate::ui_sync::show_toast(ui, format!("Exported: {}", path), false);
+        let msg = crate::util::tr_fill(&loc, "Status_Exported", &path);
+        crate::ui_sync::show_toast(ui, msg, false);
     } else {
         log::error!("Failed to export config to {}", path);
-        crate::ui_sync::show_toast(ui, "Export failed", true);
+        let msg = loc.borrow().tr("Status_ExportFailed").to_string();
+        crate::ui_sync::show_toast(ui, msg, true);
     }
 }
 
 /// Settings 菜单 → 导入配置：用户选配置文件，整体替换数据与行为设置，
 /// 保留语言/跟随鼠标/自动隐藏等会话偏好；成功后刷新侧栏与条目。
 pub fn import_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
-    let Some(path) =
-        crate::fileops::browse_file_dialog("Import Config", "Config (*.json)\0*.json\0")
-    else {
+    let loc = state.borrow().loc.clone();
+    let (title, filter) = {
+        let lb = loc.borrow();
+        (
+            lb.tr("Title_ImportConfig").to_string(),
+            format!("{}\0*.json\0\0", lb.tr("STR_FilterConfig")),
+        )
+    };
+    let Some(path) = crate::fileops::browse_file_dialog(&title, &filter) else {
         return;
     };
     let imported = match crate::storage::Storage::new(path.clone()).load() {
         Some(c) => c,
         None => {
             log::error!("Failed to parse import config: {}", path);
-            crate::ui_sync::show_toast(ui, "Import failed: invalid config file", true);
+            let msg = loc.borrow().tr("Status_ImportFailedInvalid").to_string();
+            crate::ui_sync::show_toast(ui, msg, true);
             return;
         }
     };
@@ -90,14 +106,22 @@ pub fn import_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
 
     if !saved {
         log::error!("Failed to save imported config");
-        crate::ui_sync::show_toast(ui, "Import failed: save error", true);
+        let msg = loc.borrow().tr("Status_ImportFailedSave").to_string();
+        crate::ui_sync::show_toast(ui, msg, true);
         return;
     }
     crate::ui_sync::refresh_categories_ui(ui, &state.borrow());
     crate::ui_sync::refresh_items_ui(ui, &state.borrow(), &cur, "");
-    // F8/4.1：导入后重注册条目热键（条目集整体变化）
-    crate::ui_sync::sync_item_hotkeys(&state.borrow());
-    crate::ui_sync::show_toast(ui, "Imported config", false);
+    // F8/4.1：导入后重注册条目热键（条目集整体变化）。
+    // toast 单槽覆盖：失败列表非空时优先提示冲突，否则提示导入成功。
+    let hotkey_failed = crate::ui_sync::sync_item_hotkeys(&state.borrow());
+    if hotkey_failed.is_empty() {
+        let msg = loc.borrow().tr("Status_Imported").to_string();
+        crate::ui_sync::show_toast(ui, msg, false);
+    } else {
+        let msg = crate::util::tr_fill(&loc, "Status_HotkeyConflict", &hotkey_failed.join(", "));
+        crate::ui_sync::show_toast(ui, msg, true);
+    }
     log::info!("Imported config from {}", path);
 }
 

@@ -136,6 +136,22 @@ mod tests {
             "Tip_DropToAdd",
             "STR_Category",
             "Title_EditItem",
+            "Title_ExportConfig",
+            "Title_ImportConfig",
+            "Title_SelectTarget",
+            "Title_SelectIcon",
+            "Title_SelectBgImage",
+            "STR_FilterConfig",
+            "STR_FilterAll",
+            "STR_FilterPrograms",
+            "STR_FilterIcons",
+            "STR_FilterImages",
+            "Status_Exported",
+            "Status_ExportFailed",
+            "Status_ImportFailedInvalid",
+            "Status_ImportFailedSave",
+            "Status_Imported",
+            "Status_HotkeyConflict",
         ];
         for key in essential {
             assert_ne!(loc.tr(key), key, "zh-CN.json 缺少关键文案 key: {}", key);

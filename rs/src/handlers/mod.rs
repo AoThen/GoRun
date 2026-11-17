@@ -287,10 +287,15 @@ pub fn wire_handler(
             let Some(ui) = weak_ui_bg.upgrade() else {
                 return;
             };
-            let Some(path) = fileops::browse_file_dialog(
-                "Select Background Image",
-                "Images (*.png;*.jpg;*.jpeg)\0*.png;*.jpg;*.jpeg\0\0",
-            ) else {
+            let loc_bg = state_bg.borrow().loc.clone();
+            let (bg_title, bg_filter) = {
+                let lb = loc_bg.borrow();
+                (
+                    lb.tr("Title_SelectBgImage").to_string(),
+                    format!("{}\0*.png;*.jpg;*.jpeg\0\0", lb.tr("STR_FilterImages")),
+                )
+            };
+            let Some(path) = fileops::browse_file_dialog(&bg_title, &bg_filter) else {
                 return;
             };
             if apply_background(&ui, &state_bg, &path) {
@@ -548,10 +553,30 @@ pub fn wire_handler(
         log::debug!("Enter: run item index={}", idx);
         ui_sync::run_item_at_index(&weak_ui_sel, &state_sel, idx);
     });
+    // 项目右键菜单（v2 重构）：动作映射分发（对齐汉堡菜单模式）。
+    // MoveTo 携带目标分类 id（替代 moveto_base + 位置的索引换算）。
+    #[derive(Clone, PartialEq)]
+    enum ItemMenuAction {
+        Edit,
+        RunAsAdmin,
+        Delete,
+        CopyPath,
+        OpenLocation,
+        MoveUp,
+        MoveDown,
+        Run,
+        RefreshIcon,
+        Properties,
+        MoveTo(String),
+        OpenFolder,
+    }
+    let item_menu_actions: Rc<RefCell<Vec<ItemMenuAction>>> = Rc::new(RefCell::new(Vec::new()));
+
     let rci = right_clicked_index.clone();
     let mk_item = menu_kind.clone();
     let state_search_menu = state.clone();
     let weak_ui_right = ui.as_weak();
+    let item_actions_build = item_menu_actions.clone();
     ui.on_item_right_clicked(move |index, x, y| {
         log::debug!("Item right-clicked: index={}", index);
         mk_item.set(0);
@@ -559,42 +584,59 @@ pub fn wire_handler(
         // 搜索态排序语义与全局向量不一致，隐藏 Move Up/Down（建议④）
         let st = state_search_menu.borrow();
         let searching = !st.search_query.is_empty();
-        let cat_names: Vec<String> = st
+        let cats: Vec<(String, String)> = st
             .manager
             .categories()
             .iter()
-            .map(|c| c.name.clone())
+            .map(|c| (c.id.clone(), c.name.clone()))
             .collect();
         let loc_m = st.loc.clone();
         drop(st);
         let lb = loc_m.borrow();
-        let mut menu_vec = vec![
-            slint::SharedString::from(lb.tr("Menu_Edit")),
-            slint::SharedString::from(lb.tr("Menu_RunAsAdmin")),
-            slint::SharedString::from(lb.tr("Menu_DelItem")),
-            slint::SharedString::from(lb.tr("Menu_CopyPath")),
-            slint::SharedString::from(lb.tr("Menu_OpenLocationFile")),
-        ];
+        // 菜单文本与动作平行构建（对齐汉堡菜单模式，增删项不再依赖手写索引）
+        let mut menu_vec: Vec<slint::SharedString> = Vec::new();
+        let mut actions: Vec<ItemMenuAction> = Vec::new();
+        menu_vec.push(lb.tr("Menu_Edit").into());
+        actions.push(ItemMenuAction::Edit);
+        menu_vec.push(lb.tr("Menu_RunAsAdmin").into());
+        actions.push(ItemMenuAction::RunAsAdmin);
+        menu_vec.push(lb.tr("Menu_DelItem").into());
+        actions.push(ItemMenuAction::Delete);
+        menu_vec.push(lb.tr("Menu_CopyPath").into());
+        actions.push(ItemMenuAction::CopyPath);
+        menu_vec.push(lb.tr("Menu_OpenLocationFile").into());
+        actions.push(ItemMenuAction::OpenLocation);
         if !searching {
-            menu_vec.push(slint::SharedString::from(lb.tr("Menu_MoveUp")));
-            menu_vec.push(slint::SharedString::from(lb.tr("Menu_MoveDown")));
+            menu_vec.push(lb.tr("Menu_MoveUp").into());
+            actions.push(ItemMenuAction::MoveUp);
+            menu_vec.push(lb.tr("Menu_MoveDown").into());
+            actions.push(ItemMenuAction::MoveDown);
         }
-        menu_vec.push(slint::SharedString::from(lb.tr("Menu_Run")));
-        menu_vec.push(slint::SharedString::from(lb.tr("Menu_RefreshIcon")));
-        menu_vec.push(slint::SharedString::from(lb.tr("Menu_Properties")));
+        menu_vec.push(lb.tr("Menu_Run").into());
+        actions.push(ItemMenuAction::Run);
+        menu_vec.push(lb.tr("Menu_RefreshIcon").into());
+        actions.push(ItemMenuAction::RefreshIcon);
+        menu_vec.push(lb.tr("Menu_Properties").into());
+        actions.push(ItemMenuAction::Properties);
         let move_to = lb.tr("Menu_MoveTo").to_string();
         let open_folder = lb.tr("Menu_OpenFolder").to_string();
         drop(lb);
-        for name in &cat_names {
+        for (cat_id, name) in &cats {
             menu_vec.push(slint::SharedString::from(format!("{} {}", move_to, name)));
+            actions.push(ItemMenuAction::MoveTo(cat_id.clone()));
         }
-        menu_vec.push(slint::SharedString::from(open_folder));
+        menu_vec.push(open_folder.into());
+        actions.push(ItemMenuAction::OpenFolder);
+        *item_actions_build.borrow_mut() = actions;
         let item_count = menu_vec.len();
         let content_h = menu_content_height(&menu_vec);
         let menu_items = Rc::new(slint::VecModel::from(menu_vec));
-        // v2 危险项标红：删除项(index 2)为 danger；其余 false
-        let mut danger: Vec<bool> = vec![false; item_count];
-        danger[2] = true;
+        // v2 危险项标红：删除项为 danger；由 action 映射生成，避免索引错位
+        let danger: Vec<bool> = item_actions_build
+            .borrow()
+            .iter()
+            .map(|a| matches!(a, ItemMenuAction::Delete))
+            .collect();
         let danger_model = Rc::new(slint::VecModel::from(danger));
         if let Some(ui) = weak_ui_right.upgrade() {
             ui.set_context_menu_content_height(content_h);
@@ -680,6 +722,7 @@ pub fn wire_handler(
     let pra_menu = pending_run_all.clone();
     let pra_admin_menu = pending_run_admin.clone();
     let im_menu = input_mode.clone();
+    let item_menu_actions_menu = item_menu_actions.clone();
 
     // 汉堡菜单（v2）：组装单一列表 + 危险项数组；动作经 action 映射分发
     //（不依赖易错的手写索引，增删菜单项时对应关系自动保持）。仅中文，无语言切换项。
@@ -1096,24 +1139,11 @@ pub fn wire_handler(
             };
             if let Some(item) = items.get(item_idx as usize) {
                 let item = item.clone();
-                // 搜索态隐藏 MoveUp/Down，其 Run/RefreshIcon/Properties/MoveTo 索引前移 2。
-                // normal_mode = 查询为空（非搜索态），此时 MoveUp/Down 存在于菜单索引 5/6。
-                let normal_mode = state.search_query.is_empty();
-                let move_offset = if normal_mode { 2 } else { 0 };
-                let run_idx = move_offset + 5;
-                let refresh_idx = move_offset + 6;
-                let props_idx = move_offset + 7;
-                let moveto_base = move_offset + 8;
-                // 菜单末尾"打开文件夹"（F8/文件夹展开）：索引 = MoveTo 起点 + 分类数
-                let cat_count = state.manager.categories().len() as i32;
-                let open_folder_idx = moveto_base + cat_count;
-                // collapsible_match 建议把 move_item_down/up 调用移入 match 守卫，
-                // 但二者是带副作用的修改（置位 modified、落盘配置），放进守卫会
-                // 让"是否执行移动"的判断与执行耦合，且与另一分支不一致，可读性差；
-                // 保留分支体内调用并精确抑制（替代文件级 allow，让新告警重新可见）。
-                #[allow(clippy::collapsible_match)]
-                match index {
-                    0 => {
+                // 动作映射分发（对齐汉堡菜单模式）：搜索态构建菜单时已排除
+                // MoveUp/MoveDown，无需索引换算与 normal_mode 守卫。
+                let action = item_menu_actions_menu.borrow().get(index as usize).cloned();
+                match action {
+                    Some(ItemMenuAction::Edit) => {
                         log::info!("Edit item: {} ({})", item.name, item.id);
                         let categories: Vec<slint::SharedString> = state
                             .manager
@@ -1158,15 +1188,17 @@ pub fn wire_handler(
                             );
 
                             let dialog_weak = dialog.as_weak();
+                            let loc_browse = state.loc.clone();
                             if let Some(dlg_handle) = dialog_weak.upgrade() {
                                 {
                                     let dlg_browse = dialog_weak.clone();
+                                    let (t_title, t_filter) =
+                                        dialogs::browse_texts(&loc_browse, dialogs::BrowseKind::Target);
                                     dlg_handle.on_browse_target(move || {
                                         if let Some(d) = dlg_browse.upgrade() {
-                                            if let Some(path) = fileops::browse_file_dialog(
-                                                "Select Target",
-                                                "All Files (*.*)\0*.*\0Programs (*.exe;*.lnk;*.bat;*.cmd)\0*.exe;*.lnk;*.bat;*.cmd\0\0",
-                                            ) {
+                                            if let Some(path) =
+                                                fileops::browse_file_dialog(&t_title, &t_filter)
+                                            {
                                                 d.set_item_target(path.clone().into());
                                                 // 编辑态：仅回填工作目录（不覆盖已有名）
                                                 ui_sync::fill_from_target(&d, &path, false);
@@ -1176,12 +1208,13 @@ pub fn wire_handler(
                                 }
                                 {
                                     let dlg_icon = dialog_weak.clone();
+                                    let (i_title, i_filter) =
+                                        dialogs::browse_texts(&loc_browse, dialogs::BrowseKind::Icon);
                                     dlg_handle.on_browse_icon(move || {
                                         if let Some(d) = dlg_icon.upgrade() {
-                                            if let Some(path) = fileops::browse_file_dialog(
-                                                "Select Icon",
-                                                "Icons (*.ico;*.exe;*.png;*.jpg;*.jpeg;*.bmp)\0*.ico;*.exe;*.png;*.jpg;*.jpeg;*.bmp\0All Files (*.*)\0*.*\0\0",
-                                            ) {
+                                            if let Some(path) =
+                                                fileops::browse_file_dialog(&i_title, &i_filter)
+                                            {
                                                 d.set_item_icon_path(path.into());
                                             }
                                         }
@@ -1200,16 +1233,15 @@ pub fn wire_handler(
                                             return;
                                         }
                                     };
-                                    // 输入验证：名称与目标非空（对齐 C++ EditDialog）
+                                    // 输入验证：名称/目标非空 + 热键格式可解析（复用新建对话框校验）
                                     let name = dlg.get_item_name().to_string();
                                     let target = dlg.get_item_target().to_string();
-                                    if name.trim().is_empty() || target.trim().is_empty() {
+                                    let hotkey = dlg.get_item_hotkey().to_string();
+                                    let err_key = dialogs::validate_item_input(&name, &target)
+                                        .or_else(|| dialogs::validate_hotkey_input(&hotkey));
+                                    if let Some(err_key) = err_key {
                                         let loc = state_edit.borrow().loc.clone();
-                                        let msg = if name.trim().is_empty() {
-                                            loc.borrow().tr("Tip_NameEmpty").to_string()
-                                        } else {
-                                            loc.borrow().tr("Tip_TargetEmpty").to_string()
-                                        };
+                                        let msg = loc.borrow().tr(err_key).to_string();
                                         dlg.set_error_message(msg.into());
                                         return;
                                     }
@@ -1251,8 +1283,21 @@ pub fn wire_handler(
                                                 &query,
                                             );
                                         }
-                                        // F8/4.1：编辑条目后重注册条目热键
-                                        ui_sync::sync_item_hotkeys(&state_edit.borrow());
+                                        // F8/4.1：编辑条目后重注册条目热键；失败列表非空时提示冲突
+                                        let hotkey_failed =
+                                            ui_sync::sync_item_hotkeys(&state_edit.borrow());
+                                        if let (Some(ui), false) = (
+                                            weak_ui_edit.upgrade(),
+                                            hotkey_failed.is_empty(),
+                                        ) {
+                                            let loc = state_edit.borrow().loc.clone();
+                                            let msg = util::tr_fill(
+                                                &loc,
+                                                "Status_HotkeyConflict",
+                                                &hotkey_failed.join(", "),
+                                            );
+                                            ui_sync::show_toast(&ui, msg, true);
+                                        }
                                     } else {
                                         drop(state);
                                     }
@@ -1296,7 +1341,7 @@ pub fn wire_handler(
                             }
                         }
                     }
-                    1 => {
+                    Some(ItemMenuAction::RunAsAdmin) => {
                         log::info!("Run as admin: {} ({})", item.name, item.id);
                         let item_id = item.id.clone();
                         let item_name = item.name.clone();
@@ -1321,7 +1366,7 @@ pub fn wire_handler(
                             ui.set_confirm_dialog_visible(true);
                         }
                     }
-                    2 => {
+                    Some(ItemMenuAction::Delete) => {
                         log::info!("Delete item: {} ({})", item.name, item.id);
                         let item_id = item.id.clone();
                         let item_name = item.name.clone();
@@ -1341,10 +1386,10 @@ pub fn wire_handler(
                             ui.set_confirm_dialog_visible(true);
                         }
                     }
-                    3 => {
+                    Some(ItemMenuAction::CopyPath) => {
                         clipboard::copy_to_clipboard(&item.target);
                     }
-                    4 => {
+                    Some(ItemMenuAction::OpenLocation) => {
                         if crate::runner::is_url(&item.target) {
                             log::debug!(
                                 "Skip open file location for URL target: {}",
@@ -1354,7 +1399,7 @@ pub fn wire_handler(
                             fileops::open_file_location(&item.target);
                         }
                     }
-                    x if x == run_idx => {
+                    Some(ItemMenuAction::Run) => {
                         log::info!("Run item: {} ({})", item.name, item.id);
                         let search_query = state.search_query.clone();
                         drop(state);
@@ -1387,7 +1432,7 @@ pub fn wire_handler(
                             });
                         }
                     }
-                    x if x == refresh_idx => {
+                    Some(ItemMenuAction::RefreshIcon) => {
                         log::info!("Refresh icon: {} ({})", item.name, item.id);
                         let icon_cache = state.icon_cache.clone();
                         let pending = state.pending_icon_paths.clone();
@@ -1396,7 +1441,7 @@ pub fn wire_handler(
                             ui_sync::spawn_icon_refresh(&ui, icon_cache, vec![item.clone()], pending);
                         }
                     }
-                    x if x == props_idx => {
+                    Some(ItemMenuAction::Properties) => {
                         log::info!("Properties: {} ({})", item.target, item.id);
                         if item.target.trim().is_empty() {
                             // 空目标条目（如历史占位 "New Item"）：明确提示而非静默无动作
@@ -1414,27 +1459,18 @@ pub fn wire_handler(
                             fileops::show_properties(&item.target);
                         }
                     }
-                    x if x >= moveto_base && x < moveto_base + cat_count => {
-                        let cat_pos = (x - moveto_base) as usize;
-                        let target_cat = {
-                            let cats = state.manager.categories();
-                            cats.get(cat_pos).map(|c| c.id.clone())
-                        };
-                        if let Some(tcat) = target_cat {
-                            if state.manager.move_item(&item.id, &tcat) {
-                                state.save_if_modified();
-                                let cat_id = state.current_category_id.clone();
-                                let q = state.search_query.clone();
-                                drop(state);
-                                if let Some(ui) = weak_ui_menu.upgrade() {
-                                    ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
-                                }
+                    Some(ItemMenuAction::MoveTo(target_cat)) => {
+                        if state.manager.move_item(&item.id, &target_cat) {
+                            state.save_if_modified();
+                            let cat_id = state.current_category_id.clone();
+                            let q = state.search_query.clone();
+                            drop(state);
+                            if let Some(ui) = weak_ui_menu.upgrade() {
+                                ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                             }
                         }
                     }
-                    // P4：MoveUp/MoveDown 固定位于索引 5/6（仅非搜索态存在）；
-                    // guard 带 normal_mode 使搜索态（索引 5/6 被 Run/Refresh 占用）不误路由。
-                    x if x == 5 && normal_mode => {
+                    Some(ItemMenuAction::MoveUp) => {
                         if state.manager.move_item_up(&item.id) {
                             state.save_if_modified();
                             let cat_id = state.current_category_id.clone();
@@ -1445,7 +1481,7 @@ pub fn wire_handler(
                             }
                         }
                     }
-                    x if x == 6 && normal_mode => {
+                    Some(ItemMenuAction::MoveDown) => {
                         if state.manager.move_item_down(&item.id) {
                             state.save_if_modified();
                             let cat_id = state.current_category_id.clone();
@@ -1456,10 +1492,10 @@ pub fn wire_handler(
                             }
                         }
                     }
-                    x if x == open_folder_idx => {
+                    Some(ItemMenuAction::OpenFolder) => {
                         crate::fileops::open_folder(&item.target);
                     }
-                    _ => {}
+                    None => {}
                 }
             }
         }
@@ -1580,47 +1616,87 @@ pub fn wire_handler(
             }
             return;
         }
-        // 运行全部（背景右键菜单 → 确认弹窗 → 逐一执行分类内项目）
+        // 运行全部（背景右键菜单 → 确认弹窗 → 逐一执行分类内项目）。
+        // Timer 分批执行（每批 8 项，批间让出事件循环），避免大分类同步循环冻结 UI。
         if let Some(cat_id) = pra_ok.borrow_mut().take() {
-            let state = state_confirm.borrow();
-            let items = state.manager.items(&cat_id);
-            let search_query = state.search_query.clone();
-            drop(state);
+            let items: Vec<crate::model::Item> = {
+                let state = state_confirm.borrow();
+                state.manager.items(&cat_id).to_vec()
+            };
+            let search_query = state_confirm.borrow().search_query.clone();
             if !items.is_empty() {
-                let results = crate::runner::run_all(&items, &search_query);
-                let mut state = state_confirm.borrow_mut();
-                let mut success = 0i32;
-                let mut failed = 0i32;
-                for (idx, result) in results.iter().enumerate() {
-                    if result.success {
-                        success += 1;
-                        state.manager.increment_run_count(&items[idx].id);
-                    } else {
-                        failed += 1;
-                    }
-                }
-                state.save_if_modified();
-                drop(state);
-                let msg = {
-                    let loc = state_confirm.borrow().loc.clone();
-                    let loc_b = loc.borrow();
-                    if failed == 0 {
-                        loc_b
-                            .tr("Status_RunAllDone")
-                            .replace("{0}", &success.to_string())
-                    } else {
-                        loc_b
-                            .tr("Status_RunAllDonePartial")
-                            .replace("{0}", &success.to_string())
-                            .replace("{1}", &failed.to_string())
-                    }
-                };
+                // 进度状态：(下一批起始索引, 成功数, 失败数)
+                let progress = Rc::new(RefCell::new((0usize, 0i32, 0i32)));
                 let weak = weak_ui_confirm.clone();
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(ui) = weak.upgrade() {
-                        ui_sync::show_toast(&ui, msg, failed > 0);
-                    }
-                });
+                let state_r = state_confirm.clone();
+                let search_q = search_query.clone();
+                // slot 持有 Timer；回调尾部 take()+stop() 打破 闭包↔Timer 循环引用。
+                // 安全性：slint 事件循环触发回调期间持有 TimerInner 引用，
+                // 回调内 drop 我们的 Rc<Timer> 不会释放正在执行的闭包。
+                let timer_slot: Rc<RefCell<Option<Rc<slint::Timer>>>> =
+                    Rc::new(RefCell::new(Some(Rc::new(slint::Timer::default()))));
+                let slot_cb = timer_slot.clone();
+                if let Some(timer) = timer_slot.borrow().as_ref() {
+                    timer.clone().start(
+                        slint::TimerMode::Repeated,
+                        std::time::Duration::from_millis(0),
+                        move || {
+                            const BATCH: usize = 8;
+                            let mut pr = progress.borrow_mut();
+                            let mut state = state_r.borrow_mut();
+                            let end = (pr.0 + BATCH).min(items.len());
+                            for it in &items[pr.0..end] {
+                                // 尊重项目"管理员运行"标志，与双击/回车行为一致（P0）
+                                let result = if it.run_as_admin {
+                                    crate::runner::run_as_admin(it, &search_q)
+                                } else {
+                                    crate::runner::run(it, &search_q)
+                                };
+                                if result.success {
+                                    pr.1 += 1;
+                                    state.manager.increment_run_count(&it.id);
+                                } else {
+                                    pr.2 += 1;
+                                    log::warn!(
+                                        "Run all: failed to run {} ({}) - {}",
+                                        it.name,
+                                        it.id,
+                                        result.error_message
+                                    );
+                                }
+                            }
+                            pr.0 = end;
+                            let (next, success, failed) = *pr;
+                            // 每批落盘（"每次操作后立即保存"），也防中途中断丢计数
+                            state.save_if_modified();
+                            drop(state);
+                            if next >= items.len() {
+                                // 完成：打破 Timer 循环引用，再汇总提示
+                                if let Some(t) = slot_cb.borrow_mut().take() {
+                                    t.stop();
+                                }
+                                drop(pr);
+                                let msg = {
+                                    let loc = state_r.borrow().loc.clone();
+                                    let loc_b = loc.borrow();
+                                    if failed == 0 {
+                                        loc_b
+                                            .tr("Status_RunAllDone")
+                                            .replace("{0}", &success.to_string())
+                                    } else {
+                                        loc_b
+                                            .tr("Status_RunAllDonePartial")
+                                            .replace("{0}", &success.to_string())
+                                            .replace("{1}", &failed.to_string())
+                                    }
+                                };
+                                if let Some(ui) = weak.upgrade() {
+                                    ui_sync::show_toast(&ui, msg, failed > 0);
+                                }
+                            }
+                        },
+                    );
+                }
             }
         }
     });

@@ -394,7 +394,8 @@ pub fn refresh_categories_ui(ui: &MainWindow, state: &AppState) {
 
 /// F8/4.1：同步条目级全局热键——收集所有非空 item.hotkey，重注册到 ItemHotkeyManager。
 /// 条目增删改/导入后调用；空列表时注销全部（无条目热键）。
-pub fn sync_item_hotkeys(state: &AppState) {
+/// 返回注册失败的热键串列表（空 = 全部成功），供调用方向用户反馈冲突。
+pub fn sync_item_hotkeys(state: &AppState) -> Vec<String> {
     let hotkeys: Vec<(String, String)> = state
         .manager
         .all_items()
@@ -403,13 +404,14 @@ pub fn sync_item_hotkeys(state: &AppState) {
         .map(|i| (i.id.clone(), i.hotkey.clone()))
         .collect();
     let tx = state.item_hotkey_tx.clone();
-    let ok = state
+    let failed = state
         .item_hotkey_mgr
         .borrow_mut()
         .register_all(&hotkeys, tx);
-    if !ok {
-        log::warn!("Item hotkey registration reported failure (partial)");
+    if !failed.is_empty() {
+        log::warn!("Item hotkey registration failed for: {}", failed.join(", "));
     }
+    failed
 }
 
 #[cfg(test)]

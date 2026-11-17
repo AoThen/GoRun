@@ -24,6 +24,48 @@ pub fn validate_item_input(name: &str, target: &str) -> Option<&'static str> {
     }
 }
 
+/// 校验条目热键输入。空串视为未设置（合法）；非空且无法解析时返回错误文案键。
+pub fn validate_hotkey_input(hotkey: &str) -> Option<&'static str> {
+    if hotkey.trim().is_empty() {
+        None
+    } else if crate::hotkey::parse_hotkey_string(hotkey).is_none() {
+        Some("Tip_InvalidHotkey")
+    } else {
+        None
+    }
+}
+
+/// 新建对话框文件选择器文案（标题 + 过滤器），编辑对话框（wire_handler 内联）共用。
+pub(crate) fn browse_texts(
+    loc: &std::rc::Rc<std::cell::RefCell<crate::localization::Localization>>,
+    kind: BrowseKind,
+) -> (String, String) {
+    let lb = loc.borrow();
+    match kind {
+        BrowseKind::Target => (
+            lb.tr("Title_SelectTarget").to_string(),
+            format!(
+                "{}\0*.*\0{}\0*.exe;*.lnk;*.bat;*.cmd\0\0",
+                lb.tr("STR_FilterAll"),
+                lb.tr("STR_FilterPrograms")
+            ),
+        ),
+        BrowseKind::Icon => (
+            lb.tr("Title_SelectIcon").to_string(),
+            format!(
+                "{}\0*.ico;*.exe;*.png;*.jpg;*.jpeg;*.bmp\0{}\0*.*\0\0",
+                lb.tr("STR_FilterIcons"),
+                lb.tr("STR_FilterAll")
+            ),
+        ),
+    }
+}
+
+pub(crate) enum BrowseKind {
+    Target,
+    Icon,
+}
+
 /// 展示新建项目对话框（名称预填"新建项目"，保存时新增）。
 pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<AppState>>) {
     let (categories, selected_cat_idx, default_name) = {
@@ -62,15 +104,14 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
         dialogs::setup_edit_dialog_new_category(&dialog, state.clone(), ui_weak);
 
         let dialog_weak = dialog.as_weak();
+        let loc_browse = state.borrow().loc.clone();
         if let Some(dlg_handle) = dialog_weak.upgrade() {
             {
                 let dlg_browse = dialog_weak.clone();
+                let (t_title, t_filter) = browse_texts(&loc_browse, BrowseKind::Target);
                 dlg_handle.on_browse_target(move || {
                     if let Some(d) = dlg_browse.upgrade() {
-                        if let Some(path) = fileops::browse_file_dialog(
-                            "Select Target",
-                            "All Files (*.*)\0*.*\0Programs (*.exe;*.lnk;*.bat;*.cmd)\0*.exe;*.lnk;*.bat;*.cmd\0\0",
-                        ) {
+                        if let Some(path) = fileops::browse_file_dialog(&t_title, &t_filter) {
                             d.set_item_target(path.clone().into());
                             // 新建态回填名称+工作目录
                             ui_sync::fill_from_target(&d, &path, true);
@@ -80,12 +121,10 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
             }
             {
                 let dlg_icon = dialog_weak.clone();
+                let (i_title, i_filter) = browse_texts(&loc_browse, BrowseKind::Icon);
                 dlg_handle.on_browse_icon(move || {
                     if let Some(d) = dlg_icon.upgrade() {
-                        if let Some(path) = fileops::browse_file_dialog(
-                            "Select Icon",
-                            "Icons (*.ico;*.exe;*.png;*.jpg;*.jpeg;*.bmp)\0*.ico;*.exe;*.png;*.jpg;*.jpeg;*.bmp\0All Files (*.*)\0*.*\0\0",
-                        ) {
+                        if let Some(path) = fileops::browse_file_dialog(&i_title, &i_filter) {
                             d.set_item_icon_path(path.into());
                         }
                     }
@@ -103,10 +142,13 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
                         return;
                     }
                 };
-                // 输入验证：名称与目标非空（对齐 C++ EditDialog）
+                // 输入验证：名称与目标非空（对齐 C++ EditDialog）+ 热键格式可解析
                 let name = dlg.get_item_name().to_string();
                 let target = dlg.get_item_target().to_string();
-                if let Some(err_key) = validate_item_input(&name, &target) {
+                let hotkey = dlg.get_item_hotkey().to_string();
+                let err_key = validate_item_input(&name, &target)
+                    .or_else(|| validate_hotkey_input(&hotkey));
+                if let Some(err_key) = err_key {
                     let msg = {
                         let loc = state_save.borrow().loc.clone();
                         // E0597：块尾表达式中的 Ref 临时会延长到块末尾，导致 loc 先被 drop
@@ -149,8 +191,19 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
                     if let Some(ui) = weak_ui_save.upgrade() {
                         ui_sync::refresh_items_ui(&ui, &state_save.borrow(), &cat_id, &query);
                     }
-                    // F8/4.1：新增条目后重注册条目热键
-                    ui_sync::sync_item_hotkeys(&state_save.borrow());
+                    // F8/4.1：新增条目后重注册条目热键；失败列表非空时提示冲突
+                    let hotkey_failed = ui_sync::sync_item_hotkeys(&state_save.borrow());
+                    if let (Some(ui), false) =
+                        (weak_ui_save.upgrade(), hotkey_failed.is_empty())
+                    {
+                        let loc = state_save.borrow().loc.clone();
+                        let msg = crate::util::tr_fill(
+                            &loc,
+                            "Status_HotkeyConflict",
+                            &hotkey_failed.join(", "),
+                        );
+                        ui_sync::show_toast(&ui, msg, true);
+                    }
                 } else {
                     drop(state);
                 }
@@ -199,7 +252,7 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
 
 #[cfg(test)]
 mod tests {
-    use super::validate_item_input;
+    use super::{validate_hotkey_input, validate_item_input};
 
     #[test]
     fn test_validate_both_empty_reports_name() {
@@ -228,5 +281,34 @@ mod tests {
     fn test_validate_valid() {
         assert_eq!(validate_item_input("name", "target"), None);
         assert_eq!(validate_item_input(" name ", " target "), None);
+    }
+
+    #[test]
+    fn test_validate_hotkey_empty_is_valid() {
+        // 空串/纯空白 = 未设置热键，合法
+        assert_eq!(validate_hotkey_input(""), None);
+        assert_eq!(validate_hotkey_input("   "), None);
+    }
+
+    #[test]
+    fn test_validate_hotkey_valid_formats() {
+        assert_eq!(validate_hotkey_input("Ctrl+/"), None);
+        assert_eq!(validate_hotkey_input("Ctrl+Alt+M"), None);
+        assert_eq!(validate_hotkey_input("F8"), None);
+        assert_eq!(validate_hotkey_input("ctrl+shift+p"), None);
+        assert_eq!(validate_hotkey_input("Alt+1"), None);
+    }
+
+    #[test]
+    fn test_validate_hotkey_invalid_formats() {
+        // 修饰键不在末位
+        assert_eq!(validate_hotkey_input("Ctrl"), Some("Tip_InvalidHotkey"));
+        // 未知键名
+        assert_eq!(validate_hotkey_input("Ctrl+Foo"), Some("Tip_InvalidHotkey"));
+        // 空段（尾随 +）
+        assert_eq!(validate_hotkey_input("Ctrl+"), Some("Tip_InvalidHotkey"));
+        assert_eq!(validate_hotkey_input("+"), Some("Tip_InvalidHotkey"));
+        // 非 ASCII 单字符
+        assert_eq!(validate_hotkey_input("中"), Some("Tip_InvalidHotkey"));
     }
 }

@@ -685,5 +685,22 @@
     "Status_SaveFailed": "配置保存失败，数据未落盘",
     "Status_CorruptQuarantined": "配置损坏，已隔离为 {0}，使用默认配置",
 
+    "Title_ExportConfig": "导出配置",
+    "Title_ImportConfig": "导入配置",
+    "Title_SelectTarget": "选择目标程序",
+    "Title_SelectIcon": "选择图标文件",
+    "Title_SelectBgImage": "选择背景图",
+    "STR_FilterConfig": "配置文件 (*.json)",
+    "STR_FilterAll": "所有文件 (*.*)",
+    "STR_FilterPrograms": "程序 (*.exe;*.lnk;*.bat;*.cmd)",
+    "STR_FilterIcons": "图标 (*.ico;*.exe;*.png;*.jpg;*.jpeg;*.bmp)",
+    "STR_FilterImages": "图片 (*.png;*.jpg;*.jpeg)",
+    "Status_Exported": "已导出：{0}",
+    "Status_ExportFailed": "导出失败",
+    "Status_ImportFailedInvalid": "导入失败：配置文件无效",
+    "Status_ImportFailedSave": "导入失败：保存错误",
+    "Status_Imported": "已导入配置",
+    "Status_HotkeyConflict": "热键注册失败：{0}",
+
     "__END": ""
 }
