@@ -79,3 +79,21 @@ lto = true
 strip = "symbols"
 panic = "abort"
 codegen-units = 1
+
+# 裁剪版 lints：仅启用当前零告警的高价值 lint，用于防回归。
+# 完整 BeautifulRust 配置（含 pedantic 组 + as_conversions/cast_*/unwrap_used/
+# clone_on_ref_ptr 等）会触发 1.8 万+ 既有告警，淹没构建且与 Windows FFI 代码
+# 的既有风格（大量 `as` 转换）冲突，故不引入。仅启用项目已满足的项。
+[lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+panic_in_result_fn = "warn"
+multiple_unsafe_ops_per_block = "warn"
+fn_params_excessive_bools = "warn"
+struct_excessive_bools = "warn"
+rc_buffer = "warn"
+string_add = "warn"
+wildcard_imports = "warn"
+dbg_macro = "warn"
