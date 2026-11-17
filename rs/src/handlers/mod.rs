@@ -49,7 +49,7 @@ fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) 
 pub fn wire_handler(
     ui: &MainWindow,
     state: Rc<RefCell<AppState>>,
-    loc: &Rc<RefCell<Localization>>,
+    _loc: &Rc<RefCell<Localization>>,
     hotkey_mgr: Rc<RefCell<hotkey::HotkeyManager>>,
     hk_tx_shared: Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>>,
 ) {
@@ -1634,70 +1634,67 @@ pub fn wire_handler(
                 // slot 持有 Timer；回调尾部 take()+stop() 打破 闭包↔Timer 循环引用。
                 // 安全性：slint 事件循环触发回调期间持有 TimerInner 引用，
                 // 回调内 drop 我们的 Rc<Timer> 不会释放正在执行的闭包。
-                let timer_slot: Rc<RefCell<Option<Rc<slint::Timer>>>> =
-                    Rc::new(RefCell::new(Some(Rc::new(slint::Timer::default()))));
-                let slot_cb = timer_slot.clone();
-                if let Some(timer) = timer_slot.borrow().as_ref() {
-                    timer.clone().start(
-                        slint::TimerMode::Repeated,
-                        std::time::Duration::from_millis(0),
-                        move || {
-                            const BATCH: usize = 8;
-                            let mut pr = progress.borrow_mut();
-                            let mut state = state_r.borrow_mut();
-                            let end = (pr.0 + BATCH).min(items.len());
-                            for it in &items[pr.0..end] {
-                                // 尊重项目"管理员运行"标志，与双击/回车行为一致（P0）
-                                let result = if it.run_as_admin {
-                                    crate::runner::run_as_admin(it, &search_q)
-                                } else {
-                                    crate::runner::run(it, &search_q)
-                                };
-                                if result.success {
-                                    pr.1 += 1;
-                                    state.manager.increment_run_count(&it.id);
-                                } else {
-                                    pr.2 += 1;
-                                    log::warn!(
-                                        "Run all: failed to run {} ({}) - {}",
-                                        it.name,
-                                        it.id,
-                                        result.error_message
-                                    );
-                                }
+                let timer = Rc::new(slint::Timer::default());
+                let slot_cb = Rc::new(RefCell::new(Some(timer.clone())));
+                timer.start(
+                    slint::TimerMode::Repeated,
+                    std::time::Duration::from_millis(0),
+                    move || {
+                        const BATCH: usize = 8;
+                        let mut pr = progress.borrow_mut();
+                        let mut state = state_r.borrow_mut();
+                        let end = (pr.0 + BATCH).min(items.len());
+                        for it in &items[pr.0..end] {
+                            // 尊重项目"管理员运行"标志，与双击/回车行为一致（P0）
+                            let result = if it.run_as_admin {
+                                crate::runner::run_as_admin(it, &search_q)
+                            } else {
+                                crate::runner::run(it, &search_q)
+                            };
+                            if result.success {
+                                pr.1 += 1;
+                                state.manager.increment_run_count(&it.id);
+                            } else {
+                                pr.2 += 1;
+                                log::warn!(
+                                    "Run all: failed to run {} ({}) - {}",
+                                    it.name,
+                                    it.id,
+                                    result.error_message
+                                );
                             }
-                            pr.0 = end;
-                            let (next, success, failed) = *pr;
-                            // 每批落盘（"每次操作后立即保存"），也防中途中断丢计数
-                            state.save_if_modified();
-                            drop(state);
-                            if next >= items.len() {
-                                // 完成：打破 Timer 循环引用，再汇总提示
-                                if let Some(t) = slot_cb.borrow_mut().take() {
-                                    t.stop();
-                                }
-                                drop(pr);
-                                let msg = {
-                                    let loc = state_r.borrow().loc.clone();
-                                    let loc_b = loc.borrow();
-                                    if failed == 0 {
-                                        loc_b
-                                            .tr("Status_RunAllDone")
-                                            .replace("{0}", &success.to_string())
-                                    } else {
-                                        loc_b
-                                            .tr("Status_RunAllDonePartial")
-                                            .replace("{0}", &success.to_string())
-                                            .replace("{1}", &failed.to_string())
-                                    }
-                                };
-                                if let Some(ui) = weak.upgrade() {
-                                    ui_sync::show_toast(&ui, msg, failed > 0);
-                                }
+                        }
+                        pr.0 = end;
+                        let (next, success, failed) = *pr;
+                        // 每批落盘（"每次操作后立即保存"），也防中途中断丢计数
+                        state.save_if_modified();
+                        drop(state);
+                        if next >= items.len() {
+                            // 完成：打破 Timer 循环引用，再汇总提示
+                            if let Some(t) = slot_cb.borrow_mut().take() {
+                                t.stop();
                             }
-                        },
-                    );
-                }
+                            drop(pr);
+                            let msg = {
+                                let loc = state_r.borrow().loc.clone();
+                                let loc_b = loc.borrow();
+                                if failed == 0 {
+                                    loc_b
+                                        .tr("Status_RunAllDone")
+                                        .replace("{0}", &success.to_string())
+                                } else {
+                                    loc_b
+                                        .tr("Status_RunAllDonePartial")
+                                        .replace("{0}", &success.to_string())
+                                        .replace("{1}", &failed.to_string())
+                                }
+                            };
+                            if let Some(ui) = weak.upgrade() {
+                                ui_sync::show_toast(&ui, msg, failed > 0);
+                            }
+                        }
+                    },
+                );
             }
         }
     });

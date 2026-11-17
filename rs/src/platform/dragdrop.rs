@@ -85,7 +85,7 @@ unsafe extern "system" fn mouse_subclass_proc(
         // 诊断：先透传让 winit 窗口过程写入其 min/max 约束，再读取 TrackSize
         // （本子类先于 winit 收到消息，不透传会读到系统默认值而非 winit 设置值）。
         let r = DefSubclassProc(hwnd, umsg, wparam, lparam);
-        let mm = unsafe { &*(lparam.0 as *const MINMAXINFO) };
+        let mm = &*(lparam.0 as *const MINMAXINFO);
         let packed =
             ((mm.ptMaxTrackSize.x as u32 as u64) << 32) | (mm.ptMaxTrackSize.y as u32 as u64);
         if LAST_MAX_TRACK.swap(packed, Ordering::Relaxed) != packed {
