@@ -564,6 +564,7 @@ unsafe extern "system" fn tray_wnd_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    unsafe {
     // TaskbarCreated：Explorer 重启后托盘重建，重新添加图标
     if tray().taskbar_created_msg.get().is_some_and(|m| *m == msg) {
         if let (Some(hwnd), Some(h_icon), Some(tip)) = (
@@ -606,5 +607,6 @@ unsafe extern "system" fn tray_wnd_proc(
         }
         WM_DESTROY => LRESULT(0),
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
     }
 }

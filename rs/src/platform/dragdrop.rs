@@ -59,6 +59,7 @@ unsafe extern "system" fn mouse_subclass_proc(
     _uidsubclass: usize,
     _dwrefdata: usize,
 ) -> LRESULT {
+    unsafe {
     if umsg == WM_MOUSEMOVE {
         // F7 自动隐藏：光标在窗口内移动时注册 leave 跟踪（每次 move 重置）
         let mut tme = TRACKMOUSEEVENT {
@@ -99,6 +100,7 @@ unsafe extern "system" fn mouse_subclass_proc(
         r
     } else {
         DefSubclassProc(hwnd, umsg, wparam, lparam)
+    }
     }
 }
 

@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::app_state::AppState;
+use crate::handlers::edit_dialog::{browse_texts, validate_hotkey_input, validate_item_input, BrowseKind};
 use crate::localization::Localization;
 use crate::model::{Category, ViewType};
 use crate::{clipboard, fileops, geometry, hotkey, model, ui_sync, util, EditDialog, MainWindow};
@@ -1193,7 +1194,7 @@ pub fn wire_handler(
                                 {
                                     let dlg_browse = dialog_weak.clone();
                                     let (t_title, t_filter) =
-                                        dialogs::browse_texts(&loc_browse, dialogs::BrowseKind::Target);
+                                        browse_texts(&loc_browse, BrowseKind::Target);
                                     dlg_handle.on_browse_target(move || {
                                         if let Some(d) = dlg_browse.upgrade() {
                                             if let Some(path) =
@@ -1209,7 +1210,7 @@ pub fn wire_handler(
                                 {
                                     let dlg_icon = dialog_weak.clone();
                                     let (i_title, i_filter) =
-                                        dialogs::browse_texts(&loc_browse, dialogs::BrowseKind::Icon);
+                                        browse_texts(&loc_browse, BrowseKind::Icon);
                                     dlg_handle.on_browse_icon(move || {
                                         if let Some(d) = dlg_icon.upgrade() {
                                             if let Some(path) =
@@ -1237,8 +1238,8 @@ pub fn wire_handler(
                                     let name = dlg.get_item_name().to_string();
                                     let target = dlg.get_item_target().to_string();
                                     let hotkey = dlg.get_item_hotkey().to_string();
-                                    let err_key = dialogs::validate_item_input(&name, &target)
-                                        .or_else(|| dialogs::validate_hotkey_input(&hotkey));
+                                    let err_key = validate_item_input(&name, &target)
+                                        .or_else(|| validate_hotkey_input(&hotkey));
                                     if let Some(err_key) = err_key {
                                         let loc = state_edit.borrow().loc.clone();
                                         let msg = loc.borrow().tr(err_key).to_string();

@@ -90,7 +90,12 @@ pub fn start_tray_handler(
 }
 
 /// 处理需要 AppState 的托盘动作（主线程 Timer 回调内执行）。
-pub fn handle_tray_ui_action(action: TrayUiAction, ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
+/// ui 预留（后续动作可能需要 UI 反馈）；当前两动作仅改配置与托盘状态。
+pub fn handle_tray_ui_action(
+    action: TrayUiAction,
+    _ui: &MainWindow,
+    state: &Rc<RefCell<AppState>>,
+) {
     match action {
         TrayUiAction::ToggleFollowMouse => {
             let mut s = state.borrow_mut();

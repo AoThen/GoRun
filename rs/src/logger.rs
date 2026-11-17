@@ -60,11 +60,11 @@ impl FileLogger {
 }
 
 impl Log for FileLogger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
         metadata.level() <= log::max_level()
     }
 
-    fn log(&self, record: &Record) {
+    fn log(&self, record: &Record<'_>) {
         if self.enabled(record.metadata()) {
             let mut inner = self.file.lock().unwrap_or_else(|e| e.into_inner());
             let level = match record.level() {
