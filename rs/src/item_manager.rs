@@ -56,8 +56,7 @@ impl ItemManager {
             .collect()
     }
 
-    /// P1-9：全量项目（仅集成测试引用；bin 目标内无调用，标注抑制警告）。
-    #[allow(dead_code)]
+    /// 全量项目（供 ui_sync 刷新/重建条目模型与集成测试使用）。
     pub fn all_items(&self) -> Vec<Item> {
         self.config.data.items.clone()
     }

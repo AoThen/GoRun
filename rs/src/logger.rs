@@ -32,6 +32,12 @@ struct FileLogger {
     debug_to_console: bool,
 }
 
+// 锁恢复说明：file 锁守卫日志文件写入。锁中毒时若不用 into_inner 恢复，
+// 日志系统会永久失效（每次 log 都返回 PoisonError），代价高于恢复。
+// 锁内只做 writeln/flush/rotate 的简单 IO、不会 panic，中毒仅极端情况发生；
+// 恢复后可能半写一行日志，但日志本身是尽力而为的追加写，风险可忽略。
+// 注意：rotate 在持有锁的调用方内执行，禁止再调用 log::*（非重入死锁）。
+
 impl FileLogger {
     fn rotate(&self, inner: &mut Inner) {
         // 注意：本方法在持有 self.file 锁的调用方内执行，禁止再调用 log::*

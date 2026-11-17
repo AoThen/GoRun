@@ -123,6 +123,9 @@ pub fn persist_cached_icons(
     state: &Rc<RefCell<AppState>>,
 ) {
     let updates: Vec<(String, String)> = {
+        // 锁恢复说明：pending_icon_paths 为可丢弃可重建的待回写缓存，锁内只做
+        // is_empty/drain、不会 panic；中毒仅在极端情况发生。into_inner 恢复后
+        // 可能半更新，但下次保存会按需覆盖，风险可忽略（丢弃重建收益为负）。
         let mut map = match slot.lock() {
             Ok(m) => m,
             Err(e) => e.into_inner(),

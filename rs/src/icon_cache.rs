@@ -19,6 +19,11 @@ pub struct IconCache {
     images: Arc<Mutex<HashMap<u64, slint::SharedPixelBuffer<slint::Rgba8Pixel>>>>,
 }
 
+// 锁恢复说明：images/item_keys 均为可丢弃可重建的缓存（解码失败/缺失即重新读盘），
+// 锁内只做 HashMap 的 get/insert/remove 简单操作、不会 panic，中毒仅在极端情况
+// （如 OOM）发生。锁中毒时用 into_inner() 恢复继续用：缓存可能半更新，但下次访问
+// 会按需重算/重读盘覆盖，风险可忽略；若改为丢弃重建会丢失已有缓存、收益为负。
+
 impl Default for IconCache {
     fn default() -> Self {
         Self::new()

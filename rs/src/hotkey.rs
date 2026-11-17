@@ -1,3 +1,7 @@
+// 文件级允许 dead_code：Windows 热键注册的私有辅助函数在非 Windows（stub）
+// 构建下不参与编译，Linux/CI 无法逐项验证 Windows 侧的未用情况；保留以
+// 避免 Windows 构建出现意外告警。若后续可对 Windows 目标做 CI 检查，
+// 应改为对具体未用项加局部 allow（见 item_manager.rs 的精确抑制示范）。
 #![allow(dead_code)]
 
 use std::sync::mpsc::{channel, Sender};
