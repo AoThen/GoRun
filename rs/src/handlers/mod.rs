@@ -103,38 +103,15 @@ pub fn wire_handler(
         let path = PathBuf::from(target.to_string());
         let mut state = state_file.borrow_mut();
         let cat_id = state.current_category_id.clone();
-        let added_ids = state
+        // 拖入添加条目（内部幂等：重复 target 跳过）
+        let _ = state
             .manager
             .handle_drop(std::slice::from_ref(&path), &cat_id);
         state.save_if_modified();
-        // P0：小批量拖入同步提取图标（拖入即见图标）；
-        // 大批量仍走 refresh_items_ui 的异步提取队列兜底，避免阻塞 UI 线程。
-        const SYNC_ICON_LIMIT: usize = 8;
-        // 重复拖入被幂等跳过时，若已存在条目缺图标（历史记录提取失败/缓存丢失），
-        // 同样同步补齐——用户视角"拖入就该有图标"，无论是否首次添加。
-        let mut sync_ids = added_ids;
-        if sync_ids.is_empty() {
-            let drop_target = crate::item_manager::normalize_drop_target(&path);
-            if let Some(existing) = state.manager.find_item_by_target(&cat_id, &drop_target) {
-                if existing.icon_path.is_empty()
-                    && state.icon_cache.get_icon_path(&existing).is_none()
-                {
-                    sync_ids.push(existing.id);
-                }
-            }
-        }
-        if !sync_ids.is_empty() && sync_ids.len() <= SYNC_ICON_LIMIT {
-            for id in &sync_ids {
-                let item = match state.manager.get_item(id) {
-                    Some(it) => it.clone(),
-                    None => continue,
-                };
-                if let Some(p) = state.icon_cache.refresh_icon(&item) {
-                    state.manager.set_cached_icon(id, &p.to_string_lossy());
-                }
-            }
-            state.save_if_modified();
-        }
+        // P2：图标统一走 refresh_items_ui 的异步提取/解码队列（后台线程提取 +
+        // 房管 Timer 整表刷新落盘）——网络盘/光驱等慢速源不再阻塞 UI 线程；
+        // 代价仅是图标延后百毫秒级上屏，且与"粘贴路径"入口行为一致。
+        // （会话级防抖：提取失败条目本会话不重复自动重试，可经右键"刷新图标"强制重试。）
         let query = state.search_query.clone();
         drop(state);
         if let Some(ui) = weak_ui_file.upgrade() {
