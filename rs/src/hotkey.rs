@@ -856,8 +856,10 @@ mod tests {
 
     #[test]
     fn test_normalized_hotkey_invalid_uses_raw() {
-        // 解析失败的串按 trim 后原串参与比较（两端都会注册失败，行为一致）
-        assert_eq!(normalized_hotkey("Ctrl++"), normalized_hotkey("ctrl++"));
+        // 解析失败的串按 trim 后原串参与比较（两端都会注册失败，行为一致）；
+        // raw 通道保留原串字面（含大小写）——与可解析串的大小写无关性不同
+        assert_eq!(normalized_hotkey("Ctrl++"), "raw:Ctrl++");
+        assert_eq!(normalized_hotkey(" Ctrl++ "), "raw:Ctrl++");
         assert_ne!(normalized_hotkey("Ctrl++"), normalized_hotkey("Ctrl+M"));
     }
 
