@@ -1578,6 +1578,10 @@ pub fn wire_handler(
                     },
                 );
             }
+            // RunAll 为原末位分支，补 return 统一"每分支必返回"纪律：
+            // 其按值移动 cat_id 使 pending 部分移动，后续 Import 分支再读
+            // pending 会触发 E0382（CI rust-gui-tests-linux 实测）。
+            return;
         }
         // 导入配置确认（P1）：菜单阶段已预解析，此处执行整体替换。
         // 单独 return，避免与后续 pending 分支级联执行（对齐既有分发纪律）。
