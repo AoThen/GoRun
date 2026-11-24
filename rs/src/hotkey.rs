@@ -459,11 +459,56 @@ pub struct ItemHotkeyManager {
     registered: bool,
     pump_active: bool,
     thread_handle: Option<thread::JoinHandle<()>>,
+    /// 当前实际注册成功的条目热键集合（P3 差量跳过）：`register_all` 前先与
+    /// 新集合做归一化比较，未变且 pump 存活则跳过"杀线程→全量重注册"。
+    /// 仅含成功项；unregister/注册失败路径必须清空，防止误判"未变"静默失效。
+    current: Vec<(String, String)>,
     /// Windows：kill 事件句柄（SetEvent 即时唤醒 pump）；非 Windows：mpsc 通道（无长驻 pump）。
     #[cfg(windows)]
     kill_event: Option<EventHandle>,
     #[cfg(not(windows))]
     kill_sender: Option<Sender<()>>,
+}
+
+/// 注册结果：失败热键串（去重，供调用方提示）+ 实际注册成功的 (item_id, 热键串)
+/// 集合（供差量比较维护 `current`；失败项/超时/线程异常时不含对应项）。
+struct RegisterOutcome {
+    failed: Vec<String>,
+    ok: Vec<(String, String)>,
+}
+
+/// 热键归一化：以 `parse_hotkey_string` 的 (modifiers, vk) 为等价判据
+///（"ctrl+m" 与 "Ctrl+M" 等价）；解析失败的串按 trim 后原串参与比较
+///（两端都会注册失败，行为一致）。
+fn normalized_hotkey(hk: &str) -> String {
+    match parse_hotkey_string(hk.trim()) {
+        Some(h) => format!("{:x}:{:x}", h.modifiers, h.vk),
+        None => format!("raw:{}", hk.trim()),
+    }
+}
+
+/// 集合级归一化（排序去重，顺序无关比较）。item_id 必须参与比较：
+/// 热键串不变但归属条目变化（清除 A 改设 B、两条目互换热键）时，
+/// pump 线程内旧 id_map 仍指向旧条目，跳过重注册会触发错误条目（P1-1）。
+fn normalized_hotkey_set(hotkeys: &[(String, String)]) -> Vec<String> {
+    let mut v: Vec<String> = hotkeys
+        .iter()
+        .map(|(id, hk)| format!("{}\u{1}{}", id, normalized_hotkey(hk)))
+        .collect();
+    v.sort();
+    v.dedup();
+    v
+}
+
+/// 失败列表构造：按输入顺序去重的热键串。
+fn dedup_hotkey_strings(hotkeys: &[(String, String)]) -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    for (_, hk) in hotkeys {
+        if !v.contains(hk) {
+            v.push(hk.clone());
+        }
+    }
+    v
 }
 
 impl ItemHotkeyManager {
@@ -472,6 +517,7 @@ impl ItemHotkeyManager {
             registered: false,
             pump_active: false,
             thread_handle: None,
+            current: Vec::new(),
             #[cfg(windows)]
             kill_event: None,
             #[cfg(not(windows))]
@@ -499,11 +545,25 @@ impl ItemHotkeyManager {
     /// 返回注册失败的热键字符串列表（按输入顺序去重；空 = 全部成功）。
     /// 与全局热键/其他程序冲突的项同样计入失败（RegisterHotKey 系统层失败）。
     /// 非 Windows 平台不支持条目热键，返回空列表（不视为失败，避免误报）。
+    /// P3 差量：集合未变（归一化比较）且 pump 线程存活时跳过注销重建，
+    /// 消除"保存未改热键的条目也全量重注册"的开销与热键短暂失效窗口。
     pub fn register_all(
         &mut self,
         hotkeys: &[(String, String)],
         sender: Sender<String>,
     ) -> Vec<String> {
+        // 已知微窗口（P3，接受）：pump 因 MsgWait 失败自行退出与本次调用并发时，
+        // is_finished() 可能仍为 false 而误跳过——发生条件极苛刻，且下次任意
+        // 集合变化会自愈；旧全量路径无此窗口但每次保存都杀线程重建。
+        if self.pump_active
+            && self
+                .thread_handle
+                .as_ref()
+                .is_some_and(|h| !h.is_finished())
+            && normalized_hotkey_set(hotkeys) == normalized_hotkey_set(&self.current)
+        {
+            return Vec::new();
+        }
         self.unregister();
         if hotkeys.is_empty() {
             self.registered = true;
@@ -517,13 +577,11 @@ impl ItemHotkeyManager {
             Some(k) => k,
             None => {
                 log::error!("ItemHotkeyManager: failed to create kill event, aborting register");
-                return hotkeys
-                    .iter()
-                    .map(|(_, hk)| hk.clone())
-                    .collect::<Vec<_>>();
+                self.current.clear();
+                return dedup_hotkey_strings(hotkeys);
             }
         };
-        let (result_tx, result_rx) = channel::<Vec<String>>();
+        let (result_tx, result_rx) = channel::<RegisterOutcome>();
         let hotkeys_owned: Vec<(String, String)> = hotkeys.to_vec();
 
         let handle = thread::Builder::new()
@@ -555,6 +613,7 @@ impl ItemHotkeyManager {
                     // id 从 0xC100 起，避免与全局热键 HOTKEY_ID(0xC001) 冲突
                     let mut id_map: HashMap<u32, String> = HashMap::new();
                     let mut failed: Vec<String> = Vec::new();
+                    let mut ok: Vec<(String, String)> = Vec::new();
                     for (i, (item_id, hk_str)) in hotkeys_owned.iter().enumerate() {
                         let hkid = 0xC100 + i as u32;
                         match parse_hotkey_string(hk_str) {
@@ -567,6 +626,7 @@ impl ItemHotkeyManager {
                                 );
                                 if r.is_ok() {
                                     id_map.insert(hkid, item_id.clone());
+                                    ok.push((item_id.clone(), hk_str.clone()));
                                 } else {
                                     log::error!(
                                         "ItemHotkeyManager: RegisterHotKey failed for '{}' (id=0x{:X}): {:?}",
@@ -588,7 +648,7 @@ impl ItemHotkeyManager {
                             }
                         }
                     }
-                    let _ = result_tx.send(failed);
+                    let _ = result_tx.send(RegisterOutcome { failed, ok });
                     if id_map.is_empty() {
                         log::warn!(
                             "ItemHotkeyManager: no item hotkey registered, pump exiting"
@@ -635,7 +695,10 @@ impl ItemHotkeyManager {
                     let _ = &kill_signal;
                     let _ = &hotkeys_owned;
                     // 平台不支持：不算失败（无失败反馈），避免调用方误判配置错误
-                    let _ = result_tx.send(Vec::new());
+                    let _ = result_tx.send(RegisterOutcome {
+                        failed: Vec::new(),
+                        ok: Vec::new(),
+                    });
                     log::warn!(
                         "ItemHotkeyManager: item hotkeys not supported on this platform"
                     );
@@ -645,41 +708,27 @@ impl ItemHotkeyManager {
         match handle {
             Ok(h) => {
                 self.thread_handle = Some(h);
-                // 超时保守视为全部失败（与旧 bool 语义一致：拿不到结果不报成功）
-                let failed = result_rx
+                // 超时保守视为全部失败（与旧 bool 语义一致：拿不到结果不报成功）；
+                // current 同步置空，防止下次误判"集合未变"跳过注册
+                let outcome = result_rx
                     .recv_timeout(std::time::Duration::from_secs(5))
                     .unwrap_or_else(|_| {
                         log::error!("ItemHotkeyManager: register result timeout");
-                        hotkeys
-                            .iter()
-                            .map(|(_, hk)| hk.clone())
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                            .fold(Vec::new(), |mut acc, hk| {
-                                if !acc.contains(&hk) {
-                                    acc.push(hk);
-                                }
-                                acc
-                            })
+                        RegisterOutcome {
+                            failed: dedup_hotkey_strings(hotkeys),
+                            ok: Vec::new(),
+                        }
                     });
-                let any_ok = failed.len() < hotkeys.len();
+                let any_ok = outcome.failed.len() < hotkeys.len();
                 self.registered = any_ok || hotkeys.is_empty();
                 self.pump_active = any_ok;
-                failed
+                self.current = outcome.ok;
+                outcome.failed
             }
             Err(e) => {
                 log::error!("ItemHotkeyManager: failed to start pump thread: {}", e);
-                hotkeys
-                    .iter()
-                    .map(|(_, hk)| hk.clone())
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .fold(Vec::new(), |mut acc, hk| {
-                        if !acc.contains(&hk) {
-                            acc.push(hk);
-                        }
-                        acc
-                    })
+                self.current.clear();
+                dedup_hotkey_strings(hotkeys)
             }
         }
     }
@@ -688,6 +737,9 @@ impl ItemHotkeyManager {
         self.kill_pump_thread();
         self.pump_active = false;
         self.registered = false;
+        // 线程已终止（热键实际全部注销）：差量集合必须清空，
+        // 防止下次 register_all 误判"未变"跳过导致热键静默失效
+        self.current.clear();
         true
     }
 
@@ -772,5 +824,53 @@ mod tests {
         assert!(parse_hotkey_string("Ctrl+").is_none());
         // '+' 本身是分隔符，无法作为键位表达（既有限制）
         assert!(parse_hotkey_string("Ctrl++").is_none());
+    }
+
+    #[test]
+    fn test_normalized_hotkey_case_and_trim_insensitive() {
+        // 大小写/首尾空白差异归一化等价（"ctrl+m" 与 "Ctrl+M" 语义相同）
+        assert_eq!(normalized_hotkey("Ctrl+M"), normalized_hotkey("ctrl+m"));
+        assert_eq!(normalized_hotkey(" Ctrl+M "), normalized_hotkey("Ctrl+M"));
+    }
+
+    #[test]
+    fn test_normalized_hotkey_set_order_and_case_insensitive() {
+        let a = vec![
+            ("i1".to_string(), "Ctrl+M".to_string()),
+            ("i2".to_string(), "Ctrl+Alt+X".to_string()),
+        ];
+        let b = vec![
+            ("i2".to_string(), "ctrl+alt+x".to_string()),
+            ("i1".to_string(), " Ctrl+M".to_string()),
+        ];
+        // 同 id 同热键、仅顺序/大小写不同 → 集合相等（可差量跳过）
+        assert_eq!(normalized_hotkey_set(&a), normalized_hotkey_set(&b));
+        // 热键串不变但归属条目变化（迁移/互换）→ 集合不同（必须重注册，
+        // 否则 pump 旧 id_map 仍指向旧条目，会触发错误条目——P1-1）
+        let c = vec![
+            ("i9".to_string(), "Ctrl+M".to_string()),
+            ("i8".to_string(), "Ctrl+Alt+X".to_string()),
+        ];
+        assert_ne!(normalized_hotkey_set(&a), normalized_hotkey_set(&c));
+    }
+
+    #[test]
+    fn test_normalized_hotkey_invalid_uses_raw() {
+        // 解析失败的串按 trim 后原串参与比较（两端都会注册失败，行为一致）
+        assert_eq!(normalized_hotkey("Ctrl++"), normalized_hotkey("ctrl++"));
+        assert_ne!(normalized_hotkey("Ctrl++"), normalized_hotkey("Ctrl+M"));
+    }
+
+    #[test]
+    fn test_dedup_hotkey_strings_keeps_order() {
+        let hk = vec![
+            ("a".to_string(), "Ctrl+M".to_string()),
+            ("b".to_string(), "Ctrl+X".to_string()),
+            ("c".to_string(), "Ctrl+M".to_string()),
+        ];
+        assert_eq!(
+            dedup_hotkey_strings(&hk),
+            vec!["Ctrl+M".to_string(), "Ctrl+X".to_string()]
+        );
     }
 }
