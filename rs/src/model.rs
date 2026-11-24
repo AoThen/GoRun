@@ -7,7 +7,9 @@ pub enum ViewType {
     List = 1,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+// 不 derive Default：手写实现使 icon_size=48 与 serde 缺省 default_icon_size()
+// 一致，消除"derive=0 / serde=48"双默认源（Category::default() 不再产出 0）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Category {
     #[serde(default)]
     pub id: String,
@@ -18,6 +20,18 @@ pub struct Category {
     pub view_type: ViewType,
     #[serde(default = "default_icon_size")]
     pub icon_size: i32,
+}
+
+impl Default for Category {
+    fn default() -> Self {
+        Category {
+            id: String::new(),
+            name: String::new(),
+            sort_order: 0,
+            view_type: ViewType::default(),
+            icon_size: 48,
+        }
+    }
 }
 
 fn default_icon_size() -> i32 {
@@ -318,11 +332,11 @@ mod tests {
 
     #[test]
     fn test_category_default_icon_size() {
-        // Rust Default derive → icon_size=0（不是 48；serde 的 default 只影响反序列化）
+        // 手写 Default 与 serde 缺省对齐：icon_size=48（消除 derive=0 双默认源）
         let cat = Category::default();
-        assert_eq!(cat.icon_size, 0, "Rust Default 的 icon_size 应为 0");
+        assert_eq!(cat.icon_size, 48, "Rust Default 的 icon_size 应为 48");
         assert_eq!(cat.view_type, ViewType::List);
-        // serde 缺失 icon_size 字段 → default_icon_size()=48
+        // serde 缺失 icon_size 字段 → default_icon_size()=48（与 Default 一致）
         let json = r#"{"id":"c","name":"Apps"}"#;
         let cat: Category = serde_json::from_str(json).unwrap();
         assert_eq!(
