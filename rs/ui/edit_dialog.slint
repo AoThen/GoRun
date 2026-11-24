@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox, SpinBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, LineEdit, Button, CheckBox, ComboBox, SpinBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 export component EditDialog inherits Window {
@@ -45,10 +45,17 @@ export component EditDialog inherits Window {
     in-out property <string> add-category-text: "+";
 
     VerticalBox {
-        // 高度预算：窗口固定 500px，11 行内容需压缩至 ≤480px 可用区，
-        // 否则底部 CheckBox/Save/Cancel 行会被推出窗口（fix: 布局溢出）。
         padding: 10px;
         spacing: 6px;
+
+        // P2：内容区套 ScrollView 兜底——窗口被钳制到小屏高度后，11 行内容
+        // 仍可滚动访问，保存/取消按钮行固定在底部始终可见可点。
+        ScrollView {
+            vertical-stretch: 1;
+
+        VerticalBox {
+            padding: 0px;
+            spacing: 6px;
 
         HorizontalBox {
             padding-top: 2px;
@@ -209,6 +216,8 @@ export component EditDialog inherits Window {
                 clicked => { root.save(); }
             }
             Button { text: root.cancel-text; clicked => { root.cancel(); } }
+        }
+        }
         }
     }
 }

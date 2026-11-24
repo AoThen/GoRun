@@ -155,6 +155,7 @@ mod tests {
             "Status_ImportFailedSave",
             "Status_Imported",
             "Status_HotkeyConflict",
+            "Tip_ImportConfirm",
         ];
         for key in essential {
             assert_ne!(loc.tr(key), key, "zh-CN.json 缺少关键文案 key: {}", key);

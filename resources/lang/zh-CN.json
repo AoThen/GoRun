@@ -705,6 +705,7 @@
     "Status_ImportFailedSave": "导入失败：保存错误",
     "Status_Imported": "已导入配置",
     "Status_HotkeyConflict": "热键注册失败：{0}",
+    "Tip_ImportConfirm": "将导入 {0} 个分类、{1} 个条目，并覆盖当前全部数据与个性化设置（保留语言/跟随鼠标/自动隐藏偏好）。\n\n是否继续？",
 
     "__END": ""
 }

@@ -140,6 +140,18 @@ fn wire_shared_callbacks(
     {
         log::error!("Failed to show dialog: {}", e);
     }
+    // P2：小屏/高缩放设备上把窗口钳到屏幕可用范围内（scale_factor 在 show 后才可靠），
+    // 防止固定 500 逻辑 px 高的窗口被系统截断到工作区、底部按钮行不可见无法保存。
+    if let Some(d) = state.borrow().edit_dialog.as_ref() {
+        let scale = d.window().scale_factor();
+        let size = d.window().size();
+        let logical_w = size.width as f32 / scale;
+        let logical_h = size.height as f32 / scale;
+        let (w, h) = crate::util::clamp_dialog_logical_size(logical_w, logical_h, scale);
+        if w < logical_w || h < logical_h {
+            d.window().set_size(slint::LogicalSize::new(w, h));
+        }
+    }
 }
 
 /// P2-5 保存时共享逻辑：读取对话框填写的条目字段，输入校验 + 同分类重复

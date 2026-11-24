@@ -133,6 +133,51 @@ fn scale_from_dpi(dpi: u32) -> Option<f32> {
     Some(dpi as f32 / 96.0)
 }
 
+/// 对话框逻辑尺寸按屏幕可用范围钳制（P2：小屏/高缩放设备上，固定 500 逻辑 px 高的
+/// 编辑窗口物理高度会超出工作区，被系统截断后固定布局的底部按钮行挤出可视区）。
+/// `scale` 为窗口当前缩放系数（物理 px = 逻辑 px × scale）。Windows 下按主屏
+/// 工作区（已扣任务栏）减去标题栏/边框余量换算逻辑上限后取 min；非 Windows 原样返回。
+/// 需在窗口 show 之后调用（此时 scale_factor 才是真实值）。
+pub fn clamp_dialog_logical_size(w: f32, h: f32, scale: f32) -> (f32, f32) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetSystemMetrics, SM_CXBORDER, SM_CXFULLSCREEN, SM_CYCAPTION, SM_CYFULLSCREEN,
+        };
+        // 工作区（SM_CX/CYFULLSCREEN）已扣除任务栏，再扣标题栏+双边框余量
+        let avail_w = unsafe { GetSystemMetrics(SM_CXFULLSCREEN) };
+        let avail_h = unsafe { GetSystemMetrics(SM_CYFULLSCREEN) };
+        let chrome_h = unsafe { GetSystemMetrics(SM_CYCAPTION) } + 2 * unsafe { GetSystemMetrics(SM_CXBORDER) };
+        clamp_dialog_logical_size_impl(w, h, scale, avail_w, avail_h, chrome_h)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (w, h, scale);
+        (w, h)
+    }
+}
+
+/// 钳制纯函数（便于单测）：`avail_w/avail_h` 为可用物理高宽（已扣任务栏），
+/// `chrome_h` 为标题栏+边框的物理像素总余量；另留 2% 余量吸收取整/度量误差。
+fn clamp_dialog_logical_size_impl(
+    w: f32,
+    h: f32,
+    scale: f32,
+    avail_w_phys: i32,
+    avail_h_phys: i32,
+    chrome_h: i32,
+) -> (f32, f32) {
+    if avail_w_phys <= 0 || avail_h_phys <= 0 || scale <= 0.0 || w <= 0.0 || h <= 0.0 {
+        return (w, h);
+    }
+    let s = scale as f64;
+    let max_w = ((avail_w_phys as f64 * 0.98).floor() / s).max(1.0);
+    let max_h = (((avail_h_phys - chrome_h).max(1) as f64 * 0.98).floor() / s).max(1.0);
+    let cw = (w as f64).min(max_w);
+    let ch = (h as f64).min(max_h);
+    (cw as f32, ch as f32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,5 +350,52 @@ mod tests {
         // 异常值（<96）不换算，交由调用方退回延迟恢复路径
         assert_eq!(scale_from_dpi(0), None);
         assert_eq!(scale_from_dpi(72), None);
+    }
+
+    #[test]
+    fn test_clamp_dialog_size_within_limits_unchanged() {
+        // 1080p@100%：可用高 1032−25=1007 物理 → 逻辑上限 986，500 不变
+        assert_eq!(
+            clamp_dialog_logical_size_impl(500.0, 500.0, 1.0, 1920, 1032, 25),
+            (500.0, 500.0)
+        );
+    }
+
+    #[test]
+    fn test_clamp_dialog_size_small_screen_scales_down() {
+        // 768p@150%（工作区高 720 物理）：可用 695 物理 → ×0.98=681 → /1.5=454 逻辑
+        let (w, h) = clamp_dialog_logical_size_impl(500.0, 500.0, 1.5, 1366, 720, 25);
+        assert_eq!(w, 500.0); // 宽度上限 1366×0.98/1.5≈892，不裁
+        assert_eq!(h, 454.0);
+    }
+
+    #[test]
+    fn test_clamp_dialog_size_high_dpi_1080p() {
+        // 1080p@200%：可用高 1007 物理 → ×0.98=986 → /2=493 逻辑
+        let (_, h) = clamp_dialog_logical_size_impl(500.0, 500.0, 2.0, 1920, 1032, 25);
+        assert_eq!(h, 493.0);
+    }
+
+    #[test]
+    fn test_clamp_dialog_size_degenerate_inputs_unchanged() {
+        assert_eq!(
+            clamp_dialog_logical_size_impl(500.0, 500.0, 0.0, 1920, 1032, 25),
+            (500.0, 500.0)
+        );
+        assert_eq!(
+            clamp_dialog_logical_size_impl(500.0, 500.0, 1.0, 0, 1032, 25),
+            (500.0, 500.0)
+        );
+        assert_eq!(
+            clamp_dialog_logical_size_impl(500.0, 500.0, 1.0, 1920, -1, 25),
+            (500.0, 500.0)
+        );
+    }
+
+    #[test]
+    fn test_clamp_dialog_size_never_below_one() {
+        // 极端：扣完装饰余量后至少按 1 物理像素参与换算，结果不低于 1 逻辑 px
+        let (_, h) = clamp_dialog_logical_size_impl(500.0, 500.0, 1.0, 1920, 10, 25);
+        assert!(h >= 1.0);
     }
 }

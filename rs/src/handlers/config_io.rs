@@ -35,7 +35,7 @@ pub(crate) fn filter_session_prefs(
 
 /// 应用全局热键：注销旧键 → 注册新键；失败时回滚重注册旧键（P1-7）。
 /// 成功写配置并落盘，失败将配置回滚为旧键，保证"配置值 = 实际注册值"。
-/// 供改键流程（wire_handler input_dialog）与导入配置（import_config）共用。
+/// 供改键流程（wire_handler input_dialog）与导入配置（import_config_apply）共用。
 /// 返回是否成功注册；失败时调用方负责 UI 提示（Tip_HotkeyRegisterFail）。
 /// `old_hk` 为回滚目标旧键：由调用方在替换配置前捕获传入（导入路径配置已替换，
 /// 内部读 state 会拿到 new_hk，必须显式传导入前旧键）。
@@ -107,15 +107,13 @@ pub fn export_config(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
     }
 }
 
-/// Settings 菜单 → 导入配置：用户选配置文件，整体替换数据与行为设置，
-/// 保留语言/跟随鼠标/自动隐藏等会话偏好；成功后刷新侧栏与条目。
-/// 导入的配置若更改了全局热键，则重注册使本会话立即生效（与条目热键同步对齐）。
-pub fn import_config(
+/// 导入配置第一步：选文件并预解析。解析失败时自行提示并返回 None；
+/// 成功返回 (文件路径, 解析结果)，供调用方统计导入规模并弹出"覆盖确认"框，
+/// 用户确认后再交 import_config_apply 执行实际替换（防误选文件静默覆盖数据）。
+pub fn prepare_import(
     ui: &MainWindow,
     state: &Rc<RefCell<AppState>>,
-    hotkey_mgr: &Rc<RefCell<crate::hotkey::HotkeyManager>>,
-    hk_tx: &Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>>,
-) {
+) -> Option<(String, crate::model::AppConfig)> {
     let loc = state.borrow().loc.clone();
     let (title, filter) = {
         let lb = loc.borrow();
@@ -124,19 +122,32 @@ pub fn import_config(
             format!("{}\0*.json\0\0", lb.tr("STR_FilterConfig")),
         )
     };
-    let Some(path) = crate::fileops::browse_file_dialog(&title, &filter) else {
-        return;
-    };
+    let path = crate::fileops::browse_file_dialog(&title, &filter)?;
     let imported = match crate::storage::Storage::new(path.clone()).load() {
         Some(c) => c,
         None => {
             log::error!("Failed to parse import config: {}", path);
             let msg = loc.borrow().tr("Status_ImportFailedInvalid").to_string();
             crate::ui_sync::show_toast(ui, msg, true);
-            return;
+            return None;
         }
     };
+    Some((path, imported))
+}
 
+/// 导入配置第二步（用户确认覆盖后调用）：整体替换数据与行为设置，
+/// 保留语言/跟随鼠标/自动隐藏等会话偏好；成功后刷新侧栏与条目。
+/// 导入的配置若更改了全局热键，则重注册使本会话立即生效（与条目热键同步对齐）。
+/// `path` 仅用于日志。
+pub fn import_config_apply(
+    ui: &MainWindow,
+    state: &Rc<RefCell<AppState>>,
+    hotkey_mgr: &Rc<RefCell<crate::hotkey::HotkeyManager>>,
+    hk_tx: &Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>>,
+    path: &str,
+    imported: crate::model::AppConfig,
+) {
+    let loc = state.borrow().loc.clone();
     let mut st = state.borrow_mut();
     let (old_hk, new_hk, new_current) = {
         let cfg = st.manager.config_mut();

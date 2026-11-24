@@ -77,6 +77,9 @@ pub fn wire_handler(
         DeleteCategory(String),
         RunAll(String),
         RunAsAdmin(String),
+        // 导入配置（P1：防误覆盖）——携带预解析结果与来源路径，
+        // 确认后交 config_io::import_config_apply 执行整体替换
+        Import(String, crate::model::AppConfig),
     }
     let pending_confirm: Rc<std::cell::RefCell<Option<ConfirmAction>>> =
         Rc::new(std::cell::RefCell::new(None));
@@ -873,10 +876,6 @@ pub fn wire_handler(
     let pcr_mps = pending_category_rename.clone();
     let im_mps = input_mode.clone();
     let menu_actions_mps = menu_actions.clone();
-    // 导入配置需传 hotkey_mgr/hk_tx（Rc 非 Copy）：本闭包与 on_input_dialog_ok 均按值捕获，
-    // 故为菜单闭包克隆一份，避免 E0382 move 冲突（原始引用留给 input_dialog_ok 使用）。
-    let hotkey_mgr_import = hotkey_mgr.clone();
-    let hk_tx_import = hk_tx_shared.clone();
     ui.on_menu_popup_selected(move |index| {
         log::debug!("Menu popup item selected: index={}", index);
         let ui = match weak_ui_mps.upgrade() {
@@ -963,12 +962,28 @@ pub fn wire_handler(
                 crate::ui_sync::show_toast(&ui, msg, err);
             }
             Some(MenuAction::Export) => crate::handlers::config_io::export_config(&ui, &state_mps),
-            Some(MenuAction::Import) => crate::handlers::config_io::import_config(
-                &ui,
-                &state_mps,
-                &hotkey_mgr_import,
-                &hk_tx_import,
-            ),
+            Some(MenuAction::Import) => {
+                // P1：导入前预解析并弹"覆盖确认"框，防误选文件静默覆盖全部数据；
+                // 预解析（含规模统计）在菜单阶段完成，确认后由 confirm 回调执行替换。
+                if let Some((import_path, imported)) =
+                    crate::handlers::config_io::prepare_import(&ui, &state_mps)
+                {
+                    let (n_cats, n_items) =
+                        (imported.data.categories.len(), imported.data.items.len());
+                    let loc_m = state_mps.borrow().loc.clone();
+                    *pcm_mps.borrow_mut() = Some(ConfirmAction::Import(import_path, imported));
+                    ui.set_confirm_dialog_title(loc_m.borrow().tr("Title_ImportConfig").into());
+                    let msg = {
+                        let lb = loc_m.borrow();
+                        lb.tr("Tip_ImportConfirm")
+                            .replace("{0}", &n_cats.to_string())
+                            .replace("{1}", &n_items.to_string())
+                    };
+                    ui.set_confirm_dialog_message(msg.into());
+                    ui.set_confirm_confirm_text(loc_m.borrow().tr("Btn_OK").to_string().into());
+                    ui.set_confirm_dialog_visible(true);
+                }
+            }
             Some(MenuAction::Settings) => {
                 // 打开设置对话框：回填背景图与遮罩当前状态
                 let st = state_mps.borrow();
@@ -1376,6 +1391,10 @@ pub fn wire_handler(
     let state_confirm = state.clone();
     let weak_ui_confirm = ui.as_weak();
     let pcm_ok = pending_confirm.clone();
+    // 导入确认（P1）：import_config_apply 需传 hotkey_mgr/hk_tx（Rc 非 Copy），
+    // 本闭包按值捕获，克隆一份避免与 input_dialog_ok 的捕获冲突（E0382）。
+    let hotkey_mgr_confirm = hotkey_mgr.clone();
+    let hk_tx_confirm = hk_tx_shared.clone();
     ui.on_confirm_dialog_ok(move || {
         // 只取一次：原各分支分别 take()，首个模式不匹配也会吞掉动作，
         // 导致 DeleteItem/RunAsAdmin/RunAll 确认后静默失效
@@ -1582,6 +1601,21 @@ pub fn wire_handler(
                     },
                 );
             }
+        }
+        // 导入配置确认（P1）：菜单阶段已预解析，此处执行整体替换。
+        // 单独 return，避免与后续 pending 分支级联执行（对齐既有分发纪律）。
+        if let Some(ConfirmAction::Import(path, imported)) = pending {
+            if let Some(ui) = weak_ui_confirm.upgrade() {
+                crate::handlers::config_io::import_config_apply(
+                    &ui,
+                    &state_confirm,
+                    &hotkey_mgr_confirm,
+                    &hk_tx_confirm,
+                    &path,
+                    imported,
+                );
+            }
+            return;
         }
     });
 
