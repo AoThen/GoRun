@@ -833,7 +833,17 @@ pub fn wire_handler(
                 lb.tr("Menu_FollowMouse").into(),
                 Some(MenuAction::FollowMouse),
             );
-            add(lb.tr("Tray_AutoStart").into(), Some(MenuAction::AutoStart));
+            // 开机自启：菜单项带实时状态后缀（读注册表，与托盘 ✓/✗ 同源）
+            let as_text = format!(
+                "{}（{}）",
+                lb.tr("Tray_AutoStart"),
+                if crate::tray::is_autostart_enabled() {
+                    lb.tr("STR_On")
+                } else {
+                    lb.tr("STR_Off")
+                }
+            );
+            add(as_text.into(), Some(MenuAction::AutoStart));
             add("-".into(), None);
             add(lb.tr("Menu_ExportConfig").into(), Some(MenuAction::Export));
             add(lb.tr("Menu_ImportConfig").into(), Some(MenuAction::Import));
@@ -940,7 +950,17 @@ pub fn wire_handler(
                 &state_mps,
             ),
             Some(MenuAction::AutoStart) => {
-                let _ = crate::tray::toggle_autostart();
+                // 切换开机自启并即时反馈（成功提示新状态，失败明确报错）
+                let (msg, err) = {
+                    let st = state_mps.borrow();
+                    let lb = st.loc.borrow();
+                    match crate::tray::toggle_autostart() {
+                        Some(true) => (lb.tr("Tip_AutoStart_On").to_string(), false),
+                        Some(false) => (lb.tr("Tip_AutoStart_Off").to_string(), false),
+                        None => (lb.tr("Tip_AutoStart_Fail").to_string(), true),
+                    }
+                };
+                crate::ui_sync::show_toast(&ui, msg, err);
             }
             Some(MenuAction::Export) => crate::handlers::config_io::export_config(&ui, &state_mps),
             Some(MenuAction::Import) => crate::handlers::config_io::import_config(

@@ -433,7 +433,7 @@ const AUTOSTART_VALUE: &str = "GoRun";
 
 /// 读取开机启动是否启用（读注册表，独立于 config 状态）。
 #[cfg(windows)]
-fn is_autostart_enabled() -> bool {
+pub fn is_autostart_enabled() -> bool {
     unsafe {
         let mut key = HKEY::default();
         let key_w: Vec<u16> = AUTOSTART_KEY
@@ -470,9 +470,15 @@ fn is_autostart_enabled() -> bool {
     }
 }
 
-/// 切换开机启动（写入/删除 HKCU Run 值），返回新状态。
+/// 非 Windows 平台桩：恒返回未启用。
+#[cfg(not(windows))]
+pub fn is_autostart_enabled() -> bool {
+    false
+}
+
+/// 切换开机启动（写入/删除 HKCU Run 值）。成功返回 Some(新状态)，失败返回 None。
 #[cfg(windows)]
-pub fn toggle_autostart() -> bool {
+pub fn toggle_autostart() -> Option<bool> {
     unsafe {
         let enabled = is_autostart_enabled();
         let mut key = HKEY::default();
@@ -493,7 +499,8 @@ pub fn toggle_autostart() -> bool {
         )
         .is_err()
         {
-            return enabled;
+            // 注册表打开失败：未发生切换，返回 None 让调用方明确报错
+            return None;
         }
         let value_w: Vec<u16> = AUTOSTART_VALUE
             .encode_utf16()
@@ -505,9 +512,9 @@ pub fn toggle_autostart() -> bool {
             let mut exe_buf = [0u16; 1024];
             let len = GetModuleFileNameW(None, &mut exe_buf);
             if len == 0 || (len as usize) >= exe_buf.len() {
-                // 获取 exe 路径失败：注册表未写入，返回原状态避免误报
+                // 获取 exe 路径失败：注册表未写入，返回 None 让调用方明确报错
                 let _ = RegCloseKey(key);
-                return enabled;
+                return None;
             }
             let exe = String::from_utf16_lossy(&exe_buf[..len as usize]);
             // 含空格路径加引号包裹，防同名影子二进制劫持
@@ -526,14 +533,14 @@ pub fn toggle_autostart() -> bool {
             );
         }
         let _ = RegCloseKey(key);
-        !enabled
+        Some(!enabled)
     }
 }
 
 #[cfg(not(windows))]
-pub fn toggle_autostart() -> bool {
+pub fn toggle_autostart() -> Option<bool> {
     log::warn!("Autostart is only supported on Windows");
-    false
+    None
 }
 
 #[cfg(windows)]

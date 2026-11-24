@@ -66,8 +66,10 @@ pub fn start_tray_handler(
                 }
                 TrayMessage::ToggleAutoStart => {
                     // 纯注册表操作，无需 AppState
-                    let enabled = crate::tray::toggle_autostart();
-                    log::info!("Autostart toggled: enabled={}", enabled);
+                    match crate::tray::toggle_autostart() {
+                        Some(enabled) => log::info!("Autostart toggled: enabled={}", enabled),
+                        None => log::warn!("Autostart toggle failed"),
+                    }
                 }
                 TrayMessage::ToggleFollowMouse => {
                     if let Ok(mut q) = tray_ui.lock() {

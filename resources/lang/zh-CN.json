@@ -677,6 +677,11 @@
     "Err_Unknown": "未知错误",
 
     "Tray_AutoStart": "开机自启",
+    "STR_On": "已开启",
+    "STR_Off": "已关闭",
+    "Tip_AutoStart_On": "已开启开机自启",
+    "Tip_AutoStart_Off": "已关闭开机自启",
+    "Tip_AutoStart_Fail": "设置开机自启失败",
     "Tray_LowResident": "低驻留模式",
     "Tip_InvalidHotkey": "快捷键格式无效，示例：Ctrl+/",
     "Tip_ItemNotFound": "该项目已不存在，操作已取消",
