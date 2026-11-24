@@ -1459,6 +1459,22 @@ pub fn wire_handler(
             }
             return;
         }
+        // 导入配置确认（P1）：菜单阶段已预解析，此处执行整体替换。
+        // 置于 RunAll 之前并 return——RunAll 按值移动 cat_id 会使 pending
+        // 部分移动，后续分支再读 pending 触发 E0382（CI 实测）。
+        if let Some(ConfirmAction::Import(path, imported)) = pending {
+            if let Some(ui) = weak_ui_confirm.upgrade() {
+                crate::handlers::config_io::import_config_apply(
+                    &ui,
+                    &state_confirm,
+                    &hotkey_mgr_confirm,
+                    &hk_tx_confirm,
+                    &path,
+                    imported,
+                );
+            }
+            return;
+        }
         // 运行全部（背景右键菜单 → 确认弹窗 → 逐一执行分类内项目）。
         // M-4：启动全部移到工作线程逐项执行（项间 50ms 让出），UI 线程 Timer 仅
         // 轮询进度与汇总提示——UAC 提权弹窗/慢速目标不再冻结界面；窗口隐藏
@@ -1578,25 +1594,6 @@ pub fn wire_handler(
                     },
                 );
             }
-            // RunAll 为原末位分支，补 return 统一"每分支必返回"纪律：
-            // 其按值移动 cat_id 使 pending 部分移动，后续 Import 分支再读
-            // pending 会触发 E0382（CI rust-gui-tests-linux 实测）。
-            return;
-        }
-        // 导入配置确认（P1）：菜单阶段已预解析，此处执行整体替换。
-        // 单独 return，避免与后续 pending 分支级联执行（对齐既有分发纪律）。
-        if let Some(ConfirmAction::Import(path, imported)) = pending {
-            if let Some(ui) = weak_ui_confirm.upgrade() {
-                crate::handlers::config_io::import_config_apply(
-                    &ui,
-                    &state_confirm,
-                    &hotkey_mgr_confirm,
-                    &hk_tx_confirm,
-                    &path,
-                    imported,
-                );
-            }
-            return;
         }
     });
 
