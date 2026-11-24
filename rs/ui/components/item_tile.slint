@@ -69,6 +69,8 @@ export component ItemTile {
                     padding: Theme.spacing-sm;
                     spacing: Theme.spacing-sm;
                     alignment: center;
+                    // 交叉轴（水平）居中：默认 stretch 下固定宽度的图标靠左
+                    cross-axis-alignment: center;
 
                     Image {
                         width: Theme.icon-size;
@@ -101,6 +103,8 @@ export component ItemTile {
                         text: root.item.name;
                         font-size: Theme.font-size-md;
                         color: root.item.search-active ? Theme.accent : Theme.text-1;
+                        // horizontal-stretch 撑满图标右侧区域，字形在该区域内水平居中
+                        horizontal-alignment: center;
                         vertical-alignment: center;
                         overflow: elide;
                         horizontal-stretch: 1;

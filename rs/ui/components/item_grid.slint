@@ -46,8 +46,9 @@ export component ItemGrid {
     in-out property <length> scroll-y <=> flick.content-y;
 
     // 内容总高 = 行数 * 单元高 - 末行间距 + 上下 padding
+    // 行数用 Math.floor：Slint 的 / 为浮点除法，不取整会让内容高虚增
     property <length> grid-content-height:
-        ((root.items.length + root.column-count - 1) / root.column-count)
+        Math.floor((root.items.length + root.column-count - 1) / root.column-count)
             * (root.cell-height + Theme.spacing-sm)
             - Theme.spacing-sm + 2 * Theme.spacing-md;
 
@@ -71,7 +72,9 @@ export component ItemGrid {
             for item[index] in items: ItemTile {
                 item: item;
                 x: Math.mod(index, root.column-count) * (root.cell-width + Theme.spacing-sm) + Theme.spacing-md;
-                y: (index / root.column-count) * (root.cell-height + Theme.spacing-sm) + Theme.spacing-md;
+                // 行号 Math.floor 取整：Slint 的 / 为浮点除法，小数行号会让
+                // 同行条目 y 逐项递增（阶梯状错位）
+                y: Math.floor(index / root.column-count) * (root.cell-height + Theme.spacing-sm) + Theme.spacing-md;
                 width: root.cell-width;
                 height: root.cell-height;
                 icon-cell-height: root.cell-height;
