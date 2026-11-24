@@ -1357,8 +1357,11 @@ pub fn wire_handler(
     let weak_ui_confirm = ui.as_weak();
     let pcm_ok = pending_confirm.clone();
     ui.on_confirm_dialog_ok(move || {
+        // 只取一次：原各分支分别 take()，首个模式不匹配也会吞掉动作，
+        // 导致 DeleteItem/RunAsAdmin/RunAll 确认后静默失效
+        let pending = pcm_ok.borrow_mut().take();
         // 分类删除优先（级联删除项目 + 清理图标缓存）
-        if let Some(ConfirmAction::DeleteCategory(cat_id)) = pcm_ok.borrow_mut().take() {
+        if let Some(ConfirmAction::DeleteCategory(cat_id)) = pending {
             let mut state = state_confirm.borrow_mut();
             // 先读取待删分类下的项目，用于后续清理 icon_cache（delete_category 后 items 已移除）
             let cat_items = state.manager.items(&cat_id);
@@ -1395,7 +1398,7 @@ pub fn wire_handler(
             }
             return;
         }
-        if let Some(ConfirmAction::DeleteItem(id)) = pcm_ok.borrow_mut().take() {
+        if let Some(ConfirmAction::DeleteItem(id)) = pending {
             let mut state = state_confirm.borrow_mut();
             if let Some(item) = state.manager.get_item(&id) {
                 state.icon_cache.delete_cache(item);
@@ -1417,7 +1420,7 @@ pub fn wire_handler(
             return;
         }
         // 提权运行确认（右键菜单 → 确认弹窗 → 执行）
-        if let Some(ConfirmAction::RunAsAdmin(id)) = pcm_ok.borrow_mut().take() {
+        if let Some(ConfirmAction::RunAsAdmin(id)) = pending {
             let (item, search_query) = {
                 let state = state_confirm.borrow();
                 (
@@ -1444,7 +1447,7 @@ pub fn wire_handler(
         // M-4：启动全部移到工作线程逐项执行（项间 50ms 让出），UI 线程 Timer 仅
         // 轮询进度与汇总提示——UAC 提权弹窗/慢速目标不再冻结界面；窗口隐藏
         // （Esc/X/热键）或退出即取消剩余批次。
-        if let Some(ConfirmAction::RunAll(cat_id)) = pcm_ok.borrow_mut().take() {
+        if let Some(ConfirmAction::RunAll(cat_id)) = pending {
             let items: Vec<crate::model::Item> = {
                 let state = state_confirm.borrow();
                 state.manager.items(&cat_id).to_vec()
