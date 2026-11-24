@@ -1,5 +1,8 @@
-// GoRun UI v2 设计令牌（docs/ui-redesign-plan.md §2.1/§2.2）。
-// 深色为默认；set-dark(is-dark) 按色板切换，保留原机制（main_window 接线不变）。
+// GoRun UI v2 设计令牌。
+// 令牌字面默认值为深色板，仅作占位基准；运行时默认浅色
+// （配置键 "theme"："0"=Light、"1"=Dark，缺失→Light）。
+// main_window 的 init 无条件执行 set-dark(root.is-dark-theme) 覆盖字面默认；
+// set-dark(is-dark) 按色板切换，保留原机制（main_window 接线不变）。
 export global Theme {
     // ---- 色彩令牌（§2.1）----
     in-out property <color> bg-0: #202020; // 主背景
