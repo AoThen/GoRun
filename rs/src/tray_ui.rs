@@ -1,0 +1,165 @@
+//! 托盘 UI 动作桥接（P1-3 自 main.rs 拆出）
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::app_state::AppState;
+use crate::localization::Localization;
+use crate::tray::TrayMessage;
+use crate::MainWindow;
+use slint::ComponentHandle;
+
+/// 需要主线程访问 AppState 的托盘动作（经 Arc<Mutex> 队列 + 500ms Timer 消费）。
+pub enum TrayUiAction {
+    ToggleFollowMouse,
+    ToggleLowResident,
+}
+
+pub fn start_tray_handler(
+    rx: std::sync::mpsc::Receiver<TrayMessage>,
+    ui_weak: slint::Weak<MainWindow>,
+    tray_ui: std::sync::Arc<std::sync::Mutex<Vec<TrayUiAction>>>,
+) {
+    std::thread::spawn(move || {
+        while let Ok(msg) = rx.recv() {
+            match msg {
+                TrayMessage::Show => {
+                    log::info!("Tray: Show window requested");
+                    let weak = ui_weak.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            if crate::tray::is_follow_mouse() {
+                                crate::geometry::position_at_cursor(&ui);
+                            }
+                            let _ = ui.show();
+                        }
+                    })
+                    .ok();
+                }
+                TrayMessage::Hide => {
+                    log::info!("Tray: Hide window requested");
+                    let weak = ui_weak.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            let _ = ui.hide();
+                        }
+                    })
+                    .ok();
+                }
+                TrayMessage::Toggle => {
+                    // 托盘双击切换显隐（P1-6）；跟随鼠标时显示前定位到光标。
+                    log::info!("Tray: Toggle window requested");
+                    let weak = ui_weak.clone();
+                    slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            if ui.window().is_visible() {
+                                let _ = ui.hide();
+                            } else {
+                                if crate::tray::is_follow_mouse() {
+                                    crate::geometry::position_at_cursor(&ui);
+                                }
+                                let _ = ui.show();
+                            }
+                        }
+                    })
+                    .ok();
+                }
+                TrayMessage::ToggleAutoStart => {
+                    // 纯注册表操作，无需 AppState
+                    let enabled = crate::tray::toggle_autostart();
+                    log::info!("Autostart toggled: enabled={}", enabled);
+                }
+                TrayMessage::ToggleFollowMouse => {
+                    if let Ok(mut q) = tray_ui.lock() {
+                        q.push(TrayUiAction::ToggleFollowMouse);
+                    }
+                }
+                TrayMessage::ToggleLowResident => {
+                    if let Ok(mut q) = tray_ui.lock() {
+                        q.push(TrayUiAction::ToggleLowResident);
+                    }
+                }
+                TrayMessage::Quit => {
+                    log::info!("Tray: Quit requested");
+                    let _ = slint::quit_event_loop();
+                    break;
+                }
+            }
+        }
+    });
+}
+
+/// 处理需要 AppState 的托盘动作（主线程 Timer 回调内执行）。
+/// ui 预留（后续动作可能需要 UI 反馈）；当前两动作仅改配置与托盘状态。
+pub fn handle_tray_ui_action(
+    action: TrayUiAction,
+    _ui: &MainWindow,
+    state: &Rc<RefCell<AppState>>,
+) {
+    match action {
+        TrayUiAction::ToggleFollowMouse => {
+            let mut s = state.borrow_mut();
+            let cur = s.manager.config().extra_get_bool("follow_mouse");
+            let new = !cur;
+            s.manager.config_mut().extra_set_bool("follow_mouse", new);
+            s.save_if_modified();
+            let low_res = s.low_resident.get();
+            crate::tray::set_ui_state(new, low_res);
+            log::info!("Follow mouse toggled: {}", new);
+        }
+        TrayUiAction::ToggleLowResident => {
+            let mut s = state.borrow_mut();
+            let new = !s.low_resident.get();
+            s.low_resident.set(new);
+            s.manager.config_mut().extra_set_bool("low_resident", new);
+            s.save_if_modified();
+            let follow = s.manager.config().extra_get_bool("follow_mouse");
+            crate::tray::set_ui_state(follow, new);
+            log::info!("Low resident toggled: {}", new);
+        }
+    }
+}
+
+/// 写入全部本地化 UI 文本（启动初始化与语言切换共用）。
+pub fn apply_localized_texts(ui: &MainWindow, loc: &Rc<RefCell<Localization>>, _dark_theme: bool) {
+    let lb = loc.borrow();
+    ui.set_about_version_text(lb.tr("About_Version").into());
+    ui.set_about_desc_text(lb.tr("About_Desc").into());
+    ui.set_about_ok_text(lb.tr("Btn_OK").into());
+    ui.set_sb_new_item_text(lb.tr("Menu_NewItem").into());
+    ui.set_sb_search_hint_text(lb.tr("Tip_Search").into());
+    ui.set_empty_text(lb.tr("Tip_NoItems").into());
+    ui.set_empty_hint_text(lb.tr("Tip_DropToAdd").into());
+    ui.set_confirm_confirm_text(lb.tr("Btn_Del").into());
+    ui.set_confirm_cancel_text(lb.tr("Btn_Cancel").into());
+    ui.set_sidebar_title_text(lb.tr("STR_Category").into());
+    ui.set_sidebar_add_category_text(lb.tr("Menu_NewC").into());
+    ui.set_input_dialog_confirm_text(lb.tr("Btn_OK").into());
+    ui.set_input_dialog_cancel_text(lb.tr("Btn_Cancel").into());
+    // 设置对话框（V1：背景图 + 日志档位）
+    ui.set_settings_title(lb.tr("Dlg_Settings_Title").into());
+    ui.set_settings_bg_label(lb.tr("Dlg_BG_Label").into());
+    ui.set_settings_bg_select(lb.tr("Dlg_BG_Select").into());
+    ui.set_settings_bg_clear(lb.tr("Dlg_BG_Clear").into());
+    ui.set_settings_bg_dim_label(lb.tr("Dlg_BG_Dim").into());
+    ui.set_settings_close(lb.tr("Dlg_Close").into());
+    ui.set_settings_log_label(lb.tr("Dlg_Log_Level").into());
+    ui.set_settings_auto_hide_label(lb.tr("Dlg_Auto_Hide").into());
+    let log_model = Rc::new(slint::VecModel::from(vec![
+        lb.tr("SI_Log_Min").to_string().into(),
+        lb.tr("SI_Log_Std").to_string().into(),
+        lb.tr("SI_Log_Dbg").to_string().into(),
+    ]));
+    ui.set_settings_log_model(slint::ModelRc::from(log_model));
+    #[cfg(windows)]
+    crate::tray::set_ui_texts(crate::tray::TrayTexts {
+        show: lb.tr("Tray_ShowHide").to_string(),
+        autostart: lb.tr("Tray_AutoStart").to_string(),
+        follow_mouse: lb.tr("Menu_FollowMouse").to_string(),
+        low_resident: lb.tr("Tray_LowResident").to_string(),
+        exit: lb.tr("Tray_Exit").to_string(),
+    });
+    // 非 Windows：TrayTexts/托盘未编译；UI 文本已设置完毕，仅消费 lb 避免 unused 警告
+    #[cfg(not(windows))]
+    let _ = &lb;
+}

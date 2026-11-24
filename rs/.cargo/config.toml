@@ -1,0 +1,6 @@
+# 构建产物防膨胀：关闭增量编译缓存。
+# 背景：target/debug/incremental 曾累积至 2.9G 导致磁盘写满（Rust 构建产物是磁盘占用主因）。
+# 代价：本 crate 每次构建需完整编译分析（已编译的依赖仍可增量复用），debug 构建略慢；
+# 换取 incremental 缓存不再持续增长。
+[build]
+incremental = false

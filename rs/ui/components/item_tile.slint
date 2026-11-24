@@ -1,0 +1,122 @@
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { ItemModel } from "../models.slint";
+
+export component ItemTile {
+    callback clicked();
+    callback right-clicked(x: length, y: length);
+    // 拖拽排序（F2-1，DragArea/DropArea）：data 直接绑定 drag-data(index) 的 pure 回调
+    // 结果（tile 创建即求值，消除"down 时 Rust 回写属性"的时序竞态）；
+    // 被拖入时上报 dropped-on(target_index, data)，Rust 读 data 得源索引后重排。
+    pure callback drag-data(index: int) -> data-transfer;
+    callback dropped-on(index: int, data: data-transfer);
+
+    in property <ItemModel> item;
+    in property <bool> is-icon-view: true;
+    in property <bool> selected: false;
+    // 图标视图单元高度（网格传入 cell-height；默认 90px 保持原行为）
+    in property <length> icon-cell-height: 90px;
+    // 拖拽排序状态（由 ItemGrid 注入）
+    in property <int> item-index: -1;
+    in property <bool> drag-enabled: true;
+
+    height: root.is-icon-view ? root.icon-cell-height : 34px;
+
+    // 拖拽视觉反馈：拖影 = 条目图标跟随光标；
+    // offset 为图标中心近似值（按 48px 图标视图 / 22px 列表图标估算，
+    // 实际热点以拖影原图像素尺寸为准，图标非该尺寸时略有偏差）。
+    drag := DragArea {
+        enabled: root.drag-enabled;
+        data: root.drag-data(root.item-index);
+        allow-move: true;
+        width: 100%;
+        height: 100%;
+        drag-image: root.item.icon-path;
+        drag-image-offset-x: root.is-icon-view ? 24 : 11;
+        drag-image-offset-y: root.is-icon-view ? 24 : 11;
+        opacity: self.dragging ? 0.4 : 1.0;
+
+        drop := DropArea {
+            can-drop(event) => {
+                return DragAction.move;
+            }
+            dropped(event) => {
+                root.dropped-on(root.item-index, event.data);
+                return DragAction.move;
+            }
+
+            ta := TouchArea {
+                clicked => { root.clicked(); }
+                pointer-event(PointerEvent) => {
+                    if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                        root.right-clicked(self.pressed-x, self.pressed-y);
+                    }
+                }
+
+                // hover 反馈背景（P3；声明在前置于内容下层）
+                Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: drop.has-drag ? Theme.accent-subtle : (ta.has-hover ? Theme.hover : transparent);
+                    border-width: drop.has-drag ? 1px : 0px;
+                    border-color: Theme.accent;
+                    border-radius: Theme.radius-md;
+                }
+
+                // 图标视图（大图标水平居中，无底板直接渲染）
+                VerticalBox {
+                    visible: root.is-icon-view;
+                    padding: Theme.spacing-sm;
+                    spacing: Theme.spacing-sm;
+                    alignment: center;
+
+                    Image {
+                        width: Theme.icon-size;
+                        height: Theme.icon-size;
+                        source: root.item.icon-path;
+                    }
+
+                    Text {
+                        text: root.item.name;
+                        font-size: Theme.font-size-sm;
+                        color: root.item.search-active ? Theme.accent : Theme.text-1;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                // 列表视图（小图标 + 名称行）
+                HorizontalBox {
+                    visible: !root.is-icon-view;
+                    padding: Theme.spacing-sm;
+                    spacing: Theme.spacing-sm;
+
+                    Image {
+                        width: 22px;
+                        height: 22px;
+                        source: root.item.icon-path;
+                    }
+
+                    Text {
+                        text: root.item.name;
+                        font-size: Theme.font-size-md;
+                        color: root.item.search-active ? Theme.accent : Theme.text-1;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // 键盘导航选中态（P2 键盘操作闭环；声明在后，覆盖于内容之上）
+    Rectangle {
+        visible: root.selected;
+        width: 100%;
+        height: 100%;
+        border-width: 1px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-md;
+    }
+}

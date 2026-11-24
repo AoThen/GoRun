@@ -1,0 +1,77 @@
+import { VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 汉堡弹层（v2）：项高 28px；items 中 "-" 渲染 1px 分隔线；
+// 视觉 bg-2 + stroke-1 + radius 6（阴影降级）；定位右锚定由 main_window 注入。
+// content-height 由 Rust 侧按 items 计算（项数×28 + 分隔×1 + padding 8），
+// 挂载处取 min(content-height, 窗口可用高)：窗口矮时弹层内滚动，不再溢出窗口底边。
+export component MenuPopup {
+    in property <[string]> items;
+    in property <[bool]> menu-danger: [];
+    in property <length> content-height: 600px;
+    callback selected(index: int);
+
+    width: 200px;
+    height: min(self.content-height, 1000px);
+
+    Rectangle {
+        background: Theme.bg-2;
+        border-width: 1px;
+        border-color: Theme.stroke-1;
+        border-radius: Theme.radius-md;
+        width: 100%;
+        height: 100%;
+
+        ScrollView {
+            width: 100%;
+            height: 100%;
+
+            VerticalBox {
+                spacing: 0px;
+                padding: 4px;
+                width: 100%;
+
+                for item[index] in root.items: Rectangle {
+                    // 分隔线（v2）：item == "-" 时渲染 1px stroke-1；否则 28px 菜单项
+                    height: item == "-" ? 1px : 28px;
+                    width: 100%;
+                    background: item == "-" ? Theme.stroke-1 : (menu-touch.has-hover
+                        ? ((index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger-subtle : Theme.hover)
+                        : transparent);
+
+                    menu-touch := TouchArea {
+                        // 分隔线不响应点击
+                        visible: item != "-";
+                        clicked => { root.selected(index); }
+
+                        Rectangle {
+                            visible: item != "-";
+                            width: 100%;
+                            height: 100%;
+                            background: transparent;
+
+                            HorizontalBox {
+                                spacing: 0;
+                                padding: 0;
+
+                                Rectangle {
+                                    width: 12px;
+                                    height: 100%;
+                                }
+
+                                Text {
+                                    text: item;
+                                    font-size: Theme.font-size-md;
+                                    color: (index < root.menu-danger.length && root.menu-danger[index]) ? Theme.danger : Theme.text-1;
+                                    overflow: elide;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

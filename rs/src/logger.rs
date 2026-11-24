@@ -1,0 +1,236 @@
+use std::fs::File;
+use std::io::{LineWriter, Write};
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use log::{LevelFilter, Log, Metadata, Record};
+
+/// 日志轮转阈值：超过后轮转为 .old（保留一份，防止无界增长）。
+const ROTATE_THRESHOLD: usize = 10 * 1024 * 1024;
+// 编译期守卫：轮转阈值不得低于 10MB（防误改小导致频繁轮转）。
+// clippy assertions_on_constants 视运行时断言为恒真，故改为 const 断言。
+const _: () = assert!(ROTATE_THRESHOLD >= 10 * 1024 * 1024);
+
+/// 控制字符清洗：防止路径/文件名含换行/ESC 等伪造日志条目或终端转义（日志注入防护）。
+fn sanitize(msg: &str) -> String {
+    msg.chars()
+        .map(|c| match c {
+            '\r' => "\\r".to_string(),
+            '\n' => "\\n".to_string(),
+            '\t' => "\\t".to_string(),
+            c if c.is_control() => format!("\\u{:04x}", c as u32),
+            c => c.to_string(),
+        })
+        .collect()
+}
+
+struct Inner {
+    file: Option<LineWriter<File>>,
+    bytes: usize,
+}
+
+struct FileLogger {
+    file: Mutex<Inner>,
+    path: PathBuf,
+    debug_to_console: bool,
+}
+
+// 锁恢复说明：file 锁守卫日志文件写入。锁中毒时若不用 into_inner 恢复，
+// 日志系统会永久失效（每次 log 都返回 PoisonError），代价高于恢复。
+// 锁内只做 writeln/flush/rotate 的简单 IO、不会 panic，中毒仅极端情况发生；
+// 恢复后可能半写一行日志，但日志本身是尽力而为的追加写，风险可忽略。
+// 注意：rotate 在持有锁的调用方内执行，禁止再调用 log::*（非重入死锁）。
+
+impl FileLogger {
+    fn rotate(&self, inner: &mut Inner) {
+        // 注意：本方法在持有 self.file 锁的调用方内执行，禁止再调用 log::*
+        // （否则非重入 Mutex 死锁）。失败仅降级为静默，避免后续日志丢失。
+        drop(inner.file.take());
+
+        let old = self.path.with_extension("log.old");
+        let _ = std::fs::remove_file(&old);
+        let _ = std::fs::rename(&self.path, &old);
+
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+        {
+            inner.file = Some(LineWriter::new(file));
+        }
+        inner.bytes = 0;
+    }
+}
+
+impl Log for FileLogger {
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+        metadata.level() <= log::max_level()
+    }
+
+    fn log(&self, record: &Record<'_>) {
+        if self.enabled(record.metadata()) {
+            let mut inner = self.file.lock().unwrap_or_else(|e| e.into_inner());
+            let level = match record.level() {
+                log::Level::Error => "ERROR",
+                log::Level::Warn => "WARN ",
+                log::Level::Info => "INFO ",
+                log::Level::Debug => "DEBUG",
+                log::Level::Trace => "TRACE",
+            };
+            let now = chrono::Local::now();
+            let timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
+            let target = sanitize(record.target());
+            let message = sanitize(&record.args().to_string());
+            let line = format!("[{}] [{}] [{}] {}", timestamp, level, target, message);
+
+            if let Some(writer) = inner.file.as_mut() {
+                let _ = writeln!(writer, "{}", line);
+                let _ = writer.flush();
+                inner.bytes += line.len() + 1;
+                if inner.bytes >= ROTATE_THRESHOLD {
+                    self.rotate(&mut inner);
+                }
+            }
+
+            if self.debug_to_console {
+                println!("{}", line);
+            }
+        }
+    }
+
+    fn flush(&self) {
+        let mut inner = self.file.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(writer) = inner.file.as_mut() {
+            let _ = writer.flush();
+        }
+    }
+}
+
+impl Drop for FileLogger {
+    fn drop(&mut self) {
+        self.flush();
+    }
+}
+
+pub fn init(debug_to_console: bool) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    if debug_to_console {
+        unsafe {
+            use windows::Win32::System::Console::AllocConsole;
+            // --debug 时分配控制台用于输出日志；失败不影响主流程（继续写文件日志）
+            let _ = AllocConsole();
+        }
+    }
+
+    let log_path = crate::config::config_path()
+        .parent()
+        .map(|d| d.join("gorun_debug.log"))
+        .unwrap_or_else(|| PathBuf::from("gorun_debug.log"));
+    if let Some(parent) = log_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    // 启动时轮转：旧日志超阈值则先备份为 .old
+    if let Ok(meta) = std::fs::metadata(&log_path) {
+        if meta.len() as usize >= ROTATE_THRESHOLD {
+            let old = log_path.with_extension("log.old");
+            let _ = std::fs::remove_file(&old);
+            let _ = std::fs::rename(&log_path, &old);
+        }
+    }
+
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)?;
+    let logger = FileLogger {
+        file: Mutex::new(Inner {
+            file: Some(LineWriter::new(file)),
+            bytes: 0,
+        }),
+        path: log_path.clone(),
+        debug_to_console,
+    };
+
+    log::set_boxed_logger(Box::new(logger))?;
+    log::set_max_level(LevelFilter::Debug);
+
+    log::debug!("Logger initialized at: {:?}", log_path);
+
+    Ok(())
+}
+
+/// 运行时日志档位（设置项）：warn=最少 / info=标准 / debug=调试。
+/// 编译期 feature 已放宽到 release_max_level_debug，运行时按本设置过滤，
+/// 修改后立即生效。未设置（空）默认"标准"（Info）——Debug 档会记录用户
+/// 输入（搜索词/路径），默认收敛以保护隐私；显式 debug 用于排查问题，
+/// 未知值保守回退最少（Warn）。
+pub fn apply_level(level: &str) {
+    let filter = match level {
+        "debug" => LevelFilter::Debug,
+        "info" => LevelFilter::Info,
+        "" => LevelFilter::Info,
+        _ => LevelFilter::Warn,
+    };
+    log::set_max_level(filter);
+    log::info!("Log level applied: {}", filter.as_str());
+}
+
+pub fn set_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            *s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.as_str()
+        } else {
+            "unknown panic"
+        };
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "?".to_string());
+        log::error!("PANIC at {}: {}", location, msg);
+        log::logger().flush();
+    }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_sanitize_newlines() {
+        assert_eq!(sanitize("a\nb"), "a\\nb");
+        assert_eq!(sanitize("a\rb"), "a\\rb");
+        assert_eq!(sanitize("a\tb"), "a\\tb");
+        assert_eq!(sanitize("a\x1bb"), "a\\u001bb");
+        assert_eq!(sanitize("normal"), "normal");
+    }
+
+    #[test]
+    fn test_log_path_under_base() {
+        let p = Path::new("x/gorun_debug.log");
+        assert_eq!(
+            p.with_extension("log.old").to_string_lossy(),
+            "x/gorun_debug.log.old"
+        );
+    }
+
+    #[test]
+    fn test_apply_level_mapping() {
+        // 三档映射 + 未设置默认 Info（隐私收敛）+ 未知值回退 Warn；全局 max_level 即时切换
+        apply_level("debug");
+        assert_eq!(log::max_level(), LevelFilter::Debug);
+        apply_level("info");
+        assert_eq!(log::max_level(), LevelFilter::Info);
+        apply_level("warn");
+        assert_eq!(log::max_level(), LevelFilter::Warn);
+        apply_level("nonsense");
+        assert_eq!(log::max_level(), LevelFilter::Warn);
+        apply_level("");
+        assert_eq!(log::max_level(), LevelFilter::Info, "未设置默认应为 Info");
+        // 还原，避免影响其他依赖全局级别的测试
+        apply_level("debug");
+    }
+}

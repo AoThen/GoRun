@@ -1,0 +1,1151 @@
+// 预留方法（如分类编辑 update_category）当前无调用者，保留而非删除；
+// 以精确 #[allow(dead_code)] 标注，仅对确实无调用的预留方法抑制警告，
+// 让新增的意外死代码重新可见（替代文件级 #![allow(dead_code)]）。
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+use crate::model::{AppConfig, Category, Item};
+
+/// 拼音缓存上限（超限整体清空，条目键为文本原文，旧条目自然无害）
+const PINYIN_CACHE_MAX: usize = 4096;
+
+pub struct ItemManager {
+    config: AppConfig,
+    modified: bool,
+    /// P1-9：文本 → 拼音对（首字母, 全拼）缓存；None 表示不含 CJK（无需拼音匹配）。
+    pinyin_cache: RefCell<HashMap<String, Option<(String, String)>>>,
+}
+
+impl ItemManager {
+    pub fn new(config: AppConfig) -> Self {
+        log::debug!(
+            "ItemManager created with {} categories",
+            config.data.categories.len()
+        );
+        ItemManager {
+            config,
+            modified: false,
+            pinyin_cache: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn config(&self) -> &AppConfig {
+        &self.config
+    }
+
+    pub fn config_mut(&mut self) -> &mut AppConfig {
+        self.modified = true;
+        &mut self.config
+    }
+
+    pub fn categories(&self) -> &[Category] {
+        &self.config.data.categories
+    }
+
+    pub fn items(&self, category_id: &str) -> Vec<Item> {
+        if category_id.is_empty() {
+            return self.config.data.items.clone();
+        }
+        self.config
+            .data
+            .items
+            .iter()
+            .filter(|i| i.category_id == category_id)
+            .cloned()
+            .collect()
+    }
+
+    /// 全量项目（供 ui_sync 刷新/重建条目模型与集成测试使用）。
+    pub fn all_items(&self) -> Vec<Item> {
+        self.config.data.items.clone()
+    }
+
+    /// P1-9：拼音匹配。文本级缓存，同一文本仅首次计算（首字母 + 全拼），
+    /// 避免每次搜索按键对每个汉字项重算 lazy_pinyin。
+    fn pinyin_match(&self, text: &str, q: &str) -> bool {
+        let entry = {
+            let mut cache = self.pinyin_cache.borrow_mut();
+            match cache.get_mut(text) {
+                Some(v) => v.clone(),
+                None => {
+                    if cache.len() >= PINYIN_CACHE_MAX {
+                        cache.clear();
+                    }
+                    let computed = pinyin_pair(text);
+                    cache.insert(text.to_string(), computed.clone());
+                    computed
+                }
+            }
+        };
+        match entry {
+            Some((init, full)) => init.contains(q) || full.contains(q),
+            None => false,
+        }
+    }
+
+    pub fn search_items(&self, query: &str) -> Vec<Item> {
+        let q = query.to_lowercase();
+        let q_trim = q.trim();
+        if q_trim.is_empty() {
+            return self.config.data.items.clone();
+        }
+        let mut scored: Vec<(Item, i32)> = self
+            .config
+            .data
+            .items
+            .iter()
+            // filter + map 合并单遍历：每 item 只做一次小写转换（原实现 filter/map
+            // 各自调用 to_lowercase，最多 6 次/item），匹配与打分共用结果。
+            .filter_map(|item| {
+                let name_l = item.name.to_lowercase();
+                let kw_l = item.keywords.to_lowercase();
+                let target_l = item.target.to_lowercase();
+                let matched = name_l.contains(&q)
+                    || kw_l.contains(&q)
+                    || target_l.contains(&q)
+                    // 拼音匹配（P2 #1/#2 + P1-9）：按文本缓存拼音对，避免每次搜索逐字符重算
+                    || self.pinyin_match(&item.name, &q)
+                    || self.pinyin_match(&item.keywords, &q);
+                if !matched {
+                    return None;
+                }
+                let mut score = 0;
+                if name_l == q {
+                    score += 1000;
+                } else if name_l.starts_with(&q) {
+                    score += 100;
+                } else {
+                    score += 10;
+                }
+                if kw_l.contains(&q) {
+                    score += 50;
+                }
+                score += item.run_count;
+                Some((item.clone(), score))
+            })
+            .collect();
+
+        scored.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
+        let results: Vec<Item> = scored.into_iter().map(|(item, _)| item).collect();
+        log::debug!("Search: query={}, results={}", query, results.len());
+        results
+    }
+
+    pub fn add_category(&mut self, mut category: Category) {
+        if category.id.is_empty() {
+            category.id = crate::model::generate_id("cat");
+        }
+        log::info!("Category added: id={}, name={}", category.id, category.name);
+        self.config.data.categories.push(category);
+        self.modified = true;
+    }
+
+    #[allow(dead_code)]
+    pub fn update_category(&mut self, category: &Category) -> bool {
+        if let Some(c) = self
+            .config
+            .data
+            .categories
+            .iter_mut()
+            .find(|c| c.id == category.id)
+        {
+            *c = category.clone();
+            self.modified = true;
+            log::info!("Category updated: id={}", category.id);
+            true
+        } else {
+            log::warn!("Category update failed: id={} not found", category.id);
+            false
+        }
+    }
+
+    /// 删除分类（级联删除项目）。返回是否实际删除；至少保留一个分类，避免空分类显示全部项目（P1-1）。
+    pub fn delete_category(&mut self, id: &str) -> bool {
+        if self.config.data.categories.len() <= 1 {
+            log::warn!(
+                "Cannot delete category: only {} left (id={})",
+                self.config.data.categories.len(),
+                id
+            );
+            return false;
+        }
+        let removed = self.config.data.items.iter().any(|i| i.category_id == id);
+        self.config.data.items.retain(|i| i.category_id != id);
+        self.config.data.categories.retain(|c| c.id != id);
+        self.modified = true;
+        log::info!("Category deleted: id={}, cascaded_items={}", id, removed);
+        true
+    }
+
+    /// 分类上移一位（在 categories 向量内交换，替代拖拽排序，决策①）。
+    pub fn move_category_up(&mut self, id: &str) -> bool {
+        self.move_category_in_vec(id, true)
+    }
+
+    /// 分类下移一位（在 categories 向量内交换，替代拖拽排序，决策①）。
+    pub fn move_category_down(&mut self, id: &str) -> bool {
+        self.move_category_in_vec(id, false)
+    }
+
+    fn move_category_in_vec(&mut self, id: &str, up: bool) -> bool {
+        let cats = &mut self.config.data.categories;
+        let idx = match cats.iter().position(|c| c.id == id) {
+            Some(i) => i,
+            None => return false,
+        };
+        let j = if up {
+            if idx == 0 {
+                return false;
+            }
+            idx - 1
+        } else {
+            if idx + 1 >= cats.len() {
+                return false;
+            }
+            idx + 1
+        };
+        cats.swap(idx, j);
+        self.modified = true;
+        log::info!(
+            "Category moved {} at {}, target {}",
+            if up { "up" } else { "down" },
+            idx,
+            j
+        );
+        true
+    }
+
+    /// 分类拖拽排序（F2-1）：把 categories 向量中 `from` 位分类移到 `to` 位。
+    pub fn move_category_to_index(&mut self, from: usize, to: usize) -> bool {
+        let cats = &mut self.config.data.categories;
+        let n = cats.len();
+        if from >= n || to >= n || from == to {
+            log::debug!("Category reorder skipped: from={} to={} n={}", from, to, n);
+            return false;
+        }
+        let moved = cats.remove(from);
+        cats.insert(to, moved);
+        self.modified = true;
+        log::info!("Category reordered: from={} to={}", from, to);
+        true
+    }
+
+    pub fn add_item(&mut self, mut item: Item) -> bool {
+        if item.category_id.is_empty() {
+            log::warn!("Item add failed: empty category_id");
+            return false;
+        }
+        if !self
+            .config
+            .data
+            .categories
+            .iter()
+            .any(|c| c.id == item.category_id)
+        {
+            log::warn!(
+                "Item add failed: category_id {} not found",
+                item.category_id
+            );
+            return false;
+        }
+        if item.id.is_empty() {
+            item.id = crate::model::generate_id("item");
+        }
+        // 拖放注册幂等（F2-1）：同分类下 target 已存在则跳过，重复拖入同一文件不重复注册。
+        // 仅对非空 target 查重（URL/命令行等 target 为空或重复合法场景不受限）。
+        if !item.target.is_empty()
+            && self.target_exists_in(&item.category_id, &item.target, &item.id)
+        {
+            log::info!(
+                "Item add skipped (duplicate target): category={}, target={}",
+                item.category_id,
+                item.target
+            );
+            return false;
+        }
+        log::info!("Item added: id={}, name={}", item.id, item.name);
+        self.config.data.items.push(item);
+        self.modified = true;
+        true
+    }
+
+    /// 同分类下是否存在相同 target 的其他条目（P2-1）。
+    /// `exclude_id` 用于编辑场景排除自身（编辑条目时允许保留原 target）；
+    /// 空 target 不查重（URL/命令行等 target 为空或重复合法场景不受限）。
+    pub fn target_exists_in(&self, category_id: &str, target: &str, exclude_id: &str) -> bool {
+        if target.is_empty() {
+            return false;
+        }
+        self.config
+            .data
+            .items
+            .iter()
+            .any(|i| i.category_id == category_id && i.target == target && i.id != exclude_id)
+    }
+
+    pub fn update_item(&mut self, item: &Item) -> bool {
+        if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item.id) {
+            *i = item.clone();
+            self.modified = true;
+            log::info!("Item updated: id={}", item.id);
+            true
+        } else {
+            log::warn!("Item update failed: id={} not found", item.id);
+            false
+        }
+    }
+
+    pub fn delete_item(&mut self, id: &str) -> bool {
+        let before = self.config.data.items.len();
+        self.config.data.items.retain(|i| i.id != id);
+        let removed = self.config.data.items.len() < before;
+        if removed {
+            self.modified = true;
+            log::info!("Item deleted: id={}", id);
+        } else {
+            log::warn!("Item delete failed: id={} not found", id);
+        }
+        removed
+    }
+
+    pub fn move_item(&mut self, item_id: &str, category_id: &str) -> bool {
+        if !self
+            .config
+            .data
+            .categories
+            .iter()
+            .any(|c| c.id == category_id)
+        {
+            log::warn!("Item move failed: category_id {} not found", category_id);
+            return false;
+        }
+        if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item_id) {
+            i.category_id = category_id.to_string();
+            self.modified = true;
+            log::info!("Item moved: {} -> {}", item_id, category_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 在同一分类内上移一位（与相邻兄弟交换，替代拖拽排序，决策①）。
+    pub fn move_item_up(&mut self, item_id: &str) -> bool {
+        self.swap_with_sibling(item_id, true)
+    }
+
+    /// 在同一分类内下移一位（与相邻兄弟交换，替代拖拽排序，决策①）。
+    pub fn move_item_down(&mut self, item_id: &str) -> bool {
+        self.swap_with_sibling(item_id, false)
+    }
+
+    /// 拖拽排序（F2-1）：把分类内显示序列中 `from` 位的项移动到 `to` 位。
+    /// `from`/`to` 均为分类内索引（0..分类项数-1），等价于 UI 网格/列表显示序。
+    /// 仅重排该分类子集，不影响其他分类相对顺序；写回数组槽位（save 时按序重编号 sort_order）。
+    pub fn move_item_to_index(&mut self, category_id: &str, from: usize, to: usize) -> bool {
+        let items = &mut self.config.data.items;
+        let mut positions: Vec<usize> = items
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| i.category_id == category_id)
+            .map(|(idx, _)| idx)
+            .collect();
+        let n = positions.len();
+        if from >= n || to >= n || from == to {
+            log::debug!("Item reorder skipped: from={} to={} n={}", from, to, n);
+            return false;
+        }
+        let mut subset: Vec<Item> = positions.iter().map(|&p| items[p].clone()).collect();
+        let moved = subset.remove(from);
+        subset.insert(to, moved);
+        for (slot, item) in positions.drain(..).zip(subset) {
+            items[slot] = item;
+        }
+        self.modified = true;
+        log::info!(
+            "Item reordered in category {}: from={} to={}",
+            category_id,
+            from,
+            to
+        );
+        true
+    }
+
+    fn swap_with_sibling(&mut self, item_id: &str, up: bool) -> bool {
+        let items = &mut self.config.data.items;
+        let idx = match items.iter().position(|i| i.id == item_id) {
+            Some(i) => i,
+            None => return false,
+        };
+        let cat = items[idx].category_id.clone();
+        // 向前/向后找同分类的最近兄弟（跳过其他分类的项）
+        let target = if up {
+            (0..idx).rev().find(|&j| items[j].category_id == cat)
+        } else {
+            ((idx + 1)..items.len()).find(|&j| items[j].category_id == cat)
+        };
+        if let Some(j) = target {
+            items.swap(idx, j);
+            self.modified = true;
+            log::info!(
+                "Item moved {} at {}, target {}",
+                if up { "up" } else { "down" },
+                idx,
+                j
+            );
+            true
+        } else {
+            log::debug!("Item {} already at boundary", item_id);
+            false
+        }
+    }
+
+    pub fn increment_run_count(&mut self, item_id: &str) {
+        if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item_id) {
+            i.run_count += 1;
+            // P1-1：使用计数是高频非关键写，不置位 modified —— 否则会经
+            // save_if_modified（及退出兜底）触发备份轮转，"运行→退出"高频模式
+            // 持续冲刷 .bak1，误操作后恢复窗口极小。落盘由调用方 save_soft
+            // 承担（storage.save 不轮转备份，与几何路径同策略）。
+        }
+    }
+
+    /// 记录自动提取图标的缓存路径（P0：跨进程恢复图标的唯一依据）。
+    /// 返回值表示是否变化，避免无谓置位 modified / 重复落盘。
+    pub fn set_cached_icon(&mut self, item_id: &str, path: &str) -> bool {
+        if let Some(i) = self.config.data.items.iter_mut().find(|i| i.id == item_id) {
+            if i.cached_icon != path {
+                i.cached_icon = path.to_string();
+                self.modified = true;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 清空缓存路径（图标源变更/缓存失效时调用），返回是否变化。
+    pub fn clear_cached_icon(&mut self, item_id: &str) -> bool {
+        self.set_cached_icon(item_id, "")
+    }
+
+    pub fn is_modified(&self) -> bool {
+        self.modified
+    }
+
+    pub fn reset_modified(&mut self) {
+        self.modified = false;
+    }
+
+    /// 拖入/粘贴新增条目，返回新增条目的 id 列表（供调用方同步提取图标）。
+    pub fn handle_drop(&mut self, files: &[std::path::PathBuf], category_id: &str) -> Vec<String> {
+        let mut added: Vec<String> = Vec::new();
+        for path in files {
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Unknown".to_string());
+
+            let target = normalize_drop_target(path);
+            let working_dir = path
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            let item_id = crate::model::generate_id("item");
+            let item = Item {
+                id: item_id.clone(),
+                name,
+                target,
+                working_dir,
+                category_id: category_id.to_string(),
+                ..Default::default()
+            };
+
+            if self.add_item(item) {
+                added.push(item_id);
+            }
+        }
+        added
+    }
+
+    /// 按分类与目标路径查找已存在条目（重复拖入幂等跳过时用于补齐图标等补救动作）。
+    pub fn find_item_by_target(&self, category_id: &str, target: &str) -> Option<Item> {
+        self.config
+            .data
+            .items
+            .iter()
+            .find(|i| i.category_id == category_id && i.target == target)
+            .cloned()
+    }
+
+    pub fn get_item(&self, id: &str) -> Option<&Item> {
+        self.config.data.items.iter().find(|i| i.id == id)
+    }
+
+    /// 按名称排序分类内项目（背景右键菜单"按名称排序"）。
+    pub fn sort_items_by_name(&mut self, category_id: &str) {
+        self.sort_category_items(category_id, |a, b| {
+            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        });
+    }
+
+    /// 按使用次数排序分类内项目（背景右键菜单"按使用次数排序"）。
+    pub fn sort_items_by_usage(&mut self, category_id: &str) {
+        self.sort_category_items(category_id, |a, b| b.run_count.cmp(&a.run_count));
+    }
+
+    /// 对分类内项目稳定排序（仅重排该分类子集，不影响其他分类相对顺序）。
+    fn sort_category_items<F>(&mut self, category_id: &str, cmp: F)
+    where
+        F: Fn(&Item, &Item) -> std::cmp::Ordering,
+    {
+        let items = &mut self.config.data.items;
+        let mut positions: Vec<usize> = items
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| i.category_id == category_id)
+            .map(|(idx, _)| idx)
+            .collect();
+        if positions.len() < 2 {
+            return;
+        }
+        let total = positions.len();
+        let mut subset: Vec<Item> = positions.iter().map(|&p| items[p].clone()).collect();
+        subset.sort_by(&cmp);
+        for (slot, item) in positions.drain(..).zip(subset) {
+            items[slot] = item;
+        }
+        self.modified = true;
+        log::info!("Sorted {} items in category {}", total, category_id);
+    }
+}
+
+impl Default for ItemManager {
+    fn default() -> Self {
+        ItemManager::new(AppConfig::default())
+    }
+}
+
+/// 判断字符是否为 CJK 汉字（拼音匹配仅对汉字生效）。
+fn is_cjk(c: char) -> bool {
+    let u = c as u32;
+    (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u)
+}
+
+/// 字符串是否含 CJK 汉字（用于拼音匹配前置判断）。
+fn contains_cjk(s: &str) -> bool {
+    s.chars().any(is_cjk)
+}
+
+/// 取文本的拼音首字母（非汉字保留原字符小写）。
+fn pinyin_initial(text: &str) -> String {
+    use pinyin::ToPinyin;
+    let mut out = String::new();
+    for ch in text.chars() {
+        if !is_cjk(ch) {
+            out.push(ch.to_ascii_lowercase());
+            continue;
+        }
+        if let Some(p) = ch.to_pinyin() {
+            if let Some(c) = p.plain().chars().next() {
+                out.push(c.to_ascii_lowercase());
+            }
+        }
+    }
+    out
+}
+
+/// 取文本的拼音对（首字母 + 全拼）（P1-9，供缓存）；非中文返回 None。
+fn pinyin_pair(text: &str) -> Option<(String, String)> {
+    if !contains_cjk(text) {
+        return None;
+    }
+    Some((pinyin_initial(text), pinyin_full(text)))
+}
+
+/// 取文本的完整拼音（多音字取第一个读音，非汉字保留原字符小写）。
+fn pinyin_full(text: &str) -> String {
+    use pinyin::ToPinyin;
+    let mut out = String::new();
+    for ch in text.chars() {
+        if !is_cjk(ch) {
+            out.push(ch.to_ascii_lowercase());
+            continue;
+        }
+        if let Some(p) = ch.to_pinyin() {
+            out.push_str(p.plain());
+        }
+    }
+    out
+}
+
+/// F8/URL 拖入：读取 .url 快捷方式文件（[InternetShortcut]）中的 URL= 行。
+/// 找不到 URL= 或读失败返回 None（调用方回退为原路径）。
+fn read_url_from_internet_shortcut(path: &std::path::Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some((key, value)) = line.split_once('=') {
+            if key.trim().eq_ignore_ascii_case("url") {
+                let url = value.trim();
+                if !url.is_empty() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 拖入目标的规范化 target：.url 快捷方式 → 读 URL= 行作为真实 target，其余为原路径。
+/// handle_drop 与 on_file_dropped 的重复拖入查询必须共用此逻辑，保证 target 一致。
+pub fn normalize_drop_target(path: &std::path::Path) -> String {
+    if path
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("url"))
+        .unwrap_or(false)
+    {
+        read_url_from_internet_shortcut(path).unwrap_or_else(|| path.to_string_lossy().to_string())
+    } else {
+        path.to_string_lossy().to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{AppData, Config};
+
+    fn make_item(id: &str, name: &str, cat: &str) -> Item {
+        Item {
+            id: id.into(),
+            name: name.into(),
+            target: format!("C:\\bin\\{}.exe", name),
+            category_id: cat.into(),
+            ..Default::default()
+        }
+    }
+
+    fn make_manager(items: Vec<Item>) -> ItemManager {
+        let config = AppConfig {
+            version: "test".into(),
+            data: AppData {
+                categories: vec![],
+                items,
+            },
+            config: Config::default(),
+            extra_config: Default::default(),
+        };
+        ItemManager::new(config)
+    }
+
+    #[test]
+    fn test_search_exact_name_ranks_first() {
+        let m = make_manager(vec![
+            make_item("a", "Calculator Pro", "c1"),
+            make_item("b", "Calculator", "c1"),
+        ]);
+        let res = m.search_items("calculator");
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0].name, "Calculator");
+    }
+
+    #[test]
+    fn test_search_matches_keyword() {
+        let mut m = make_manager(vec![]);
+        let mut it = make_item("k", "Calc Tool", "c1");
+        it.keywords = "math calculator".into();
+        m.config.data.items.push(it);
+        let res = m.search_items("math");
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].id, "k");
+    }
+
+    #[test]
+    fn test_search_no_result() {
+        let m = make_manager(vec![make_item("a", "Foo", "c1")]);
+        assert!(m.search_items("zzz").is_empty());
+    }
+
+    #[test]
+    fn test_add_update_delete_item() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        assert!(m.add_item(make_item("i1", "One", "c1")));
+        assert!(m.is_modified());
+        assert_eq!(m.config.data.items.len(), 1);
+
+        let it = make_item("i1", "One v2", "c1");
+        assert!(m.update_item(&it));
+        assert_eq!(m.config.data.items[0].name, "One v2");
+
+        assert!(m.delete_item("i1"));
+        assert!(m.config.data.items.is_empty());
+        assert!(!m.delete_item("nope"));
+    }
+
+    #[test]
+    fn test_add_item_duplicate_target_same_category_rejected() {
+        // F2-1：同分类同 target 重复注册被拒绝（拖放幂等）
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        assert!(m.add_item(make_item("i1", "One", "c1")));
+        // 同分类同 target → 拒绝，条目数不变
+        assert!(!m.add_item(make_item("i2", "One", "c1")));
+        assert_eq!(m.config.data.items.len(), 1);
+    }
+
+    #[test]
+    fn test_add_item_duplicate_target_different_category_allowed() {
+        // 不同分类同 target → 允许（各分类独立注册）
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
+        assert!(m.add_item(make_item("i1", "One", "c1")));
+        assert!(m.add_item(make_item("i2", "One", "c2")));
+        assert_eq!(m.config.data.items.len(), 2);
+    }
+
+    #[test]
+    fn test_add_item_empty_target_not_deduped() {
+        // 空 target（如纯命令行/URL 占位）不参与查重
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        let mut a = make_item("i1", "A", "c1");
+        a.target = "".into();
+        let mut b = make_item("i2", "B", "c1");
+        b.target = "".into();
+        assert!(m.add_item(a));
+        assert!(m.add_item(b));
+        assert_eq!(m.config.data.items.len(), 2);
+    }
+
+    #[test]
+    fn test_move_item_to_index_reorders_within_category() {
+        // F2-1：分类内拖拽排序——把 0 位移到 2 位，重排该分类子集
+        let mut m = make_manager(vec![
+            make_item("i1", "A", "c1"),
+            make_item("i2", "B", "c1"),
+            make_item("i3", "C", "c1"),
+        ]);
+        assert!(m.move_item_to_index("c1", 0, 2));
+        let ids: Vec<String> = m.config.data.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(ids, vec!["i2", "i3", "i1"]);
+    }
+
+    #[test]
+    fn test_move_item_to_index_reverse() {
+        // 反向：把 2 位移到 0 位
+        let mut m = make_manager(vec![
+            make_item("i1", "A", "c1"),
+            make_item("i2", "B", "c1"),
+            make_item("i3", "C", "c1"),
+        ]);
+        assert!(m.move_item_to_index("c1", 2, 0));
+        let ids: Vec<String> = m.config.data.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(ids, vec!["i3", "i1", "i2"]);
+    }
+
+    #[test]
+    fn test_move_item_to_index_bounds_rejected() {
+        let mut m = make_manager(vec![make_item("i1", "A", "c1")]);
+        // 越界 / 同位 → false 且不变
+        assert!(!m.move_item_to_index("c1", 0, 1));
+        assert!(!m.move_item_to_index("c1", 0, 0));
+        assert!(!m.move_item_to_index("c1", 5, 0));
+        assert_eq!(m.config.data.items.len(), 1);
+    }
+
+    #[test]
+    fn test_move_item_to_index_preserves_other_categories() {
+        // 重排 c1 不影响 c2 的顺序与位置
+        let mut m = make_manager(vec![
+            make_item("a1", "A1", "c1"),
+            make_item("b1", "B1", "c2"),
+            make_item("a2", "A2", "c1"),
+            make_item("b2", "B2", "c2"),
+        ]);
+        assert!(m.move_item_to_index("c1", 0, 1));
+        let ids: Vec<String> = m.config.data.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(ids, vec!["a2", "b1", "a1", "b2"]);
+    }
+
+    #[test]
+    fn test_move_category_to_index_reorders() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c3".into(),
+            name: "C3".into(),
+            ..Default::default()
+        });
+        assert!(m.move_category_to_index(0, 2));
+        let ids: Vec<String> = m.categories().iter().map(|c| c.id.clone()).collect();
+        assert_eq!(ids, vec!["c2", "c3", "c1"]);
+    }
+
+    #[test]
+    fn test_move_category_to_index_bounds_rejected() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        assert!(!m.move_category_to_index(0, 0));
+        assert!(!m.move_category_to_index(0, 1));
+        assert_eq!(m.categories().len(), 1);
+    }
+
+    #[test]
+    fn test_delete_category_cascades_items() {
+        let mut m = make_manager(vec![make_item("i1", "A", "c1")]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
+        m.config.data.items.push(make_item("i2", "B", "c2"));
+        assert!(m.delete_category("c1"));
+        assert!(m.config.data.items.iter().all(|i| i.category_id != "c1"));
+        assert_eq!(m.config.data.items.len(), 1);
+        assert_eq!(m.config.data.categories.len(), 1);
+    }
+
+    #[test]
+    fn test_delete_category_keeps_last_category() {
+        let mut m = make_manager(vec![make_item("i1", "A", "c1")]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        // add_category 会置 modified，重置以便验证 delete 失败不改状态
+        m.reset_modified();
+        // 仅剩一个分类时拒绝删除（P1-1）
+        assert!(!m.delete_category("c1"));
+        assert_eq!(m.config.data.categories.len(), 1);
+        assert!(!m.is_modified());
+    }
+
+    #[test]
+    fn test_move_item() {
+        let mut m = make_manager(vec![make_item("i1", "A", "c1")]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
+        assert!(m.move_item("i1", "c2"));
+        assert_eq!(m.config.data.items[0].category_id, "c2");
+        assert!(!m.move_item("nope", "c2"));
+    }
+
+    #[test]
+    fn test_increment_run_count_affects_search_rank() {
+        let mut m = make_manager(vec![make_item("a", "Tool Alpha", "c1")]);
+        let mut b = make_item("b", "Tool Beta", "c1");
+        b.run_count = 5;
+        m.config.data.items.push(b);
+        m.increment_run_count("a");
+        let res = m.search_items("tool");
+        assert_eq!(res[0].id, "b");
+    }
+
+    #[test]
+    fn test_increment_run_count_does_not_set_modified() {
+        // P1-1：使用计数是高频非关键写，不置位 modified（否则会经
+        // save_if_modified/退出兜底触发备份轮转，冲刷 .bak1）
+        let mut m = make_manager(vec![make_item("a", "Tool Alpha", "c1")]);
+        m.reset_modified();
+        m.increment_run_count("a");
+        assert_eq!(m.config.data.items[0].run_count, 1);
+        assert!(!m.is_modified(), "increment_run_count 不应置位 modified");
+        m.increment_run_count("missing");
+        assert!(!m.is_modified(), "缺失条目同样不应置位");
+    }
+
+    #[test]
+    fn test_add_category_generates_id() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            name: "New".into(),
+            ..Default::default()
+        });
+        assert_eq!(m.config.data.categories.len(), 1);
+        assert!(!m.config.data.categories[0].id.is_empty());
+    }
+
+    #[test]
+    fn test_handle_drop_adds_items() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        let paths = vec![std::path::PathBuf::from("C:\\Tools\\foo.exe")];
+        let added = m.handle_drop(&paths, "c1");
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0], m.config.data.items[0].id);
+        assert_eq!(m.config.data.items.len(), 1);
+        assert_eq!(m.config.data.items[0].category_id, "c1");
+    }
+
+    #[test]
+    fn test_move_item_up_down_within_category() {
+        // 交替分类，验证仅在同分类内交换
+        let mut m = make_manager(vec![
+            make_item("a", "A", "c1"),
+            make_item("x", "X", "c2"),
+            make_item("b", "B", "c1"),
+        ]);
+        // b(索引2) 上移 → 应与 a(索引0) 交换（跳过 c2 的 x）
+        assert!(m.move_item_up("b"));
+        assert_eq!(m.config.data.items[0].id, "b");
+        assert_eq!(m.config.data.items[1].id, "x");
+        assert_eq!(m.config.data.items[2].id, "a");
+        // b 已到顶，再上移失败
+        assert!(!m.move_item_up("b"));
+        // a(索引2) 在 c1 组尾部，下移无同分类兄弟 → 失败
+        assert!(!m.move_item_down("a"));
+        // 未知 id
+        assert!(!m.move_item_up("nope"));
+    }
+
+    #[test]
+    fn test_move_category_up_down() {
+        let mut m = make_manager(vec![]);
+        m.add_category(Category {
+            id: "c1".into(),
+            name: "C1".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c2".into(),
+            name: "C2".into(),
+            ..Default::default()
+        });
+        m.add_category(Category {
+            id: "c3".into(),
+            name: "C3".into(),
+            ..Default::default()
+        });
+        assert!(m.move_category_up("c2"));
+        assert_eq!(m.config.data.categories[0].id, "c2");
+        assert_eq!(m.config.data.categories[1].id, "c1");
+        assert!(m.move_category_down("c1"));
+        assert_eq!(m.config.data.categories[0].id, "c2");
+        assert_eq!(m.config.data.categories[1].id, "c3");
+        assert_eq!(m.config.data.categories[2].id, "c1");
+        assert!(!m.move_category_up("c2")); // 顶
+        assert!(!m.move_category_down("c1")); // 底
+        assert!(!m.move_category_up("nope"));
+    }
+
+    #[test]
+    fn test_sort_items_by_name_and_usage() {
+        let mut m = make_manager(vec![
+            make_item("b", "banana", "c1"),
+            make_item("a", "Apple", "c1"),
+            make_item("z", "zebra", "c2"), // 其他分类不受影响
+        ]);
+        m.sort_items_by_name("c1");
+        let c1: Vec<&str> = m
+            .config
+            .data
+            .items
+            .iter()
+            .filter(|i| i.category_id == "c1")
+            .map(|i| i.id.as_str())
+            .collect();
+        assert_eq!(c1, vec!["a", "b"]);
+
+        let mut it = m.config.data.items[0].clone(); // "a" 原为 Apple，现索引0
+        it.run_count = 10;
+        m.config.data.items[0] = it;
+        m.sort_items_by_usage("c1");
+        let c1_usage: Vec<&str> = m
+            .config
+            .data
+            .items
+            .iter()
+            .filter(|i| i.category_id == "c1")
+            .map(|i| i.id.as_str())
+            .collect();
+        assert_eq!(c1_usage, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_pinyin_search() {
+        // "计算器" 拼音首字母 jsq / 全拼 jisuanqi
+        let mut m = make_manager(vec![]);
+        let mut it = make_item("py", "计算器", "c1");
+        it.keywords = "math tool".into();
+        m.config.data.items.push(it);
+        // 首字母匹配
+        let res = m.search_items("jsq");
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].id, "py");
+        // 全拼匹配
+        let res = m.search_items("jisuanqi");
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].id, "py");
+        // 无匹配
+        assert!(m.search_items("zzzz").is_empty());
+    }
+
+    #[test]
+    fn test_pinyin_cache_populated_and_stable() {
+        // P1-9：同一文本仅计算一次，重复搜索命中缓存且结果一致
+        let mut m = make_manager(vec![]);
+        let mut it = make_item("py", "计算器", "c1");
+        it.keywords = "abc".into();
+        m.config.data.items.push(it);
+        let first = m.search_items("jsq");
+        let second = m.search_items("jsq");
+        assert_eq!(first, second);
+        assert_eq!(second.len(), 1);
+        let cache = m.pinyin_cache.borrow();
+        // 名称拼音被计算并入缓存；搜索命中名称时 || 短路，keywords 不保证入缓存
+        assert!(cache.contains_key("计算器"));
+        assert!(cache.get("计算器").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_pinyin_initial_full() {
+        assert_eq!(pinyin_initial("计算器"), "jsq");
+        assert!(pinyin_full("计算器").contains("jisuanqi"));
+        // 非汉字原样
+        assert_eq!(pinyin_initial("Abc"), "abc");
+        assert_eq!(pinyin_full("Abc"), "abc");
+    }
+
+    #[test]
+    fn test_set_cached_icon_persists_state() {
+        // P0：自动提取的图标缓存路径必须写回项目并置位 modified（触发落盘）
+        let mut m = make_manager(vec![make_item("a", "Alpha", "c1")]);
+        assert!(m.config.data.items[0].cached_icon.is_empty());
+        m.reset_modified();
+
+        assert!(m.set_cached_icon("a", "/icons/abc.png"));
+        assert_eq!(m.config.data.items[0].cached_icon, "/icons/abc.png");
+        assert!(m.is_modified());
+
+        // 同值重复设置不置位 modified（避免无谓落盘）
+        m.reset_modified();
+        assert!(!m.set_cached_icon("a", "/icons/abc.png"));
+        assert!(!m.is_modified());
+
+        // 未知 id 不产生变化
+        assert!(!m.set_cached_icon("nope", "/x.png"));
+    }
+
+    #[test]
+    fn test_clear_cached_icon() {
+        let mut m = make_manager(vec![make_item("a", "Alpha", "c1")]);
+        m.set_cached_icon("a", "/icons/abc.png");
+        assert!(m.clear_cached_icon("a"));
+        assert!(m.config.data.items[0].cached_icon.is_empty());
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_parses_url_line() {
+        let path = std::env::temp_dir().join(format!("gorun_url_test_{}.url", std::process::id()));
+        std::fs::write(&path, "[InternetShortcut]\nURL=https://example.com/\n").unwrap();
+        assert_eq!(
+            read_url_from_internet_shortcut(&path).as_deref(),
+            Some("https://example.com/")
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_case_insensitive_key() {
+        let path = std::env::temp_dir().join(format!("gorun_url_lower_{}.url", std::process::id()));
+        std::fs::write(&path, "url=ftp://host/file\n").unwrap();
+        assert_eq!(
+            read_url_from_internet_shortcut(&path).as_deref(),
+            Some("ftp://host/file")
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_missing_file_returns_none() {
+        let path = std::env::temp_dir().join("gorun_url_definitely_missing.url");
+        assert!(read_url_from_internet_shortcut(&path).is_none());
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_no_url_line_returns_none() {
+        let path = std::env::temp_dir().join(format!("gorun_url_nourl_{}.url", std::process::id()));
+        std::fs::write(&path, "[InternetShortcut]\nIconFile=x.ico\n").unwrap();
+        assert!(read_url_from_internet_shortcut(&path).is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_read_url_from_shortcut_empty_url_returns_none() {
+        let path = std::env::temp_dir().join(format!("gorun_url_empty_{}.url", std::process::id()));
+        std::fs::write(&path, "URL=\n").unwrap();
+        assert!(read_url_from_internet_shortcut(&path).is_none());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_normalize_drop_target_uses_url_for_internet_shortcut() {
+        let path = std::env::temp_dir().join(format!("gorun_norm_{}.url", std::process::id()));
+        std::fs::write(&path, "URL=https://example.com/page\n").unwrap();
+        assert_eq!(normalize_drop_target(&path), "https://example.com/page");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_normalize_drop_target_keeps_plain_path() {
+        let path = std::env::temp_dir().join(format!("gorun_plain_{}.exe", std::process::id()));
+        // 非 .url 文件：原样返回路径（无需真实存在）
+        let out = normalize_drop_target(&path);
+        assert_eq!(out, path.to_string_lossy().to_string());
+    }
+}

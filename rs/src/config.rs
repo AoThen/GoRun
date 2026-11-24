@@ -1,0 +1,378 @@
+use std::path::{Path, PathBuf};
+
+/// 便携优先的基准目录解析：exe 目录可写 → 便携；否则回退系统数据目录。
+/// 核心逻辑抽为纯函数 `base_dir_from`，便于单测注入探测函数。
+pub fn base_dir_from(exe_dir: &Path, probe: &dyn Fn(&Path) -> bool) -> PathBuf {
+    if probe(exe_dir) {
+        log::debug!("Using portable base dir: {:?}", exe_dir);
+        exe_dir.to_path_buf()
+    } else {
+        let fallback = app_data_fallback();
+        log::warn!(
+            "Exe dir not writable (or missing), fallback to AppData: {:?}",
+            fallback
+        );
+        fallback
+    }
+}
+
+/// 默认探测：在目录内尝试创建/删除临时文件。
+pub fn default_writable_probe(dir: &Path) -> bool {
+    let probe_file = dir.join(format!(".gorun_write_probe_{}", std::process::id()));
+    match std::fs::File::create(&probe_file) {
+        Ok(_) => {
+            if let Err(e) = std::fs::remove_file(&probe_file) {
+                log::warn!(
+                    "Failed to remove writability probe file {:?}: {}",
+                    probe_file,
+                    e
+                );
+            }
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+fn app_data_fallback() -> PathBuf {
+    dirs::data_dir()
+        .map(|d| d.join("GoRun"))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// 解析并缓存基准目录（进程级）。
+pub fn base_dir() -> PathBuf {
+    static BASE_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    BASE_DIR
+        .get_or_init(|| {
+            let exe_dir = std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|p| p.to_path_buf()));
+            match exe_dir {
+                Some(dir) => base_dir_from(&dir, &default_writable_probe),
+                None => app_data_fallback(),
+            }
+        })
+        .clone()
+}
+
+pub fn config_path() -> PathBuf {
+    base_dir().join("config.json")
+}
+
+pub fn icons_dir() -> PathBuf {
+    base_dir().join("icons")
+}
+
+/// 迁移旧版本（AppData 落盘）数据到当前基准目录：
+/// 复制 config.json、.bak1-3 与 icons 目录；只复制不删源；单文件失败仅告警。
+/// 旧目录与当前基准目录相同（如回退模式）时直接跳过。
+pub fn migrate_legacy() {
+    migrate_legacy_from(&app_data_fallback(), &base_dir());
+}
+
+/// 迁移主体（独立纯函数，便于单测真实驱动）。
+pub fn migrate_legacy_from(old: &Path, current: &Path) {
+    if old == current {
+        log::debug!("Legacy migration skipped: base dir == AppData fallback");
+        return;
+    }
+    if !old.join("config.json").exists() {
+        log::debug!("Legacy migration skipped: no old config in {:?}", old);
+        return;
+    }
+    let target = current.join("config.json");
+    if target.exists() {
+        log::info!("Legacy migration skipped: portable config already exists");
+        return;
+    }
+
+    // 空占位旧配置不迁移：所有条目均无 target（如历史版本留下的 "New Item" 占位），
+    // 属于无任何可运行数据的空壳，迁移只会把垃圾占位带进新目录。
+    // 判定失败（坏 JSON）保守照旧迁移，交由启动加载兜底处理。
+    let legacy_json = std::fs::read_to_string(old.join("config.json")).unwrap_or_default();
+    if is_placeholder_only_config(&legacy_json) {
+        log::info!(
+            "Legacy migration skipped: old config has no usable targets (placeholder-only items)"
+        );
+        return;
+    }
+
+    log::info!("Migrating legacy data from {:?} to {:?}", old, current);
+    let mut any_fail = false;
+
+    for name in [
+        "config.json",
+        "config.json.bak1",
+        "config.json.bak2",
+        "config.json.bak3",
+    ] {
+        let src = old.join(name);
+        if !src.exists() {
+            continue;
+        }
+        let dst = current.join(name);
+        if let Err(e) = std::fs::copy(&src, &dst) {
+            any_fail = true;
+            log::error!("Failed to copy {}: {}", name, e);
+        }
+    }
+
+    // 迁移即规范化：程序自己迁移的旧版数据按当前格式（sortOrder 重编号等）
+    // 重落盘，保证迁移后配置处于规范形态。
+    // 解析失败（损坏/非 JSON）时保留原样，交由启动加载兜底处理。
+    let migrated_path = current.join("config.json");
+    if migrated_path.exists() {
+        let storage = crate::storage::Storage::new(migrated_path.to_string_lossy().to_string());
+        if let Some(cfg) = storage.load() {
+            if storage.save(&cfg) {
+                log::info!("Migrated legacy config normalized and re-saved");
+            } else {
+                log::warn!("Failed to re-save migrated config; startup load will handle it");
+            }
+        } else {
+            log::warn!("Migrated config failed to parse; left as-is for startup fallback");
+        }
+    }
+
+    let old_icons = old.join("icons");
+    if old_icons.exists() {
+        let new_icons = current.join("icons");
+        if let Err(e) = std::fs::create_dir_all(&new_icons) {
+            any_fail = true;
+            log::error!("Failed to create icons dir {:?}: {}", new_icons, e);
+        } else if let Ok(entries) = std::fs::read_dir(&old_icons) {
+            for entry in entries.flatten() {
+                let src = entry.path();
+                let dst = new_icons.join(entry.file_name());
+                if src.is_file() {
+                    if let Err(e) = std::fs::copy(&src, &dst) {
+                        any_fail = true;
+                        log::error!("Failed to copy icon {:?}: {}", src, e);
+                    }
+                }
+            }
+        }
+    }
+
+    if any_fail {
+        log::warn!("Legacy migration completed with partial failures");
+    } else {
+        log::info!("Legacy migration completed");
+    }
+}
+
+/// 判定旧配置是否为"纯占位空壳"：items 非空且所有条目的 target 均为空。
+/// 兼容旧版 JSON 字段名（items[].target）；解析失败返回 false（保守照常迁移）。
+fn is_placeholder_only_config(json: &str) -> bool {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+        return false;
+    };
+    let Some(items) = v.get("items").and_then(|i| i.as_array()) else {
+        return false;
+    };
+    !items.is_empty()
+        && items.iter().all(|it| match it.get("target") {
+            // 字段缺失视同空（旧版占位条目常缺省字段）
+            None => true,
+            // 字段存在但类型异常：保守按"非空"处理，照常迁移
+            Some(v) => v.as_str().map(|t| t.trim().is_empty()).unwrap_or(false),
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_base_dir_writable_uses_exe() {
+        let dir = std::env::temp_dir().join("gorun_base_test_w");
+        let _ = std::fs::create_dir_all(&dir);
+        let out = base_dir_from(&dir, &|_| true);
+        assert_eq!(out, dir);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_base_dir_readonly_falls_back_to_appdata() {
+        let dir = std::env::temp_dir().join("gorun_base_test_ro");
+        let _ = std::fs::create_dir_all(&dir);
+        let out = base_dir_from(&dir, &|_| false);
+        assert_ne!(out, dir);
+        assert!(out.ends_with("GoRun"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_config_path_under_base_dir() {
+        let dir = std::env::temp_dir().join("gorun_base_test_cfg");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = base_dir_from(&dir, &|_| true).join("config.json");
+        assert_eq!(path.parent().unwrap(), dir);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_migrate_copies_and_keeps_source() {
+        let old = std::env::temp_dir().join("gorun_migrate_old");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur");
+        let _ = std::fs::create_dir_all(old.join("icons"));
+        let _ = std::fs::create_dir_all(&cur);
+        std::fs::write(old.join("config.json"), b"{\"version\":\"1.0.0\"}").unwrap();
+        std::fs::write(old.join("config.json.bak1"), b"bak1").unwrap();
+        std::fs::write(old.join("icons").join("abc.png"), b"png").unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        // 复制且源保留
+        assert!(cur.join("config.json").exists());
+        assert!(cur.join("config.json.bak1").exists());
+        assert!(cur.join("icons").join("abc.png").exists());
+        assert!(old.join("config.json").exists());
+        assert!(old.join("icons").join("abc.png").exists());
+
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
+    fn test_migrate_normalizes_legacy_config() {
+        // 迁移即规范化：旧版数据（sortOrder 与数组序不一致）迁移后按当前
+        // 格式重编号落盘，首启即可正常解析使用
+        let old = std::env::temp_dir().join("gorun_migrate_old_sign");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_sign");
+        let _ = std::fs::create_dir_all(&old);
+        let _ = std::fs::create_dir_all(&cur);
+        // 旧版格式：含条目、无 generated_by、sortOrder 与数组序不一致
+        let legacy = r#"{
+            "version": "1.0.0",
+            "categories": [
+                {"id":"cat_b","name":"B","sortOrder":1,"viewType":0,"iconSize":48},
+                {"id":"cat_a","name":"A","sortOrder":0,"viewType":0,"iconSize":48}
+            ],
+            "items": [
+                {"id":"item_1","name":"N1","target":"C:\\a.exe","categoryId":"cat_a","sortOrder":3}
+            ],
+            "config": {"globalHotkey":"Ctrl+/","windowX":100,"windowY":100,"windowWidth":800,"windowHeight":600}
+        }"#;
+        std::fs::write(old.join("config.json"), legacy).unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        let storage =
+            crate::storage::Storage::new(cur.join("config.json").to_string_lossy().to_string());
+        let cfg = storage.load().expect("迁移后的配置应可解析");
+        assert_eq!(cfg.data.categories.len(), 2, "迁移应保留全部分类");
+        assert_eq!(cfg.data.items.len(), 1, "迁移应保留条目");
+        assert_eq!(cfg.data.items[0].target, "C:\\a.exe");
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
+    fn test_migrate_skips_when_current_exists() {
+        let old = std::env::temp_dir().join("gorun_migrate_old2");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur2");
+        let _ = std::fs::create_dir_all(&old);
+        let _ = std::fs::create_dir_all(&cur);
+        std::fs::write(old.join("config.json"), b"old").unwrap();
+        std::fs::write(cur.join("config.json"), b"current").unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        // 已存在便携配置时不覆盖
+        assert_eq!(std::fs::read(cur.join("config.json")).unwrap(), b"current");
+
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
+    fn test_migrate_skips_when_no_old_config() {
+        let old = std::env::temp_dir().join("gorun_migrate_old_empty");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_empty");
+        let _ = std::fs::create_dir_all(&old);
+        let _ = std::fs::create_dir_all(&cur);
+        // 旧目录无 config.json → 直接跳过，不创建任何文件
+        migrate_legacy_from(&old, &cur);
+        assert!(!cur.join("config.json").exists(), "无旧配置时不应迁移");
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
+    fn test_migrate_copies_all_backups_and_multiple_icons() {
+        let old = std::env::temp_dir().join("gorun_migrate_old_full");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_full");
+        let _ = std::fs::create_dir_all(old.join("icons"));
+        let _ = std::fs::create_dir_all(&cur);
+        std::fs::write(old.join("config.json"), b"main").unwrap();
+        std::fs::write(old.join("config.json.bak1"), b"b1").unwrap();
+        std::fs::write(old.join("config.json.bak2"), b"b2").unwrap();
+        std::fs::write(old.join("config.json.bak3"), b"b3").unwrap();
+        std::fs::write(old.join("icons").join("a.png"), b"a").unwrap();
+        std::fs::write(old.join("icons").join("b.ico"), b"b").unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        for f in [
+            "config.json",
+            "config.json.bak1",
+            "config.json.bak2",
+            "config.json.bak3",
+        ] {
+            assert!(cur.join(f).exists(), "{} 应被复制", f);
+        }
+        assert!(cur.join("icons").join("a.png").exists());
+        assert!(cur.join("icons").join("b.ico").exists());
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+
+    #[test]
+    fn test_migrate_skips_same_dir() {
+        let dir = std::env::temp_dir().join("gorun_migrate_same");
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("config.json"), b"x").unwrap();
+        migrate_legacy_from(&dir, &dir);
+        assert_eq!(std::fs::read(dir.join("config.json")).unwrap(), b"x");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_placeholder_only_config_detection() {
+        // 空壳：条目存在但全部无 target（缺失字段视同空）
+        let shell = r#"{"items":[{"id":"i1","name":"New Item","target":""},{"id":"i2","name":"New Item"}]}"#;
+        assert!(is_placeholder_only_config(shell));
+        // 空白 target 同样视为空
+        let ws = r#"{"items":[{"name":"New Item","target":"   "}]}"#;
+        assert!(is_placeholder_only_config(ws));
+        // 有真实 target → 非空壳
+        let real = r#"{"items":[{"name":"app","target":"C:\\a.exe"}]}"#;
+        assert!(!is_placeholder_only_config(real));
+        // target 字段类型异常 → 保守按非空处理（照常迁移）
+        let weird = r#"{"items":[{"name":"app","target":123}]}"#;
+        assert!(!is_placeholder_only_config(weird));
+        // 空 items / 无 items / 坏 JSON → 非空壳（照常迁移，不误伤）
+        assert!(!is_placeholder_only_config(r#"{"items":[]}"#));
+        assert!(!is_placeholder_only_config(r#"{"version":"1.0.0"}"#));
+        assert!(!is_placeholder_only_config("not json"));
+    }
+
+    #[test]
+    fn test_migrate_skips_placeholder_only_config() {
+        // 空占位旧配置（如历史遗留的 6 个 "New Item"）不应被迁入新目录
+        let old = std::env::temp_dir().join("gorun_migrate_old_shell");
+        let cur = std::env::temp_dir().join("gorun_migrate_cur_shell");
+        let _ = std::fs::create_dir_all(&old);
+        let _ = std::fs::create_dir_all(&cur);
+        let shell = r#"{"version":"1.0.0","categories":[{"id":"c1","name":"默认","sortOrder":0}],"items":[{"id":"i1","name":"New Item","target":""}]}"#;
+        std::fs::write(old.join("config.json"), shell).unwrap();
+
+        migrate_legacy_from(&old, &cur);
+
+        assert!(!cur.join("config.json").exists(), "空占位配置不应被迁移");
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&cur);
+    }
+}

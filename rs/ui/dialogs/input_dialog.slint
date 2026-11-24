@@ -1,0 +1,148 @@
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 分类重命名输入框（普通覆盖层组件，模式同 ConfirmDialog；不继承 Window）
+export component InputDialog {
+    in-out property <bool> dialog-visible;
+    in property <string> dialog-title: "Input";
+    in property <string> message: "";
+    in-out property <string> input-text: "";
+    in-out property <string> error-message: "";
+    in property <string> confirm-text: "OK";
+    in property <string> cancel-text: "Cancel";
+    callback confirm();
+    callback cancel();
+
+    visible: root.dialog-visible;
+
+    // 弹窗打开时自动聚焦输入框（P1-5）
+    changed dialog-visible => {
+        if (root.dialog-visible) {
+            input-field.focus();
+        }
+    }
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #00000060;
+
+        // 遮罩吞点击：铺满后防止鼠标事件穿透到下层（误触启动条目/关闭弹层）。
+        // 仅吞不关——关闭由确定/取消按钮或 Esc 负责（保守，防误触丢数据）。
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { }
+            scroll-event(event) => { accept }
+            // 吞掉右键，防穿透到底层触发右键菜单
+            pointer-event(PointerEvent) => { EventResult.accept }
+        }
+
+        Rectangle {
+            // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
+            width: min(360px, root.width * 0.92);
+            height: min(max(self.preferred-height, 160px), root.height * 0.92);
+            background: Theme.bg-2;
+            border-radius: Theme.radius-lg;
+            border-width: 1px;
+            border-color: Theme.stroke-1;
+
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            VerticalBox {
+                // spacing 10px：紧凑起见（卡片高度现已贴合内容，不会裁切按钮）；
+                // 历史上 180px 固定高帽下 12px 间距曾致底部按钮被裁 2px。
+                padding: 16px;
+                spacing: 10px;
+
+                Text {
+                    text: root.dialog-title;
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-lg;
+                    font-weight: 700;
+                }
+
+                input-scope := FocusScope {
+                    enabled: root.dialog-visible;
+                    key-pressed(event) => {
+                        if (event.text == "\u{1b}") {
+                            root.cancel();
+                            return accept;
+                        }
+                        if (event.text == "\u{0d}") {
+                            root.confirm();
+                            return accept;
+                        }
+                        reject
+                    }
+
+                    Rectangle {
+                        width: 100%;
+                        height: 32px;
+                        background: Theme.bg-3;
+                        border-radius: Theme.radius-xs;
+                        border-width: 1px;
+                        border-color: Theme.stroke-2;
+
+                        VerticalBox {
+                            padding: 6px;
+                            spacing: 0;
+
+                            input-field := TextInput {
+                                text: root.input-text;
+                                color: Theme.text-1;
+                                font-size: Theme.font-size-sm;
+                                width: 100%;
+                                height: 100%;
+                                edited => { root.error-message = ""; }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    text: root.error-message;
+                    color: Theme.danger;
+                    font-size: Theme.font-size-sm;
+                    visible: root.error-message != "";
+                }
+
+                HorizontalBox {
+                    alignment: end;
+                    spacing: 8px;
+
+                    cancel-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.cancel(); }
+                        Rectangle {
+                            background: cancel-ta.has-hover ? Theme.hover : transparent;
+                            border-radius: Theme.radius-xs;
+                            border-width: 1px;
+                            border-color: Theme.stroke-2;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.cancel-text; color: Theme.text-1; font-size: 13px; }
+                            }
+                        }
+                    }
+
+                    confirm-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.confirm(); }
+                        Rectangle {
+                            background: Theme.accent;
+                            border-radius: Theme.radius-xs;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.confirm-text; color: Theme.accent-fg; font-size: 13px; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,129 @@
+import { ItemTile } from "item_tile.slint";
+import { VerticalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { ItemModel } from "../models.slint";
+
+export component ItemGrid {
+    callback item-tile-clicked(index: int);
+    callback item-right-clicked(index: int, x: length, y: length);
+    // 拖拽排序（F2-1，DragArea/DropArea）：data 绑定 pure 回调即时构造（消除时序竞态）；
+    // 被拖入时上报 (target, data)。
+    pure callback drag-data(index: int) -> data-transfer;
+    callback dropped-on(index: int, data: data-transfer);
+
+    in property <[ItemModel]> items;
+    in property <bool> is-icon-view: true;
+    in property <int> selected-index: 0;
+
+    // 布局约束：内部 Flickable（width:100%）合成的有限 max-width 会把本组件在
+    // HorizontalBox 中的拉伸钳死在小宽度上，导致列表多列永远展不开（恒 1 列）。
+    // 显式解除：与 main_window 的 max-width 同款手法，16777215px = 2^24-1 即 Slint 无上限。
+    min-width: 0px;
+    max-width: 16777215px;
+
+    // 拖拽排序状态（F2-1）：drag-enabled 搜索态为 false（禁拖拽）。
+    in property <bool> drag-enabled: true;
+
+    // 图标视图：响应式网格（对齐原版 95px 单元格，columns = max(1, width/95)）
+    in property <length> icon-cell-width: 96px;
+    in property <length> icon-cell-height: 88px;
+    // 列表视图：固定列宽 160px 横向自适应多列，行高 34px
+    in property <length> list-cell-width: 160px;
+    in property <length> list-cell-height: 34px;
+
+    // 当前视图单元格尺寸（按 is-icon-view 切换）
+    property <length> cell-width: root.is-icon-view ? root.icon-cell-width : root.list-cell-width;
+    property <length> cell-height: root.is-icon-view ? root.icon-cell-height : root.list-cell-height;
+
+    // 可用宽度内能容纳的列数（至少 1 列）；Math.floor 截断偏保守（宁可少一列不溢出）。
+    // 绑定 Flickable 实际视口宽 flick.width（而非 self.width），消除布局时序歧义；
+    // out 暴露供上层/测试观察。
+    out property <int> column-count:
+        max(1, Math.floor((flick.width - 2 * Theme.spacing-md) / (root.cell-width + Theme.spacing-sm)));
+
+    // P2-6：滚动位置透出（Rust 侧重建条目模型后恢复，图标回写不使列表跳回顶部）
+    // Slint 1.18：viewport-y 已弃用，改用 content-y（语义等价）
+    in-out property <length> scroll-y <=> flick.content-y;
+
+    // 内容总高 = 行数 * 单元高 - 末行间距 + 上下 padding
+    property <length> grid-content-height:
+        ((root.items.length + root.column-count - 1) / root.column-count)
+            * (root.cell-height + Theme.spacing-sm)
+            - Theme.spacing-sm + 2 * Theme.spacing-md;
+
+    // ---- 统一网格（图标/列表共用）：Flickable + 绝对定位，cell 尺寸按视图切换 ----
+    // mouse-drag-pan-enabled: false —— 鼠标拖动直通 DragArea（拖拽排序），
+    // 触摸拖动与滚轮仍正常滚动（官方文档：该属性仅影响鼠标拖动手势）。
+    flick := Flickable {
+        width: 100%;
+        height: 100%;
+        // Slint 1.18：viewport-width/height 已弃用，改用 content-width/height（语义等价）
+        content-width: self.width;
+        content-height: root.grid-content-height;
+        mouse-drag-pan-enabled: false;
+
+        Rectangle {
+            width: 100%;
+            height: root.grid-content-height;
+            x: 0;
+            y: 0;
+
+            for item[index] in items: ItemTile {
+                item: item;
+                x: Math.mod(index, root.column-count) * (root.cell-width + Theme.spacing-sm) + Theme.spacing-md;
+                y: (index / root.column-count) * (root.cell-height + Theme.spacing-sm) + Theme.spacing-md;
+                width: root.cell-width;
+                height: root.cell-height;
+                icon-cell-height: root.cell-height;
+                is-icon-view: root.is-icon-view;
+                selected: index == root.selected-index;
+                item-index: index;
+                drag-data(index) => { root.drag-data(index); }
+                drag-enabled: root.drag-enabled;
+                clicked => { root.item-tile-clicked(index); }
+                right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+                dropped-on(index, data) => { root.dropped-on(index, data); }
+            }
+        }
+    }
+
+    in property <string> empty-text: "No items here yet";
+    in property <string> empty-hint-text: "";
+
+    // 空状态引导（v2：48px 虚线圆角框 + 主文案 + 副文案；虚线 Slint 不支持，以 1px stroke 描边近似）
+    Rectangle {
+        visible: items.length == 0;
+        width: 100%;
+        height: 100%;
+
+        VerticalBox {
+            alignment: center;
+            cross-axis-alignment: center;
+            spacing: Theme.spacing-md;
+
+            Rectangle {
+                width: 48px;
+                height: 48px;
+                border-width: 1px;
+                border-color: Theme.stroke-1;
+                border-radius: Theme.radius-md;
+            }
+
+            Text {
+                text: root.empty-text;
+                color: Theme.text-1;
+                font-size: Theme.font-size-md;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: root.empty-hint-text;
+                color: Theme.text-2;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                visible: root.empty-hint-text != "";
+            }
+        }
+    }
+}

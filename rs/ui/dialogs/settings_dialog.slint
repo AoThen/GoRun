@@ -1,0 +1,183 @@
+import { VerticalBox, HorizontalBox, Button, CheckBox, Slider, ComboBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 设置对话框（V1：背景图 + 日志档位 + 自动隐藏行为）。模式同 AboutDialog：普通覆盖层组件，
+// visible 由 main_window 的 settings-dialog-visible 驱动，Esc/关闭按钮收起。
+export component SettingsDialog {
+    in-out property <bool> dialog-visible;
+    in property <string> title-text: "Settings";
+    in property <string> bg-label: "Background image";
+    in property <string> bg-status-text: "";
+    in property <string> bg-select-text: "Choose image...";
+    in property <string> bg-clear-text: "Clear";
+    in property <string> bg-dim-label: "Dim overlay";
+    in property <string> log-label: "Log level";
+    in property <[string]> log-level-model: [];
+    in property <int> log-level-index: 0;
+    in property <string> auto-hide-label: "";
+    in property <bool> auto-hide-enabled: false;
+    in property <bool> has-background: false;
+    in property <bool> bg-dim-enabled: true;
+    in property <float> bg-dim-percent: 35;
+    in property <string> close-text: "Close";
+    callback select-background();
+    callback clear-background();
+    callback dim-toggled(enabled: bool);
+    callback dim-changed(percent: float);
+    callback log-level-changed(index: int);
+    callback auto-hide-toggled(enabled: bool);
+    callback close();
+
+    visible: root.dialog-visible;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #00000060;
+
+        // 遮罩吞点击：铺满后防止鼠标事件穿透到下层（误触启动条目/关闭弹层）。
+        // 仅吞不关——关闭由 Close 按钮或 Esc 负责（保守，防误触丢数据）。
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { }
+            scroll-event(event) => { accept }
+            // 吞掉右键，防穿透到底层触发右键菜单
+            pointer-event(PointerEvent) => { EventResult.accept }
+        }
+
+        Rectangle {
+            // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
+            width: min(560px, root.width * 0.92);
+            // 高度取内容 preferred 与 420px 地板的较大者（preferred 偏小导致卡片压扁），
+            // 矮窗口收缩到窗口 92% 并由 ScrollView 滚动。
+            height: min(max(self.preferred-height, 420px), root.height * 0.92);
+            background: Theme.bg-2;
+            border-radius: Theme.radius-lg;
+            border-width: 1px;
+            border-color: Theme.stroke-1;
+
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            VerticalBox {
+                padding: 16px;
+                spacing: 12px;
+
+                Text {
+                    text: root.title-text;
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-lg;
+                    font-weight: 700;
+                }
+
+                // 中段内容可滚动：卡片随窗口缩小时，标题与关闭按钮始终可见
+                ScrollView {
+                    vertical-stretch: 1;
+
+                    VerticalBox {
+                        padding: 0px;
+                        spacing: 12px;
+
+                        Text {
+                            text: root.bg-label;
+                            color: Theme.text-1;
+                            font-size: Theme.font-size-md;
+                        }
+
+                        Text {
+                            text: root.bg-status-text;
+                            color: Theme.text-2;
+                            font-size: Theme.font-size-sm;
+                            overflow: elide;
+                        }
+
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            Button {
+                                text: root.bg-select-text;
+                                clicked => {
+                                    root.select-background();
+                                }
+                            }
+                            Button {
+                                text: root.bg-clear-text;
+                                enabled: root.has-background;
+                                clicked => {
+                                    root.clear-background();
+                                }
+                            }
+                        }
+
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            CheckBox {
+                                text: root.bg-dim-label;
+                                checked: root.bg-dim-enabled;
+                                toggled => {
+                                    root.dim-toggled(self.checked);
+                                }
+                            }
+                            Slider {
+                                min-width: 160px;
+                                horizontal-stretch: 1;
+                                minimum: 0;
+                                maximum: 100;
+                                value: root.bg-dim-percent;
+                                enabled: root.bg-dim-enabled;
+                                changed(value) => {
+                                    root.dim-changed(value);
+                                }
+                            }
+                        }
+
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            Text {
+                                text: root.log-label;
+                                color: Theme.text-1;
+                                font-size: Theme.font-size-md;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                min-width: 160px;
+                                horizontal-stretch: 1;
+                                model: root.log-level-model;
+                                current-index: root.log-level-index;
+                                // ComboBox 的 selected 回调参数是选中项文本（非索引），映射回索引
+                                selected(value) => {
+                                    root.log-level-changed(
+                                        value == root.log-level-model[1] ? 1 :
+                                        value == root.log-level-model[2] ? 2 : 0
+                                    );
+                                }
+                            }
+                        }
+
+                        // P3-11：光标离开自动隐藏开关（运行时即时生效，无需重启）
+                        CheckBox {
+                            text: root.auto-hide-label;
+                            checked: root.auto-hide-enabled;
+                            toggled => {
+                                root.auto-hide-toggled(self.checked);
+                            }
+                        }
+                    }
+                }
+
+                HorizontalBox {
+                    alignment: end;
+                    Button {
+                        text: root.close-text;
+                        primary: true;
+                        clicked => {
+                            root.close();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

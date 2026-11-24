@@ -1,0 +1,109 @@
+import { Theme } from "../theme.slint";
+import { VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+
+export component ConfirmDialog {
+    in-out property <bool> dialog-visible;
+    in property <string> dialog-title: "确认";
+    in property <string> message: "";
+    in property <string> confirm-text: "确定";
+    in property <string> cancel-text: "取消";
+    in property <bool> danger: false;
+
+    callback confirm();
+    callback cancel();
+
+    visible: root.dialog-visible;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #00000060;
+
+        // 遮罩吞点击：铺满后防止鼠标事件穿透到下层（误触启动条目/关闭弹层）。
+        // 仅吞不关——关闭由确认/取消按钮或 Esc 负责（保守，防误触丢数据）。
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { }
+            scroll-event(event) => { accept }
+            // 吞掉右键，防穿透到底层触发右键菜单
+            pointer-event(PointerEvent) => { EventResult.accept }
+        }
+
+        // 垂直居中容器：卡片高度贴合内容，消息区用 ScrollView 滚动——
+        // 长消息（如外部配置目标列表）不再把卡片撑出屏幕/与背景堆叠，
+        // 矮窗口时卡片收缩到窗口 92% 内滚动显示。
+        VerticalLayout {
+            alignment: center;
+
+            Rectangle {
+                // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
+                width: min(340px, root.width * 0.92);
+                height: min(max(self.preferred-height, 160px), root.height * 0.92);
+                cross-axis-self-alignment: center;
+                background: Theme.bg-2;
+                border-radius: Theme.radius-lg;
+                border-width: 1px;
+                border-color: Theme.stroke-1;
+
+            VerticalBox {
+                padding: 16px;
+                spacing: 16px;
+
+                Text {
+                    text: root.dialog-title;
+                    color: Theme.text-1;
+                    font-size: Theme.font-size-lg;
+                    font-weight: 700;
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+
+                    Text {
+                        text: root.message;
+                        color: Theme.text-2;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                }
+
+                HorizontalBox {
+                    alignment: end;
+                    spacing: 8px;
+
+                    cancel-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.cancel(); }
+                        Rectangle {
+                            background: cancel-ta.has-hover ? Theme.hover : transparent;
+                            border-radius: Theme.radius-xs;
+                            border-width: 1px;
+                            border-color: Theme.stroke-2;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.cancel-text; color: Theme.text-1; font-size: 13px; }
+                            }
+                        }
+                    }
+
+                    confirm-ta := TouchArea {
+                        width: 80px;
+                        height: 32px;
+                        clicked => { root.confirm(); }
+                        Rectangle {
+                            background: root.danger ? Theme.danger : Theme.accent;
+                            border-radius: Theme.radius-xs;
+                            HorizontalBox { alignment: center;
+                                Text { text: root.confirm-text; color: root.danger ? Theme.danger-fg : Theme.accent-fg; font-size: 13px; }
+                            }
+                        }
+                    }
+                }
+            }
+            }
+        }
+    }
+}

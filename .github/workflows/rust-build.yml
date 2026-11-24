@@ -1,0 +1,172 @@
+name: Rust Build (GoRun-rs)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rs/**'
+      - 'resources/icons/**'
+      - 'resources/lang/**'
+      - '.github/workflows/rust-build.yml'
+  pull_request:
+    paths:
+      - 'rs/**'
+      - 'resources/icons/**'
+      - 'resources/lang/**'
+      - '.github/workflows/rust-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-build-windows:
+    runs-on: windows-latest
+    # delete-workflow-runs 需要 actions:write 删除本仓库历史 run
+    permissions:
+      contents: read
+      actions: write
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@0cf693bc9909e5e867ee8f27b813224ba862939c # v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7
+          keep_minimum_runs: 3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      # 带 backend-testing feature 使 gui_integration_test.rs 参与编译检查
+      - name: Run clippy (lints)
+        run: cargo clippy --all-targets --features backend-testing -- -D warnings
+
+      - name: Build (debug)
+        run: cargo build
+
+      - name: Run unit tests
+        run: cargo test --lib
+
+      - name: Run storage integration tests
+        run: cargo test --test storage_test
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoRun-rs-release
+          path: rs/target/release/GoRun.exe
+          retention-days: 7
+
+  rust-tests-windows:
+    # Windows 原生测试（P0-1/P1-7/托盘/图标等平台路径的 CI 覆盖）：
+    # Linux CI 无法执行 windows crate 路径（COM/注册表/WinHotkey），本 job 补齐。
+    # GUI 集成测试在 Windows runner 上无需 xvfb（有真实桌面会话），但事件循环
+    # 不可重建，仍以 --test-threads=1 串行执行，与 Linux job 策略一致。
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      - name: Build with testing backend
+        run: cargo build --features backend-testing
+
+      - name: Run all tests (Windows native)
+        run: cargo test --features backend-testing -- --test-threads=1
+
+  rust-gui-tests-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libfontconfig1-dev libfreetype6-dev xvfb
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rs/Cargo.lock') }}
+
+      - name: Build with testing
+        run: cargo build
+
+      - name: Run GUI integration tests (xvfb)
+        run: xvfb-run cargo test --features backend-testing --test gui_integration_test -- --test-threads=1
+
+      - name: Run all tests (xvfb)
+        run: xvfb-run cargo test --features backend-testing -- --test-threads=1
+
+  release-latest:
+    name: Publish latest release
+    needs: rust-build-windows
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GoRun-rs-release
+
+      - name: Zip release exe
+        run: zip -9 GoRun-rs-release.zip GoRun.exe
+
+      - name: Force-update latest tag
+        run: |
+          git tag -f latest
+          git push -f origin latest
+
+      - name: Replace latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest -y >/dev/null 2>&1 || true
+          gh release create latest GoRun-rs-release.zip \
+            --title "GoRun CI build $(git rev-parse --short HEAD)" \
+            --notes "Auto-built by cloud CI on $(date +%Y-%m-%d UTC), commit $(git rev-parse --short HEAD)" \
+            --latest

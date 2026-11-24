@@ -1,0 +1,45 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// Toast（v2 §2.3）：右下角浮出；bg-2 + stroke-1 描边 + radius 6；error 时文字 danger 色。
+// 计时与显隐由 ui_sync::show_toast 控制（单例 Timer）。
+export component Toast {
+    in property <string> message: "";
+    in property <bool> error: false;
+    in property <bool> toast-visible: false;
+
+    visible: root.toast-visible;
+
+    Rectangle {
+        x: parent.width - self.width - 12px;
+        y: parent.height - self.height - 12px;
+        width: min(360px, toast-text.preferred-width + 26px);
+        min-height: 36px;
+        background: Theme.bg-2;
+        border-width: 1px;
+        border-color: Theme.stroke-1;
+        border-radius: Theme.radius-md;
+
+        // 吞掉点击与滚轮，防止鼠标事件穿透到下层（误触背景/弹层）
+        TouchArea {
+            clicked => { }
+            scroll-event(event) => { accept }
+            // 吞掉右键，防穿透到底层触发右键菜单
+            pointer-event(PointerEvent) => { EventResult.accept }
+        }
+
+        HorizontalBox {
+            padding: Theme.spacing-md;
+            spacing: Theme.spacing-sm;
+
+            toast-text := Text {
+                text: root.message;
+                color: root.error ? Theme.danger : Theme.text-1;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}

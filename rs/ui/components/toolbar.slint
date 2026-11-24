@@ -1,0 +1,171 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// 工具行（v2 §2.3）：搜索框（左弹性，高 30px）+ 视图切换/主题切换/汉堡 三个 32×32 图标按钮。
+// 图标统一用 Path 矢量绘制（对齐原型 SVG），不依赖系统字体字形。
+// 保留 field-focused 回写链路（main_window 回车守卫与 Ctrl+F 依赖）。
+export component Toolbar {
+    // 有壁纸时工具行保持纯色（与无壁纸时的透明观感一致），壁纸仅在条目区透出
+    in property <bool> has-bg-image: false;
+    in-out property <string> text;
+    in-out property <bool> field-focused: false;
+    in property <string> search-hint: "";
+    in property <bool> is-icon-view: true;
+    callback search-changed(text: string);
+    callback toggle-view();
+    callback toggle-theme();
+    callback hamburger-clicked();
+    // Ctrl+F：聚焦搜索框（T4 交互补齐）
+    callback focus-search();
+    focus-search() => { search-edit.focus(); }
+
+    height: 44px;
+
+    // 壁纸时的纯色底（底层，不遮挡内容）；无壁纸时透明，与原观感一致
+    Rectangle {
+        background: root.has-bg-image ? Theme.bg-0 : transparent;
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+    }
+
+    HorizontalBox {
+        spacing: Theme.spacing-md;
+        // 垂直 6px = (44-32)/2，使 30px 搜索框/32px 按钮在 44px 行内垂直居中；
+        // 水平 8px 与原型 .toolbar{padding:0 8px} 一致。
+        padding-left: Theme.spacing-md;
+        padding-right: Theme.spacing-md;
+        padding-top: 6px;
+        padding-bottom: 6px;
+
+        // 搜索框（高 30px，裸 TextInput 自绘 + 放大镜 + 自绘 placeholder）
+        Rectangle {
+            height: 30px;
+            background: Theme.bg-3;
+            border-width: 1px;
+            border-color: search-edit.has-focus ? Theme.accent : Theme.stroke-2;
+            border-radius: Theme.radius-xs;
+            horizontal-stretch: 1;
+
+            // 放大镜（原型 14px SVG：圆 + 柄）
+            Path {
+                x: 10px;
+                y: (parent.height - self.height) / 2;
+                width: 14px;
+                height: 14px;
+                viewbox-width: 16;
+                viewbox-height: 16;
+                commands: "M 11.5 7 A 4.5 4.5 0 1 1 2.5 7 A 4.5 4.5 0 1 1 11.5 7 Z M 10.5 10.5 L 14 14";
+                stroke: Theme.text-2;
+                stroke-width: 1.5px;
+                fill: transparent;
+            }
+
+            search-edit := TextInput {
+                x: 30px;
+                width: parent.width - self.x - 10px;
+                height: parent.height;
+                vertical-alignment: center;
+                color: Theme.text-1;
+                font-size: Theme.font-size-md;
+                text <=> root.text;
+                edited => { root.search-changed(self.text); }
+                changed has-focus => { root.field-focused = self.has-focus; }
+            }
+
+            // 自绘 placeholder（builtin TextInput 无 placeholder 属性，仿官方 LineEditBase）
+            Text {
+                x: 30px;
+                width: parent.width - self.x - 10px;
+                height: parent.height;
+                vertical-alignment: center;
+                text: (root.text == "" && search-edit.preedit-text == "") ? root.search-hint : "";
+                color: Theme.text-2;
+                font-size: Theme.font-size-md;
+            }
+        }
+        // 视图切换（图标视图 ↔ 列表视图）
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: view-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
+
+            view-touch := TouchArea {
+                clicked => { root.toggle-view(); }
+
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: root.is-icon-view
+                        ? "M 1 1 L 7 1 L 7 7 L 1 7 Z M 9 1 L 15 1 L 15 7 L 9 7 Z M 1 9 L 7 9 L 7 15 L 1 15 Z M 9 9 L 15 9 L 15 15 L 9 15 Z"
+                        : "M 1 2 L 15 2 L 15 4.6 L 1 4.6 Z M 1 6.7 L 15 6.7 L 15 9.3 L 1 9.3 Z M 1 11.4 L 15 11.4 L 15 14 L 1 14 Z";
+                    fill: view-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                }
+            }
+        }
+
+        // 主题切换（对齐原型：描边圆 + 右半填充半圆）
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: theme-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
+
+            theme-touch := TouchArea {
+                clicked => { root.toggle-theme(); }
+
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: "M 14.5 8 A 6.5 6.5 0 1 1 1.5 8 A 6.5 6.5 0 1 1 14.5 8 Z";
+                    stroke: theme-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                    stroke-width: 1.5px;
+                    fill: transparent;
+                }
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: "M 8 1.5 A 6.5 6.5 0 0 1 8 14.5 Z";
+                    fill: theme-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                }
+            }
+        }
+
+        // 汉堡菜单（右锚定弹层入口）
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: burger-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
+
+            burger-touch := TouchArea {
+                clicked => { root.hamburger-clicked(); }
+
+                Path {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 16px;
+                    height: 16px;
+                    viewbox-width: 16;
+                    viewbox-height: 16;
+                    commands: "M 1.5 3 L 14.5 3 L 14.5 4.8 L 1.5 4.8 Z M 1.5 7.1 L 14.5 7.1 L 14.5 8.9 L 1.5 8.9 Z M 1.5 11.2 L 14.5 11.2 L 14.5 13 L 1.5 13 Z";
+                    fill: burger-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                }
+            }
+        }
+    }
+}

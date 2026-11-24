@@ -1,0 +1,187 @@
+import { VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { CategoryModel } from "../models.slint";
+
+export component Sidebar {
+    // 有壁纸时侧边栏保持纯色（与无壁纸时的透明观感一致），壁纸仅在条目区透出
+    in property <bool> has-bg-image: false;
+    in property <[CategoryModel]> categories;
+    in-out property <int> selected-index: 0;
+    in property <string> title-text: "Categories";
+    in property <string> add-category-text: "+ Category";
+    callback category-selected(index: int);
+    callback category-right-clicked(index: int, x: length, y: length);
+    callback new-category();
+    // 分类拖拽排序（F2-1，DragArea/DropArea）：data 绑定 pure 回调即时构造（消除时序竞态）；
+    // 被拖入时上报 (target, data)。
+    pure callback category-drag-data(index: int) -> data-transfer;
+    callback category-dropped-on(index: int, data: data-transfer);
+    // 滚轮切页（F7）：分类项滚轮 → 上/下一分类
+    callback wheel-switch(delta: int);
+    // 滚轮累积（L-8）：高分辨率/平滑滚轮单次事件 delta 小，直接每事件切页
+    // 会连续跳多页；累积到阈值再切换一次。
+    property <length> wheel-accum: 0px;
+    in property <bool> drag-enabled: true;
+
+    width: 180px;
+
+    // 壁纸时的纯色底（底层，不遮挡内容）；无壁纸时透明，与原观感一致
+    Rectangle {
+        background: root.has-bg-image ? Theme.bg-0 : transparent;
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+    }
+
+    VerticalBox {
+        spacing: Theme.spacing-sm;
+        padding: Theme.spacing-md;
+
+        Text {
+            text: root.title-text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            color: Theme.text-1;
+        }
+
+        // 分类列表：ScrollView + VerticalLayout（替代 ListView）。
+        // ScrollView 默认 mouse-drag-pan-enabled: false —— 鼠标拖动直通 DragArea
+        // （分类多、可滚动时仍可拖拽排序）；触摸拖动与滚轮仍正常滚动。
+        // 分类量级（<50）无需 ListView 虚拟化，全量渲染性能无损。
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                for cat[index] in categories: Rectangle {
+                    height: 32px;
+                    // 拖入高亮优先于选中底（同为 accent-subtle，视觉一致）
+                    background: cat-drop.has-drag ? Theme.accent-subtle : (index == root.selected-index ? Theme.accent-subtle : transparent);
+                    border-radius: Theme.radius-xs;
+
+                    // 拖拽视觉反馈：拖拽中源行半透明
+                    drag := DragArea {
+                        enabled: root.drag-enabled;
+                        data: root.category-drag-data(index);
+                        allow-move: true;
+                        width: 100%;
+                        height: 100%;
+                        opacity: self.dragging ? 0.4 : 1.0;
+
+                        cat-drop := DropArea {
+                            can-drop(event) => {
+                                return DragAction.move;
+                            }
+                            dropped(event) => {
+                                root.category-dropped-on(index, event.data);
+                                return DragAction.move;
+                            }
+
+                            cat-touch := TouchArea {
+                                clicked => {
+                                    root.selected-index = index;
+                                    root.category-selected(index);
+                                }
+                                scroll-event(event) => {
+                                    if (event.delta-y != 0) {
+                                        root.wheel-accum += event.delta-y;
+                                        if (root.wheel-accum >= 40px || root.wheel-accum <= -40px) {
+                                            root.wheel-switch(root.wheel-accum > 0 ? 1 : -1);
+                                            root.wheel-accum = 0px;
+                                        }
+                                        accept
+                                    } else {
+                                        reject
+                                    }
+                                }
+                                pointer-event(PointerEvent) => {
+                                    if (PointerEvent.button == PointerEventButton.right && PointerEvent.kind == PointerEventKind.down) {
+                                        root.selected-index = index;
+                                        root.category-right-clicked(index, self.pressed-x, self.pressed-y);
+                                    }
+                                }
+
+                                HorizontalBox {
+                                    spacing: 0;
+                                    padding: 0;
+
+                                    // 选中指示条（v2：左缘 3px accent）
+                                    Rectangle {
+                                        width: 3px;
+                                        height: 100%;
+                                        background: index == root.selected-index ? Theme.accent : transparent;
+                                    }
+
+                                    Rectangle {
+                                        width: Theme.spacing-md - 3px;
+                                        height: 100%;
+                                    }
+
+                                    Text {
+                                        text: cat.name;
+                                        color: Theme.text-1;
+                                        font-size: Theme.font-size-md;
+                                        font-weight: index == root.selected-index ? 700 : 400;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+
+                                    // 计数徽章（v2：行尾右对齐 11px）
+                                    Text {
+                                        text: cat.count;
+                                        color: Theme.text-2;
+                                        font-size: Theme.font-size-xs;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 新建分类行（v2：text-2 左对齐，hover 显底并提亮；对齐原型 .cat-add）
+        Rectangle {
+            height: 32px;
+            background: add-cat-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-xs;
+
+            add-cat-touch := TouchArea {
+                clicked => {
+                    root.new-category();
+                }
+
+                HorizontalBox {
+                    spacing: 0;
+                    padding: 0;
+
+                    Rectangle {
+                        width: Theme.spacing-md;
+                        height: 100%;
+                    }
+
+                    Text {
+                        text: "+";
+                        font-size: Theme.font-size-md;
+                        color: add-cat-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        width: Theme.spacing-sm;
+                        height: 100%;
+                    }
+
+                    Text {
+                        text: root.add-category-text;
+                        font-size: Theme.font-size-md;
+                        color: add-cat-touch.has-hover ? Theme.text-1 : Theme.text-2;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

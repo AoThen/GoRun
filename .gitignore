@@ -1,0 +1,26 @@
+# Build directories
+out/
+rs/target/
+
+# IDE
+.idea/
+.vscode/
+
+# Compiled files
+*.exe
+*.dll
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+AGENTS.md
+
+# AI 代理本地规划产物
+.opencode/
+.reasonix/
