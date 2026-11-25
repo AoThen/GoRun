@@ -1475,7 +1475,9 @@ pub fn wire_handler(
                             ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                         }
                     }
-                    None => {}
+                    // `_` 兜底：guard 失败的 MoveUp/MoveDown 与 None 均静默忽略
+                    // （带 guard 的臂不计入 match 穷尽性，须有通配臂）。
+                    _ => {}
                 }
             }
         }
