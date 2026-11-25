@@ -150,201 +150,6 @@ fn apply_item_drop(state: &Rc<RefCell<AppState>>, source: usize, target: usize) 
     true
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_click_debounce_same_item_within_window() {
-        let now = std::time::Instant::now();
-        let last = ("i1".to_string(), now - std::time::Duration::from_millis(100));
-        assert!(click_is_debounced(Some(&last), "i1", now));
-    }
-
-    #[test]
-    fn test_click_debounce_other_item_not_suppressed() {
-        let now = std::time::Instant::now();
-        let last = ("i1".to_string(), now - std::time::Duration::from_millis(100));
-        assert!(!click_is_debounced(Some(&last), "i2", now));
-    }
-
-    #[test]
-    fn test_click_debounce_expired_window_runs() {
-        let now = std::time::Instant::now();
-        let last = ("i1".to_string(), now - std::time::Duration::from_millis(401));
-        assert!(!click_is_debounced(Some(&last), "i1", now));
-    }
-
-    #[test]
-    fn test_click_debounce_no_history_runs() {
-        assert!(!click_is_debounced(None, "i1", std::time::Instant::now()));
-    }
-
-    #[test]
-    fn test_item_menu_build_normal_mode() {
-        let loc = Localization::new("zh-CN");
-        let cats = vec![("c1".to_string(), "Apps".to_string())];
-        let (texts, actions) = build_item_menu(&loc, false, &cats);
-        assert_eq!(texts.len(), actions.len(), "文本与动作必须平行");
-        // 固定 9 项 + 上移/下移 + 1 个 MoveTo + OpenFolder = 12
-        assert_eq!(texts.len(), 12);
-        assert!(matches!(actions[2], ItemMenuAction::Delete), "第 3 项应为删除");
-        let danger_count = actions
-            .iter()
-            .filter(|a| matches!(a, ItemMenuAction::Delete))
-            .count();
-        assert_eq!(danger_count, 1, "仅删除项为 danger");
-        assert!(matches!(actions.last(), Some(ItemMenuAction::OpenFolder)));
-        assert!(matches!(&actions[10], ItemMenuAction::MoveTo(id) if id == "c1"));
-    }
-
-    #[test]
-    fn test_item_menu_build_search_mode_hides_reorder() {
-        let loc = Localization::new("zh-CN");
-        let cats = vec![("c1".to_string(), "Apps".to_string())];
-        let (texts, actions) = build_item_menu(&loc, true, &cats);
-        assert_eq!(texts.len(), actions.len());
-        // 搜索态隐藏上移/下移：12 - 2 = 10 项
-        assert_eq!(texts.len(), 10);
-        assert!(!actions
-            .iter()
-            .any(|a| matches!(a, ItemMenuAction::MoveUp | ItemMenuAction::MoveDown)));
-    }
-
-    /// 构造带 1 分类 3 条目的 AppState（不依赖窗口；storage 指向独立临时文件）。
-    fn make_drop_state() -> Rc<RefCell<AppState>> {
-        use crate::icon_cache::IconCache;
-        use crate::item_manager::ItemManager;
-        use crate::model::{AppConfig, AppData, Category, Config, Item};
-        use crate::storage::Storage;
-        let app_config = AppConfig {
-            version: "test".into(),
-            data: AppData {
-                categories: vec![Category {
-                    id: "cat_1".into(),
-                    name: "Programs".into(),
-                    ..Default::default()
-                }],
-                items: vec![
-                    Item {
-                        id: "i1".into(),
-                        name: "A".into(),
-                        target: "C:\\a.exe".into(),
-                        category_id: "cat_1".into(),
-                        sort_order: 0,
-                        ..Default::default()
-                    },
-                    Item {
-                        id: "i2".into(),
-                        name: "B".into(),
-                        target: "C:\\b.exe".into(),
-                        category_id: "cat_1".into(),
-                        sort_order: 1,
-                        ..Default::default()
-                    },
-                    Item {
-                        id: "i3".into(),
-                        name: "C".into(),
-                        target: "C:\\c.exe".into(),
-                        category_id: "cat_1".into(),
-                        sort_order: 2,
-                        ..Default::default()
-                    },
-                ],
-            },
-            config: Config::default(),
-            extra_config: Default::default(),
-        };
-        Rc::new(RefCell::new(AppState {
-            manager: ItemManager::new(app_config),
-            storage: Storage::new(
-                std::env::temp_dir()
-                    .join(format!("gorun_handlers_drop_{}.json", std::process::id()))
-                    .to_string_lossy()
-                    .to_string(),
-            ),
-            icon_cache: IconCache::new(),
-            current_category_id: "cat_1".into(),
-            search_query: String::new(),
-            edit_dialog: None,
-            loc: Rc::new(RefCell::new(Localization::new("zh-CN"))),
-            save_fail_notified: false,
-            pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(
-                std::collections::HashMap::new(),
-            )),
-            icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
-            drop_handler: None,
-            geometry_dirty: false,
-            last_geometry_change: None,
-            soft_dirty: false,
-            last_soft_change: None,
-            pending_run_results: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
-            item_hotkey_mgr: Rc::new(RefCell::new(crate::hotkey::ItemHotkeyManager::new())),
-            item_hotkey_tx: {
-                let (tx, _rx) = std::sync::mpsc::channel::<String>();
-                tx
-            },
-            low_resident: Rc::new(std::cell::Cell::new(false)),
-            auto_hide_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        }))
-    }
-
-    #[test]
-    fn test_apply_item_drop_reorders_and_persists() {
-        let state = make_drop_state();
-        assert!(apply_item_drop(&state, 0, 2), "有效拖拽应重排成功");
-        let order: Vec<String> = state
-            .borrow()
-            .manager
-            .items("cat_1")
-            .iter()
-            .map(|it| it.id.clone())
-            .collect();
-        assert_eq!(order, vec!["i2".to_string(), "i3".to_string(), "i1".to_string()]);
-    }
-
-    #[test]
-    fn test_apply_item_drop_ignores_same_source_target() {
-        let state = make_drop_state();
-        assert!(!apply_item_drop(&state, 1, 1), "同位拖拽应忽略");
-        let order: Vec<String> = state
-            .borrow()
-            .manager
-            .items("cat_1")
-            .iter()
-            .map(|it| it.id.clone())
-            .collect();
-        assert_eq!(order, vec!["i1".to_string(), "i2".to_string(), "i3".to_string()]);
-    }
-
-    #[test]
-    fn test_apply_item_drop_ignores_in_search_mode() {
-        let state = make_drop_state();
-        state.borrow_mut().search_query = "a".into();
-        assert!(!apply_item_drop(&state, 0, 2), "搜索态拖拽应忽略");
-        assert_eq!(state.borrow().manager.items("cat_1").len(), 3, "顺序不变");
-    }
-
-    #[test]
-    fn test_run_all_summary_text_all_success() {
-        let loc = Localization::new("zh-CN");
-        let msg = run_all_summary_text(&loc, 3, 0);
-        assert!(msg.contains("3"), "全部成功模板应含成功数: {}", msg);
-        assert!(!msg.is_empty());
-    }
-
-    #[test]
-    fn test_run_all_summary_text_partial_failure() {
-        let loc = Localization::new("zh-CN");
-        let msg = run_all_summary_text(&loc, 2, 1);
-        assert!(
-            msg.contains("2") && msg.contains("1"),
-            "部分失败模板应同时含成功数与失败数: {}",
-            msg
-        );
-    }
-}
-
 fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) -> bool {
     let Some(decoded) = crate::background::decode(path) else {
         log::warn!("Background decode failed: {}", path);
@@ -1880,8 +1685,10 @@ pub fn wire_handler(
             }
             return;
         }
-        // 分类重命名模式
-        let cat_id = pcr_ok.borrow_mut().take();
+        // 分类重命名模式：校验通过才消费 pending——空名拒绝时保留，
+        // 用户在对话框内改正名称后重试仍生效（此前提前 take 导致
+        // "空名→改正→再确认"被静默吞掉，CI 实测暴露）
+        let cat_id = pcr_ok.borrow().clone();
         if let Some(cat_id) = cat_id {
             let mut state = state_input.borrow_mut();
             if let Some(cat) = state
@@ -1905,6 +1712,8 @@ pub fn wire_handler(
                     }
                     return;
                 }
+                // 校验通过：此刻才消费 pending（空名拒绝路径保留待重试）
+                pcr_ok.borrow_mut().take();
                 cat.name = name.trim().to_string();
                 state.save_if_modified();
                 let cur = state.current_category_id.clone();
@@ -1968,4 +1777,199 @@ pub fn wire_handler(
             let _ = ui.hide();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_click_debounce_same_item_within_window() {
+        let now = std::time::Instant::now();
+        let last = ("i1".to_string(), now - std::time::Duration::from_millis(100));
+        assert!(click_is_debounced(Some(&last), "i1", now));
+    }
+
+    #[test]
+    fn test_click_debounce_other_item_not_suppressed() {
+        let now = std::time::Instant::now();
+        let last = ("i1".to_string(), now - std::time::Duration::from_millis(100));
+        assert!(!click_is_debounced(Some(&last), "i2", now));
+    }
+
+    #[test]
+    fn test_click_debounce_expired_window_runs() {
+        let now = std::time::Instant::now();
+        let last = ("i1".to_string(), now - std::time::Duration::from_millis(401));
+        assert!(!click_is_debounced(Some(&last), "i1", now));
+    }
+
+    #[test]
+    fn test_click_debounce_no_history_runs() {
+        assert!(!click_is_debounced(None, "i1", std::time::Instant::now()));
+    }
+
+    #[test]
+    fn test_item_menu_build_normal_mode() {
+        let loc = Localization::new("zh-CN");
+        let cats = vec![("c1".to_string(), "Apps".to_string())];
+        let (texts, actions) = build_item_menu(&loc, false, &cats);
+        assert_eq!(texts.len(), actions.len(), "文本与动作必须平行");
+        // 固定 9 项 + 上移/下移 + 1 个 MoveTo + OpenFolder = 12
+        assert_eq!(texts.len(), 12);
+        assert!(matches!(actions[2], ItemMenuAction::Delete), "第 3 项应为删除");
+        let danger_count = actions
+            .iter()
+            .filter(|a| matches!(a, ItemMenuAction::Delete))
+            .count();
+        assert_eq!(danger_count, 1, "仅删除项为 danger");
+        assert!(matches!(actions.last(), Some(ItemMenuAction::OpenFolder)));
+        assert!(matches!(&actions[10], ItemMenuAction::MoveTo(id) if id == "c1"));
+    }
+
+    #[test]
+    fn test_item_menu_build_search_mode_hides_reorder() {
+        let loc = Localization::new("zh-CN");
+        let cats = vec![("c1".to_string(), "Apps".to_string())];
+        let (texts, actions) = build_item_menu(&loc, true, &cats);
+        assert_eq!(texts.len(), actions.len());
+        // 搜索态隐藏上移/下移：12 - 2 = 10 项
+        assert_eq!(texts.len(), 10);
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, ItemMenuAction::MoveUp | ItemMenuAction::MoveDown)));
+    }
+
+    /// 构造带 1 分类 3 条目的 AppState（不依赖窗口；storage 指向独立临时文件）。
+    fn make_drop_state() -> Rc<RefCell<AppState>> {
+        use crate::icon_cache::IconCache;
+        use crate::item_manager::ItemManager;
+        use crate::model::{AppConfig, AppData, Category, Config, Item};
+        use crate::storage::Storage;
+        let app_config = AppConfig {
+            version: "test".into(),
+            data: AppData {
+                categories: vec![Category {
+                    id: "cat_1".into(),
+                    name: "Programs".into(),
+                    ..Default::default()
+                }],
+                items: vec![
+                    Item {
+                        id: "i1".into(),
+                        name: "A".into(),
+                        target: "C:\\a.exe".into(),
+                        category_id: "cat_1".into(),
+                        sort_order: 0,
+                        ..Default::default()
+                    },
+                    Item {
+                        id: "i2".into(),
+                        name: "B".into(),
+                        target: "C:\\b.exe".into(),
+                        category_id: "cat_1".into(),
+                        sort_order: 1,
+                        ..Default::default()
+                    },
+                    Item {
+                        id: "i3".into(),
+                        name: "C".into(),
+                        target: "C:\\c.exe".into(),
+                        category_id: "cat_1".into(),
+                        sort_order: 2,
+                        ..Default::default()
+                    },
+                ],
+            },
+            config: Config::default(),
+            extra_config: Default::default(),
+        };
+        Rc::new(RefCell::new(AppState {
+            manager: ItemManager::new(app_config),
+            storage: Storage::new(
+                std::env::temp_dir()
+                    .join(format!("gorun_handlers_drop_{}.json", std::process::id()))
+                    .to_string_lossy()
+                    .to_string(),
+            ),
+            icon_cache: IconCache::new(),
+            current_category_id: "cat_1".into(),
+            search_query: String::new(),
+            edit_dialog: None,
+            loc: Rc::new(RefCell::new(Localization::new("zh-CN"))),
+            save_fail_notified: false,
+            pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+            drop_handler: None,
+            geometry_dirty: false,
+            last_geometry_change: None,
+            soft_dirty: false,
+            last_soft_change: None,
+            pending_run_results: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            item_hotkey_mgr: Rc::new(RefCell::new(crate::hotkey::ItemHotkeyManager::new())),
+            item_hotkey_tx: {
+                let (tx, _rx) = std::sync::mpsc::channel::<String>();
+                tx
+            },
+            low_resident: Rc::new(std::cell::Cell::new(false)),
+            auto_hide_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }))
+    }
+
+    #[test]
+    fn test_apply_item_drop_reorders_and_persists() {
+        let state = make_drop_state();
+        assert!(apply_item_drop(&state, 0, 2), "有效拖拽应重排成功");
+        let order: Vec<String> = state
+            .borrow()
+            .manager
+            .items("cat_1")
+            .iter()
+            .map(|it| it.id.clone())
+            .collect();
+        assert_eq!(order, vec!["i2".to_string(), "i3".to_string(), "i1".to_string()]);
+    }
+
+    #[test]
+    fn test_apply_item_drop_ignores_same_source_target() {
+        let state = make_drop_state();
+        assert!(!apply_item_drop(&state, 1, 1), "同位拖拽应忽略");
+        let order: Vec<String> = state
+            .borrow()
+            .manager
+            .items("cat_1")
+            .iter()
+            .map(|it| it.id.clone())
+            .collect();
+        assert_eq!(order, vec!["i1".to_string(), "i2".to_string(), "i3".to_string()]);
+    }
+
+    #[test]
+    fn test_apply_item_drop_ignores_in_search_mode() {
+        let state = make_drop_state();
+        state.borrow_mut().search_query = "a".into();
+        assert!(!apply_item_drop(&state, 0, 2), "搜索态拖拽应忽略");
+        assert_eq!(state.borrow().manager.items("cat_1").len(), 3, "顺序不变");
+    }
+
+    #[test]
+    fn test_run_all_summary_text_all_success() {
+        let loc = Localization::new("zh-CN");
+        let msg = run_all_summary_text(&loc, 3, 0);
+        assert!(msg.contains("3"), "全部成功模板应含成功数: {}", msg);
+        assert!(!msg.is_empty());
+    }
+
+    #[test]
+    fn test_run_all_summary_text_partial_failure() {
+        let loc = Localization::new("zh-CN");
+        let msg = run_all_summary_text(&loc, 2, 1);
+        assert!(
+            msg.contains("2") && msg.contains("1"),
+            "部分失败模板应同时含成功数与失败数: {}",
+            msg
+        );
+    }
 }

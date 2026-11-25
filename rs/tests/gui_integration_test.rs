@@ -370,7 +370,8 @@ fn test_menu_popup_properties() {
 /// 汉堡菜单回调存在：invoke 不 panic（分发逻辑在 wire_handler，UI 层回调通路完整）。
 #[test]
 fn test_hamburger_menu_callbacks_exist() {
-    let ui = setup_ui_with_data(vec![], vec![]);
+    // 必须走 wire 后的 UI：菜单填充逻辑在 wire_handler 的 on_hamburger_clicked
+    let (ui, _state) = setup_wired_ui(vec![], vec![]);
     ui.invoke_hamburger_clicked();
     // 菜单文本与危险项数组必须平行构建（增删菜单项时二者同步变化）
     let items = ui.get_menu_popup_items();
@@ -812,16 +813,16 @@ fn setup_wired_ui(
     (ui, state)
 }
 
-/// wire 全量回调并额外返回热键句柄（导入配置等需直接操作热键管理器的测试用）。
-fn setup_wired_ui_full(
-    categories: Vec<Category>,
-    items: Vec<Item>,
-) -> (
+/// wire 后的完整句柄组：主窗口 + 状态 + 全局热键管理器 + 热键通知通道。
+type WiredUiFull = (
     MainWindow,
     Rc<RefCell<AppState>>,
     Rc<RefCell<GoRun::hotkey::HotkeyManager>>,
     Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>>,
-) {
+);
+
+/// wire 全量回调并额外返回热键句柄（导入配置等需直接操作热键管理器的测试用）。
+fn setup_wired_ui_full(categories: Vec<Category>, items: Vec<Item>) -> WiredUiFull {
     let state = setup_app_state(categories.clone(), items.clone());
     let ui = setup_ui_with_data(categories, items);
     let loc = state.borrow().loc.clone();

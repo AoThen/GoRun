@@ -111,42 +111,6 @@ fn drain_hide_window(
     (hide, dropped)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::platform::DropMessage;
-    use std::path::PathBuf;
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn test_drain_hide_window_mouse_enter_cancels_hide() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(DropMessage::MouseEnter).unwrap();
-        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(50));
-        assert!(!hide, "窗口内 MouseEnter 应取消隐藏");
-        assert!(dropped.is_empty());
-    }
-
-    #[test]
-    fn test_drain_hide_window_drop_not_lost() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(DropMessage::Drop(vec![PathBuf::from("C:\\a.exe")]))
-            .unwrap();
-        // 无 MouseEnter：超时后仍隐藏，但窗口内 Drop 必须带出（不丢消息）
-        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(50));
-        assert!(hide);
-        assert_eq!(dropped, vec![PathBuf::from("C:\\a.exe")]);
-    }
-
-    #[test]
-    fn test_drain_hide_window_timeout_hides() {
-        let (_tx, rx) = std::sync::mpsc::channel::<DropMessage>();
-        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(30));
-        assert!(hide, "超时无 MouseEnter 应保持隐藏");
-        assert!(dropped.is_empty());
-    }
-}
-
 /// 启动消费线程：把落下的路径转成 UI 的 `file-dropped` 回调；
 /// 光标离开（F7 自动隐藏）延迟 1s 后隐藏，期间回到窗口则取消。
 #[cfg(windows)]
@@ -200,4 +164,40 @@ pub fn spawn_drop_consumer(
     _rx: std::sync::mpsc::Receiver<crate::platform::DropMessage>,
     _auto_hide: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::DropMessage;
+    use std::path::PathBuf;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn test_drain_hide_window_mouse_enter_cancels_hide() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(DropMessage::MouseEnter).unwrap();
+        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(50));
+        assert!(!hide, "窗口内 MouseEnter 应取消隐藏");
+        assert!(dropped.is_empty());
+    }
+
+    #[test]
+    fn test_drain_hide_window_drop_not_lost() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(DropMessage::Drop(vec![PathBuf::from("C:\\a.exe")]))
+            .unwrap();
+        // 无 MouseEnter：超时后仍隐藏，但窗口内 Drop 必须带出（不丢消息）
+        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(50));
+        assert!(hide);
+        assert_eq!(dropped, vec![PathBuf::from("C:\\a.exe")]);
+    }
+
+    #[test]
+    fn test_drain_hide_window_timeout_hides() {
+        let (_tx, rx) = std::sync::mpsc::channel::<DropMessage>();
+        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(30));
+        assert!(hide, "超时无 MouseEnter 应保持隐藏");
+        assert!(dropped.is_empty());
+    }
 }
