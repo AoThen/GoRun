@@ -153,6 +153,22 @@ pub fn apply_localized_texts(ui: &MainWindow, loc: &Rc<RefCell<Localization>>, _
         lb.tr("SI_Log_Dbg").to_string().into(),
     ]));
     ui.set_settings_log_model(slint::ModelRc::from(log_model));
+    // 图标大小/字体大小档位（设置页 V2）：标签 + 档位文案本地化注入
+    ui.set_settings_icon_size_label(lb.tr("Dlg_Icon_Size").into());
+    let icon_size_model = Rc::new(slint::VecModel::from(vec![
+        lb.tr("SI_Icon_32").to_string().into(),
+        lb.tr("SI_Icon_48").to_string().into(),
+        lb.tr("SI_Icon_64").to_string().into(),
+        lb.tr("SI_Icon_96").to_string().into(),
+    ]));
+    ui.set_settings_icon_size_model(slint::ModelRc::from(icon_size_model));
+    ui.set_settings_font_size_label(lb.tr("Dlg_Font_Size").into());
+    let font_size_model = Rc::new(slint::VecModel::from(vec![
+        lb.tr("SI_Font_Small").to_string().into(),
+        lb.tr("SI_Font_Medium").to_string().into(),
+        lb.tr("SI_Font_Large").to_string().into(),
+    ]));
+    ui.set_settings_font_size_model(slint::ModelRc::from(font_size_model));
     #[cfg(windows)]
     crate::tray::set_ui_texts(crate::tray::TrayTexts {
         show: lb.tr("Tray_ShowHide").to_string(),

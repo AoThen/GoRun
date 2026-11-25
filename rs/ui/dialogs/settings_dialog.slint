@@ -14,6 +14,13 @@ export component SettingsDialog {
     in property <string> log-label: "Log level";
     in property <[string]> log-level-model: [];
     in property <int> log-level-index: 0;
+    // 图标大小（档位 32/48/64/96）与字体大小（小/中/大）设置项
+    in property <string> icon-size-label: "Icon size";
+    in property <[string]> icon-size-model: [];
+    in property <int> icon-size-index: 1;
+    in property <string> font-size-label: "Font size";
+    in property <[string]> font-size-model: [];
+    in property <int> font-size-index: 1;
     in property <string> auto-hide-label: "";
     in property <bool> auto-hide-enabled: false;
     in property <bool> has-background: false;
@@ -25,6 +32,8 @@ export component SettingsDialog {
     callback dim-toggled(enabled: bool);
     callback dim-changed(percent: float);
     callback log-level-changed(index: int);
+    callback icon-size-changed(index: int);
+    callback font-size-changed(index: int);
     callback auto-hide-toggled(enabled: bool);
     callback close();
 
@@ -151,6 +160,53 @@ export component SettingsDialog {
                                     root.log-level-changed(
                                         value == root.log-level-model[1] ? 1 :
                                         value == root.log-level-model[2] ? 2 : 0
+                                    );
+                                }
+                            }
+                        }
+
+                        // 图标大小档位（32/48/64/96）：改后触发全量图标重提取
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            Text {
+                                text: root.icon-size-label;
+                                color: Theme.text-1;
+                                font-size: Theme.font-size-md;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                min-width: 160px;
+                                horizontal-stretch: 1;
+                                model: root.icon-size-model;
+                                current-index: root.icon-size-index;
+                                selected(value) => {
+                                    root.icon-size-changed(
+                                        value == root.icon-size-model[0] ? 0 :
+                                        value == root.icon-size-model[1] ? 1 :
+                                        value == root.icon-size-model[2] ? 2 : 3
+                                    );
+                                }
+                            }
+                        }
+
+                        // 字体大小档位（小/中/大）：即时生效，全局字号缩放
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            Text {
+                                text: root.font-size-label;
+                                color: Theme.text-1;
+                                font-size: Theme.font-size-md;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                min-width: 160px;
+                                horizontal-stretch: 1;
+                                model: root.font-size-model;
+                                current-index: root.font-size-index;
+                                selected(value) => {
+                                    root.font-size-changed(
+                                        value == root.font-size-model[0] ? 0 :
+                                        value == root.font-size-model[1] ? 1 : 2
                                     );
                                 }
                             }

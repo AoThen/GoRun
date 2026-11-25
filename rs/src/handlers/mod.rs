@@ -1053,11 +1053,26 @@ pub fn wire_handler(
                     _ => 0,
                 };
                 let auto_hide = cfg.extra_get_bool("auto_hide");
+                let icon_size_index = match cfg.extra_config.get("icon_size").map(|s| s.as_str()) {
+                    Some("32") => 0,
+                    Some("64") => 2,
+                    Some("96") => 3,
+                    // 未设置（空）与实际生效档位一致：默认 48
+                    _ => 1,
+                };
+                let font_size_index = match cfg.extra_config.get("font_size").map(|s| s.as_str()) {
+                    Some("0") => 0,
+                    Some("2") => 2,
+                    // 未设置（空）与实际生效档位一致：默认中
+                    _ => 1,
+                };
                 drop(st);
                 ui.set_settings_bg_status(status.into());
                 ui.set_settings_bg_dim_enabled(dim_enabled);
                 ui.set_settings_bg_dim_percent(dim_percent);
                 ui.set_settings_log_index(log_index);
+                ui.set_settings_icon_size_index(icon_size_index);
+                ui.set_settings_font_size_index(font_size_index);
                 ui.set_settings_auto_hide(auto_hide);
                 ui.set_settings_dialog_visible(true);
             }
@@ -1835,6 +1850,70 @@ pub fn wire_handler(
             let name = loc.borrow().tr(level_name).to_string();
             let msg = util::tr_fill(&loc, "Status_LogLevelSet", &name);
             ui_sync::show_toast(&ui, msg, false);
+        }
+    });
+
+    // 图标大小档位（32/48/64/96）：写配置落盘 → 清空图标内存缓存与提取防抖
+    // 标记（缓存键已随尺寸变化，旧键不再命中；不清标记会导致本会话已提取的
+    // 条目拒绝重提取、图标停留旧尺寸）→ 注入新显示尺寸 → 刷新条目触发重提取。
+    let state_iconsz = state.clone();
+    let weak_ui_iconsz = ui.as_weak();
+    ui.on_settings_icon_size_changed(move |index| {
+        let size = match index {
+            0 => 32,
+            2 => 64,
+            3 => 96,
+            _ => 48,
+        };
+        // 档位未变直接返回：避免重选当前档位触发无谓的全量缓存清空与重提取
+        if crate::icon_cache::current_icon_size() == size {
+            return;
+        }
+        let cat_id = {
+            let mut st = state_iconsz.borrow_mut();
+            st.manager
+                .config_mut()
+                .extra_config
+                .insert("icon_size".into(), size.to_string());
+            crate::icon_cache::set_current_icon_size(size);
+            st.icon_cache.clear_images();
+            // 会话级防抖标记整体清除：尺寸变化后所有条目缓存键均变，须允许重提取
+            st.icon_extract_attempted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
+            st.save_if_modified();
+            log::info!("Icon size changed to {}", size);
+            st.current_category_id.clone()
+        };
+        if let Some(ui) = weak_ui_iconsz.upgrade() {
+            ui.set_icon_size(size as f32);
+            let query = state_iconsz.borrow().search_query.clone();
+            ui_sync::refresh_items_ui(&ui, &state_iconsz.borrow(), &cat_id, &query);
+        }
+    });
+
+    // 字体大小档位（小/中/大 → 0.85/1.0/1.2）：写配置落盘 → 注入缩放系数，
+    // Theme 令牌自动联动全局字号（无需重提取图标）。
+    let state_fontsz = state.clone();
+    let weak_ui_fontsz = ui.as_weak();
+    ui.on_settings_font_size_changed(move |index| {
+        let scale = match index {
+            0 => 0.85,
+            2 => 1.2,
+            _ => 1.0,
+        };
+        {
+            let mut st = state_fontsz.borrow_mut();
+            st.manager
+                .config_mut()
+                .extra_config
+                .insert("font_size".into(), index.to_string());
+            st.save_if_modified();
+        }
+        log::info!("Font scale changed to {}", scale);
+        if let Some(ui) = weak_ui_fontsz.upgrade() {
+            ui.set_font_scale(scale);
         }
     });
 

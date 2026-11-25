@@ -430,6 +430,33 @@ fn main() {
         .unwrap_or(false);
     ui.set_is_dark_theme(is_dark);
 
+    // 图标显示尺寸（"32"/"48"/"64"/"96"，缺失默认 48）与字体缩放
+    // （"0"小/"1"中/"2"大 → 0.85/1.0/1.2，缺失默认中）：启动注入 UI 属性，
+    // main_window 的 init/changed 同步到 Theme 令牌
+    {
+        // 两步绑定：state.borrow() 的临时 Ref 须先落到局部变量，
+        // 否则 let cfg = state.borrow().manager.config() 的临时值在语句末
+        // 即 drop，cfg 悬垂（E0716）。
+        let st = state.borrow();
+        let cfg = st.manager.config();
+        let icon_size = cfg
+            .extra_config
+            .get("icon_size")
+            .and_then(|v| v.parse::<i32>().ok())
+            .filter(|v| matches!(*v, 32 | 48 | 64 | 96))
+            .unwrap_or(48);
+        let font_scale = match cfg.extra_config.get("font_size").map(|s| s.as_str()) {
+            Some("0") => 0.85f32,
+            Some("2") => 1.2f32,
+            _ => 1.0f32,
+        };
+        drop(st);
+        // 图标缓存键/提取尺寸依赖全局尺寸，须先于任何图标读取初始化
+        icon_cache::set_current_icon_size(icon_size);
+        ui.set_icon_size(icon_size as f32);
+        ui.set_font_scale(font_scale);
+    }
+
     // 背景图恢复（设置页 V1）：路径失效/解码失败时降级纯色、清除失效路径并告警，不阻断启动
     {
         let (bg_path, dim_enabled, dim_percent) = {

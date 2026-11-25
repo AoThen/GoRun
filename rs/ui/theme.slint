@@ -31,11 +31,18 @@ export global Theme {
     in-out property <length> radius-md: 6px;
     in-out property <length> radius-lg: 10px;
 
-    in-out property <length> font-size-xs: 11px;
-    in-out property <length> font-size-sm: 12px;
-    in-out property <length> font-size-md: 13px;
-    in-out property <length> font-size-lg: 16px;
+    // 字体缩放（设置项 font_size："0"小/"1"中/"2"大，默认中=1.0）。
+    // 字号令牌以缩放系数动态计算（Slint length 乘 float 合法），
+    // 各组件仍引用 font-size-* 令牌，缩放变化自动全局生效。
+    in-out property <float> font-scale: 1.0;
 
+    in-out property <length> font-size-xs: 11px * root.font-scale;
+    in-out property <length> font-size-sm: 12px * root.font-scale;
+    in-out property <length> font-size-md: 13px * root.font-scale;
+    in-out property <length> font-size-lg: 16px * root.font-scale;
+
+    // 条目图标显示尺寸（设置项 icon_size："32"/"48"/"64"/"96"，默认 48）。
+    // 运行时由 main_window 注入（init + changed）；提取尺寸为 2x（icon_cache）。
     in-out property <length> icon-size: 48px;
 
     callback set-dark(is-dark: bool);

@@ -18,6 +18,21 @@ static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// 清空只是回退到读盘路径，无数据丢失。48×48×4≈9KB/项，512 项≈4.6MB 封顶。
 const IMAGE_CACHE_MAX: usize = 512;
 
+/// 当前会话的图标显示尺寸（设置项 icon_size，全局统一）。缓存键纳入该值，
+/// 改尺寸后旧键缓存自动失效。进程内共享（提取在后台线程进行，须跨线程可见），
+/// 启动时按配置初始化、改设置时更新。
+static CURRENT_ICON_SIZE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(48);
+
+/// 读取当前图标显示尺寸（全局设置）。
+pub fn current_icon_size() -> i32 {
+    CURRENT_ICON_SIZE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// 更新当前图标显示尺寸（改设置时调用；清空内存缓存由调用方负责）。
+pub fn set_current_icon_size(size: i32) {
+    CURRENT_ICON_SIZE.store(size, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[derive(Clone)]
 pub struct IconCache {
     cache_dir: PathBuf,
@@ -57,7 +72,7 @@ impl IconCache {
     /// 从内存缓存取已解码像素；未命中返回 None（调用方再读盘并回填）。
     /// 返回 SharedPixelBuffer 的轻量克隆，调用方包装成 slint::Image。
     pub fn cached_image(&self, item: &Item) -> Option<slint::SharedPixelBuffer<slint::Rgba8Pixel>> {
-        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
+        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target, current_icon_size());
         self.images
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -68,7 +83,7 @@ impl IconCache {
     /// 回填内存缓存（读盘解码成功后调用）。
     /// 超上限整体清空后插入：缓存可重建，清空仅回退到读盘路径（对齐拼音缓存策略）。
     pub fn store_image(&self, item: &Item, buffer: slint::SharedPixelBuffer<slint::Rgba8Pixel>) {
-        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
+        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target, current_icon_size());
         let mut map = self.images.lock().unwrap_or_else(|e| e.into_inner());
         if map.len() >= IMAGE_CACHE_MAX {
             map.clear();
@@ -78,16 +93,25 @@ impl IconCache {
 
     /// 失效某项的内存缓存（编辑图标/目标后）。
     pub fn invalidate_image(&self, item: &Item) {
-        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
+        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target, current_icon_size());
         self.images
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&hash);
     }
 
-    fn cache_key(id: &str, icon_path: &str, icon_index: i32, target: &str) -> u64 {
-        // FNV-1a 64-bit：跨 Rust 版本稳定（DefaultHasher 不保证），且纳入图标/目标信息，
-        // 编辑图标或目标后自动失效缓存
+    /// 清空全部图标像素内存缓存（改图标尺寸后：缓存键随尺寸变化，旧键项
+    /// 不会再被访问，成为内存垃圾；显式清空立即释放）。
+    pub fn clear_images(&self) {
+        self.images
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
+    fn cache_key(id: &str, icon_path: &str, icon_index: i32, target: &str, icon_size: i32) -> u64 {
+        // FNV-1a 64-bit：跨 Rust 版本稳定（DefaultHasher 不保证），且纳入图标/目标/尺寸信息，
+        // 编辑图标或目标或改尺寸后自动失效缓存（不同尺寸提取的 PNG 不同，必须分键）
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
         let mut feed = |data: &[u8]| {
             for &b in data {
@@ -102,11 +126,13 @@ impl IconCache {
         feed(&icon_index.to_le_bytes());
         feed(&[0x1f]);
         feed(target.as_bytes());
+        feed(&[0x1f]);
+        feed(&icon_size.to_le_bytes());
         hash
     }
 
     pub fn cache_path(&self, item: &Item) -> PathBuf {
-        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target);
+        let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target, current_icon_size());
         self.cache_dir.join(format!("{:x}.png", hash))
     }
 
@@ -170,9 +196,14 @@ impl IconCache {
         let cache_path = self.cache_path(item);
         log::debug!("Refreshing icon for item: id={}", item.id);
 
+        // 提取尺寸 = 当前显示尺寸 × 2（下限 48 保证小图标清晰，上限 256 对齐
+        // save_hicon_as_png 的位图尺寸上限）。放大提取再缩小显示可显著提升
+        // 清晰度；缓存键已纳入显示尺寸，改尺寸后自动重提取。
+        let extract_size = (current_icon_size() * 2).clamp(48, 256);
+
         let hicon = if !item.icon_path.is_empty() {
             log::debug!("Trying custom icon_path: {}", item.icon_path);
-            extract_hicon(&item.icon_path, item.icon_index)
+            extract_hicon(&item.icon_path, item.icon_index, extract_size)
         } else {
             None
         };
@@ -180,7 +211,7 @@ impl IconCache {
         let hicon = hicon.or_else(|| {
             if !item.target.is_empty() {
                 log::debug!("Falling back to target file: {}", item.target);
-                extract_hicon_from_target(&item.target)
+                extract_hicon_from_target(&item.target, extract_size)
             } else {
                 None
             }
@@ -260,14 +291,14 @@ pub fn cleanup_and_gc(cache_dir: &Path, live_files: &std::collections::HashSet<S
 fn extract_hicon(
     icon_path: &str,
     icon_index: i32,
+    icon_size: i32,
 ) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::UI::WindowsAndMessaging::{PrivateExtractIconsW, HICON};
 
-    // 图标视图显示 48px（theme.icon-size）；此前 ExtractIconExW 只能取系统大图标
-    // （SM_CXICON=32px），放大 1.5x 显示发虚。PrivateExtractIconsW 支持指定精确尺寸，
-    // 对 exe/dll/ico 均有效；flags=0 表示按传入 cx/cy 提取。
-    const ICON_SIZE: i32 = 48;
+    // 提取尺寸由调用方传入（显示尺寸的 2 倍，放大提取再缩小显示更清晰）。
+    // PrivateExtractIconsW 支持指定精确尺寸，对 exe/dll/ico 均有效；flags=0
+    // 表示按传入 cx/cy 提取。
 
     let wide: Vec<u16> = std::ffi::OsStr::new(icon_path)
         .encode_wide()
@@ -291,8 +322,8 @@ fn extract_hicon(
         PrivateExtractIconsW(
             &path_buf,
             icon_index,
-            ICON_SIZE,
-            ICON_SIZE,
+            icon_size,
+            icon_size,
             Some(&mut [icon]),
             None,
             0,
@@ -309,6 +340,7 @@ fn extract_hicon(
 #[cfg(windows)]
 fn extract_hicon_from_target(
     target: &str,
+    icon_size: i32,
 ) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::UI::Shell::{SHGetFileInfoW, SHGFI_ICON, SHGFI_LARGEICON};
@@ -318,8 +350,9 @@ fn extract_hicon_from_target(
         .chain(std::iter::once(0))
         .collect();
 
-    // 优先 PrivateExtractIconsW 取 48px（与 UI 显示 1:1）；目标可能是任意文件
-    // （非 exe/dll/ico 时该 API 返回 0），回退 SHGetFileInfoW 大图标（32px，放大可接受）。
+    // 优先 PrivateExtractIconsW 按传入尺寸提取（与 UI 显示 2x 对应）；目标可能是
+    // 任意文件（非 exe/dll/ico 时该 API 返回 0），回退 SHGetFileInfoW 大图标
+    // （32px，放大可接受）。
     if wide.len() <= 260 {
         let mut path_buf = [0u16; 260];
         path_buf[..wide.len()].copy_from_slice(&wide);
@@ -328,8 +361,8 @@ fn extract_hicon_from_target(
             windows::Win32::UI::WindowsAndMessaging::PrivateExtractIconsW(
                 &path_buf,
                 0,
-                48,
-                48,
+                icon_size,
+                icon_size,
                 Some(&mut [icon]),
                 None,
                 0,
@@ -591,12 +624,12 @@ fn save_hicon_as_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, path
 }
 
 #[cfg(not(windows))]
-fn extract_hicon(_icon_path: &str, _icon_index: i32) -> Option<u32> {
+fn extract_hicon(_icon_path: &str, _icon_index: i32, _icon_size: i32) -> Option<u32> {
     None
 }
 
 #[cfg(not(windows))]
-fn extract_hicon_from_target(_target: &str) -> Option<u32> {
+fn extract_hicon_from_target(_target: &str, _icon_size: i32) -> Option<u32> {
     None
 }
 
@@ -674,9 +707,17 @@ mod tests {
 
     #[test]
     fn test_cache_key_stable_across_platforms() {
-        // FNV-1a 结果确定性（无随机种子），断言固定值防回归
-        let h = IconCache::cache_key("abc", "", 0, "");
-        assert_eq!(h, 0x7cb7_e682_6a28_5762);
+        // FNV-1a 结果确定性（无随机种子），断言固定值防回归（键含显示尺寸）
+        let h = IconCache::cache_key("abc", "", 0, "", 48);
+        assert_eq!(h, 0xb422_0a8b_670a_ce47);
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_icon_size() {
+        // 改图标显示尺寸后缓存键必须变化（不同尺寸提取的 PNG 不同，须分键）
+        let h48 = IconCache::cache_key("abc", "", 0, "", 48);
+        let h96 = IconCache::cache_key("abc", "", 0, "", 96);
+        assert_ne!(h48, h96);
     }
 
     #[test]

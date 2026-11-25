@@ -84,7 +84,18 @@ export component MainWindow inherits Window {
     // 启动即按标志应用主题：Theme 令牌默认值是深色板，而首启/已存浅色时
     // is-dark-theme 保持 false 不触发 changed，导致渲染成深色板、
     // 已保存的浅色偏好重启后丢失（默认 Light，theme "0"=Light "1"=Dark）。
-    init => { Theme.set-dark(root.is-dark-theme); }
+    // 同步应用图标尺寸/字体缩放（Theme 令牌默认值仅为占位基准）。
+    init => {
+        Theme.set-dark(root.is-dark-theme);
+        Theme.icon-size = root.icon-size;
+        Theme.font-scale = root.font-scale;
+    }
+    // 条目图标显示尺寸（设置项 icon_size，Rust 侧注入；Theme 同步驱动网格/图标）
+    in-out property <length> icon-size: 48px;
+    changed icon-size => { Theme.icon-size = root.icon-size; }
+    // 全局字体缩放（设置项 font_size：0小/1中/2大 → 0.85/1.0/1.2）
+    in-out property <float> font-scale: 1.0;
+    changed font-scale => { Theme.font-scale = root.font-scale; }
     in-out property <bool> is-icon-view: false;
 
     // v2 Toast（替代 StatusBar）
@@ -149,6 +160,16 @@ export component MainWindow inherits Window {
     in property <[string]> settings-log-model: [];
     in-out property <int> settings-log-index: 0;
     callback settings-log-changed(index: int);
+    // 图标大小档位（32/48/64/96）：切换后重提取图标并持久化
+    in property <string> settings-icon-size-label: "Icon size";
+    in property <[string]> settings-icon-size-model: [];
+    in-out property <int> settings-icon-size-index: 1;
+    callback settings-icon-size-changed(index: int);
+    // 字体大小档位（小/中/大）：切换后全局字号缩放并持久化
+    in property <string> settings-font-size-label: "Font size";
+    in property <[string]> settings-font-size-model: [];
+    in-out property <int> settings-font-size-index: 1;
+    callback settings-font-size-changed(index: int);
     // 背景图当前状态与遮罩设置（Rust 侧回填/持久化）
     in-out property <string> settings-bg-status: "";
     in-out property <bool> settings-bg-dim-enabled: true;
@@ -487,6 +508,12 @@ export component MainWindow inherits Window {
             log-label: root.settings-log-label;
             log-level-model: root.settings-log-model;
             log-level-index: root.settings-log-index;
+            icon-size-label: root.settings-icon-size-label;
+            icon-size-model: root.settings-icon-size-model;
+            icon-size-index: root.settings-icon-size-index;
+            font-size-label: root.settings-font-size-label;
+            font-size-model: root.settings-font-size-model;
+            font-size-index: root.settings-font-size-index;
             has-background: root.has-bg-image;
             bg-dim-enabled: root.settings-bg-dim-enabled;
             bg-dim-percent: root.settings-bg-dim-percent;
@@ -509,6 +536,14 @@ export component MainWindow inherits Window {
             log-level-changed(i) => {
                 root.settings-log-index = i;
                 root.settings-log-changed(i);
+            }
+            icon-size-changed(i) => {
+                root.settings-icon-size-index = i;
+                root.settings-icon-size-changed(i);
+            }
+            font-size-changed(i) => {
+                root.settings-font-size-index = i;
+                root.settings-font-size-changed(i);
             }
             auto-hide-toggled(v) => {
                 root.settings-auto-hide = v;
