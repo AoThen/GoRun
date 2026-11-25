@@ -208,6 +208,10 @@ fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) 
     true
 }
 
+/// 设置页"字体"候选缓存：(显示名, 族名) 列表的共享可变缓存（None=未扫描）。
+/// 独立类型别名：内层泛型嵌套较深，避免 clippy type_complexity 告警。
+type FontFamilyCache = Rc<std::cell::RefCell<Option<Vec<(String, String)>>>>;
+
 /// 枚举系统已安装字体族：返回 (显示名, 族名) 列表，按显示名排序（不含
 /// "默认"项，由回填方按本地化文案插入头部）。显示名优先取本地化名（非
 /// ASCII，如"微软雅黑"），族名取 ASCII 名（如 "Microsoft YaHei"，与
@@ -237,7 +241,7 @@ fn enumerate_system_fonts() -> Vec<(String, String)> {
             .unwrap_or_else(|| value.clone());
         out.push((label, value));
     }
-    out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    out.sort_by_key(|a| a.0.to_lowercase());
     out
 }
 
@@ -284,7 +288,7 @@ fn apply_font_family_model(
 fn ensure_font_family_list(
     ui: &MainWindow,
     state: &Rc<RefCell<AppState>>,
-    cache: &Rc<RefCell<Option<Vec<(String, String)>>>>,
+    cache: &FontFamilyCache,
     in_flight: &Rc<std::cell::Cell<bool>>,
 ) {
     if let Some(list) = cache.borrow().as_ref() {
@@ -369,8 +373,7 @@ pub fn wire_handler(
     // 设置页"字体"候选缓存：(显示名, 族名) 列表，None=尚未扫描。系统字体枚举
     // （fontdb 解析全部字体表）约百毫秒级且结果不变，仅在设置页首次打开时后台
     // 执行一次，后续打开直接回填；in-flight 防重复触发。
-    let font_family_list: Rc<std::cell::RefCell<Option<Vec<(String, String)>>>> =
-        Rc::new(std::cell::RefCell::new(None));
+    let font_family_list: FontFamilyCache = Rc::new(std::cell::RefCell::new(None));
     let font_scan_in_flight: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(false));
     // 右键菜单来源：0=项目 1=背景 2=分类（单个 ContextMenu 复用，按来源分发）
     let menu_kind: Rc<std::cell::Cell<u8>> = Rc::new(std::cell::Cell::new(0));
