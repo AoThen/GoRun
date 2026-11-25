@@ -49,7 +49,7 @@
 |-----|------|
 | 语言 | Rust 2021 |
 | 构建 | Cargo |
-| UI | Slint 1.18 |
+| UI | Slint 1.19 |
 | 存储 | JSON (serde + serde_json) |
 | 平台 | Windows 10+ |
 
@@ -59,7 +59,7 @@
 
 ### 环境要求
 
-- Rust 1.92+（MSRV 由依赖链决定：slint 1.18 及 backend 依赖要求 rustc 1.92）
+- Rust 1.95+（MSRV 由依赖链决定：slint 1.19 及 backend 依赖要求 rustc 1.95）
 - Cargo
 - Windows SDK（for windows crate）
 
@@ -85,7 +85,7 @@ cargo test
 
 | 依赖 | 版本 | 用途 |
 |-----|------|------|
-| slint | 1.18.1 | UI 框架 |
+| slint | 1.19.1 | UI 框架 |
 | serde / serde_json | 1.x | JSON 序列化 |
 | dirs | 7.x | 系统目录 |
 | image | 0.25 | 图标处理 |
