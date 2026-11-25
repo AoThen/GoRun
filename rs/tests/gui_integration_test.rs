@@ -15,14 +15,16 @@ fn init_testing_backend() {
     // 直接构造 TestingBackend 并 set_platform：init_no_event_loop 固定
     // mock_time=true，slint Timer 只随 mock_elapsed_time 推进，依赖真实
     // 睡眠轮询 Timer 的用例会超时；这里取 mock_time=false 走真实时钟。
-    // 重复初始化返回 AlreadySet 错误，忽略即可（无 panic）。
+    // threading=true 提供 event loop 代理，invoke_from_event_loop 才能入列
+    // （拖放消费线程依赖，须配合 run_event_loop 执行）。重复初始化返回
+    // AlreadySet 错误，忽略即可（无 panic）。
     #[cfg(feature = "backend-testing")]
     {
         let _ = slint::platform::set_platform(Box::new(
             i_slint_backend_testing::TestingBackend::new(
                 i_slint_backend_testing::TestingBackendOptions {
                     mock_time: false,
-                    threading: false,
+                    threading: true,
                     ..Default::default()
                 },
             ),
@@ -1841,13 +1843,12 @@ fn test_background_image_restore_valid_and_invalid() {
         .insert("background_image".into(), "/no/such/background.png".into());
     GoRun::ui_sync::restore_background_image(&ui, &state);
     assert!(
-        state
+        !state
             .borrow()
             .manager
             .config()
             .extra_config
-            .get("background_image")
-            .is_none(),
+            .contains_key("background_image"),
             "失效路径应被清除"
     );
     let _ = std::fs::remove_file(&bg_path);
@@ -1902,20 +1903,17 @@ fn test_drop_consumer_drop_message_adds_items_batch() {
     std::fs::write(&f1, b"a").unwrap();
     std::fs::write(&f2, b"b").unwrap();
 
+    // 消费线程经 invoke_from_event_loop 把转发闭包入列到 UI 线程事件循环；
+    // testing 后端（threading=true）须真正运行事件循环才会执行，故以看门狗
+    // 3 秒兜底退出，避免转发失败时测试卡死。
     tx.send(GoRun::platform::DropMessage::Drop(vec![f1, f2])).unwrap();
-    // 消费线程经 invoke_from_event_loop 转发回调，testing 后端须手动泵事件
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
-    loop {
-        slint::platform::update_timers_and_animations();
-        if state.borrow().manager.items(&cat_id).len() == before + 2 {
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "两个拖入文件应在 3 秒内全部入列"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let _ = slint::quit_event_loop();
+    });
+    slint::run_event_loop().unwrap();
+    drop(tx); // 终止消费线程
+
     let names: Vec<String> = state
         .borrow()
         .manager
@@ -1927,7 +1925,11 @@ fn test_drop_consumer_drop_message_adds_items_batch() {
         names.iter().any(|n| n == "dropa") && names.iter().any(|n| n == "dropb"),
         "拖入文件应以文件名为条目名入列: {names:?}"
     );
-    drop(tx); // 终止消费线程
+    assert_eq!(
+        state.borrow().manager.items(&cat_id).len(),
+        before + 2,
+        "一次落下多文件应批量添加两条"
+    );
     let _ = std::fs::remove_dir_all(&base);
 }
 
@@ -2002,14 +2004,14 @@ fn test_clipboard_files_roundtrip() {
     std::fs::write(&p1, b"a").unwrap();
     std::fs::write(&p2, b"b").unwrap();
 
-    // HDROP 格式：每条路径 NUL 结尾，尾部双 NUL
+    // HDROP 格式：DROPFILES 头（pFiles=8：路径列表相对结构体起始的偏移，
+    // fWide=1：UTF-16）+ 每条路径 NUL 结尾 + 尾部双 NUL（DragQueryFileW 依赖）
     let w1: Vec<u16> = p1.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     let w2: Vec<u16> = p2.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
-    let data: Vec<u16> = w1
-        .into_iter()
-        .chain(w2.into_iter())
-        .chain(std::iter::once(0))
-        .collect();
+    let mut data: Vec<u16> = vec![8, 0, 1, 0];
+    data.extend_from_slice(&w1);
+    data.extend_from_slice(&w2);
+    data.push(0);
 
     // 句柄在 SetClipboardData 成功后归系统所有（系统负责释放），不得 GlobalFree
     unsafe {
