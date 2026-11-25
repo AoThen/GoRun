@@ -223,12 +223,16 @@ pub fn wire_handler(
         DeleteCategory(String),
         RunAll(String),
         RunAsAdmin(String),
+        // 一键清理无效条目：携带预扫描出的待删条目 id 列表
+        CleanInvalid(Vec<String>),
         // 导入配置（P1：防误覆盖）——携带预解析结果与来源路径，
         // 确认后交 config_io::import_config_apply 执行整体替换
         Import(String, crate::model::AppConfig),
     }
     let pending_confirm: Rc<std::cell::RefCell<Option<ConfirmAction>>> =
         Rc::new(std::cell::RefCell::new(None));
+    // 一键清理无效条目扫描 in-flight 标记：扫描期间禁止重复触发，结果到达（含失败）即复位
+    let clean_scan_in_flight: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(false));
     // 右键菜单来源：0=项目 1=背景 2=分类（单个 ContextMenu 复用，按来源分发）
     let menu_kind: Rc<std::cell::Cell<u8>> = Rc::new(std::cell::Cell::new(0));
     let right_clicked_category: Rc<std::cell::Cell<Option<i32>>> =
@@ -821,6 +825,7 @@ pub fn wire_handler(
         AutoStart,
         Export,
         Import,
+        CleanInvalid,
         Settings,
         About,
         Exit,
@@ -892,17 +897,29 @@ pub fn wire_handler(
             add(lb.tr("Menu_ExportConfig").into(), Some(MenuAction::Export));
             add(lb.tr("Menu_ImportConfig").into(), Some(MenuAction::Import));
             add("-".into(), None);
+            add(
+                lb.tr("Menu_CleanInvalid").into(),
+                Some(MenuAction::CleanInvalid),
+            );
+            add("-".into(), None);
             add(lb.tr("Menu_Settings").into(), Some(MenuAction::Settings));
             add(lb.tr("Menu_About").into(), Some(MenuAction::About));
             add(lb.tr("Menu_Exit").into(), Some(MenuAction::Exit));
             *menu_actions_hb.borrow_mut() = actions;
             items
         };
-        // 危险项：删除当前分类、退出（由 action 映射生成，避免索引错位）
+        // 危险项：删除当前分类、清理无效条目、退出（由 action 映射生成，避免索引错位）
         let danger: Vec<bool> = menu_actions_hb
             .borrow()
             .iter()
-            .map(|a| matches!(a, Some(MenuAction::DelCategory) | Some(MenuAction::Exit)))
+            .map(|a| {
+                matches!(
+                    a,
+                    Some(MenuAction::DelCategory)
+                        | Some(MenuAction::CleanInvalid)
+                        | Some(MenuAction::Exit)
+                )
+            })
             .collect();
         // 弹层内容总高：项 28px、分隔线 1px、上下 padding 4px——供挂载处限高滚动
         let content_h = menu_content_height(&items);
@@ -917,6 +934,7 @@ pub fn wire_handler(
     let pcr_mps = pending_category_rename.clone();
     let im_mps = input_mode.clone();
     let menu_actions_mps = menu_actions.clone();
+    let clean_scan_mps = clean_scan_in_flight.clone();
     ui.on_menu_popup_selected(move |index| {
         log::debug!("Menu popup item selected: index={}", index);
         let ui = match weak_ui_mps.upgrade() {
@@ -1024,6 +1042,107 @@ pub fn wire_handler(
                     ui.set_confirm_confirm_text(loc_m.borrow().tr("Btn_OK").to_string().into());
                     ui.set_confirm_dialog_visible(true);
                 }
+            }
+            Some(MenuAction::CleanInvalid) => {
+                // 一键清理无效条目：后台线程扫描（网络盘/断连盘符 exists() 可能长
+                // 阻塞，不允许冻结 UI——对齐 RunAll/提权运行的异步化先例）；结果经
+                // mpsc + UI 轮询 Timer 回送（Rc/AppState 非 Send，不能经
+                // invoke_from_event_loop 捕获，与 main.rs 条目热键回送同款模式）。
+                if clean_scan_mps.get() {
+                    return;
+                }
+                clean_scan_mps.set(true);
+                let items: Vec<crate::model::Item> = state_mps.borrow().manager.all_items();
+                let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<(String, String)>, ()>>();
+                let spawned = std::thread::Builder::new()
+                    .name("clean-invalid-scan".to_string())
+                    .spawn(move || {
+                        let mut invalid: Vec<(String, String)> = Vec::new();
+                        for it in &items {
+                            if !crate::runner::is_item_target_valid(it) {
+                                let display = if !it.name.is_empty() {
+                                    it.name.clone()
+                                } else if !it.target.is_empty() {
+                                    it.target.clone()
+                                } else {
+                                    it.id.clone()
+                                };
+                                invalid.push((it.id.clone(), display));
+                            }
+                        }
+                        let _ = tx.send(Ok(invalid));
+                    });
+                if let Err(e) = spawned {
+                    // 线程创建失败（极端）：直接送失败标记，让轮询 Timer 正常收尾
+                    log::error!("Failed to spawn clean-invalid scan thread: {}", e);
+                    let _ = tx.send(Err(()));
+                }
+                let timer = Rc::new(slint::Timer::default());
+                let slot_cb = Rc::new(RefCell::new(Some(timer.clone())));
+                let weak_scan = ui.as_weak();
+                let state_scan = state_mps.clone();
+                let pending_scan = pcm_mps.clone();
+                let in_flight_scan = clean_scan_mps.clone();
+                timer.start(
+                    slint::TimerMode::Repeated,
+                    std::time::Duration::from_millis(50),
+                    move || {
+                        // Empty=扫描未完成继续轮询；Disconnected=线程异常退出按失败收尾
+                        let msg = match rx.try_recv() {
+                            Ok(m) => m,
+                            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(()),
+                        };
+                        // 收到结果：打破 Timer 循环引用并复位 in-flight
+                        if let Some(t) = slot_cb.borrow_mut().take() {
+                            t.stop();
+                        }
+                        in_flight_scan.set(false);
+                        let Some(ui) = weak_scan.upgrade() else {
+                            return;
+                        };
+                        let invalid = match msg {
+                            Ok(v) => v,
+                            Err(()) => {
+                                let loc = state_scan.borrow().loc.clone();
+                                let tip = loc.borrow().tr("Tip_CleanScanFail").to_string();
+                                ui_sync::show_toast(&ui, tip, true);
+                                return;
+                            }
+                        };
+                        if invalid.is_empty() {
+                            let loc = state_scan.borrow().loc.clone();
+                            let tip = loc.borrow().tr("Tip_CleanInvalidNone").to_string();
+                            ui_sync::show_toast(&ui, tip, false);
+                            return;
+                        }
+                        // 竞态防护：扫描期间用户已触发其他确认框 → 丢弃本次结果（可重新触发）
+                        if pending_scan.borrow().is_some() || ui.get_confirm_dialog_visible() {
+                            log::info!("Clean-invalid scan result dropped: another confirm active");
+                            return;
+                        }
+                        let n = invalid.len();
+                        let mut names: Vec<String> =
+                            invalid.iter().map(|(_, d)| d.clone()).collect();
+                        names.truncate(3);
+                        let mut preview = names.join("、");
+                        if n > 3 {
+                            preview = format!("{}…等 {} 项", preview, n);
+                        }
+                        let ids: Vec<String> = invalid.iter().map(|(id, _)| id.clone()).collect();
+                        let loc = state_scan.borrow().loc.clone();
+                        let msg_text = loc
+                            .borrow()
+                            .tr("Tip_CleanInvalidConfirm")
+                            .replace("{0}", &n.to_string())
+                            .replace("{1}", &preview);
+                        *pending_scan.borrow_mut() = Some(ConfirmAction::CleanInvalid(ids));
+                        ui.set_confirm_dialog_title(loc.borrow().tr("Title_CleanInvalid").into());
+                        ui.set_confirm_dialog_message(msg_text.into());
+                        ui.set_confirm_confirm_text(loc.borrow().tr("Btn_Del").to_string().into());
+                        ui.set_confirm_dialog_visible(true);
+                    },
+                );
             }
             Some(MenuAction::Settings) => {
                 // 打开设置对话框：回填背景图与遮罩当前状态
@@ -1566,6 +1685,46 @@ pub fn wire_handler(
                 ui_sync::sync_item_hotkeys(&state_confirm.borrow());
             }
             // 删除项处理完毕后必须返回，避免与后续提权/运行全部 pending 级联执行
+            return;
+        }
+        // 一键清理无效条目（预扫描 id 列表）：逐项清理图标缓存后删除，
+        // 与 DeleteItem 同管线（保存/刷新/热键重注册）
+        if let Some(ConfirmAction::CleanInvalid(ids)) = pending {
+            let mut state = state_confirm.borrow_mut();
+            let mut removed = 0usize;
+            for id in &ids {
+                if let Some(item) = state.manager.get_item(id) {
+                    state.icon_cache.delete_cache(item);
+                }
+                if state.manager.delete_item(id) {
+                    removed += 1;
+                }
+            }
+            if removed > 0 {
+                state.save_if_modified();
+            }
+            let cur = state.current_category_id.clone();
+            let query = state.search_query.clone();
+            drop(state);
+            if let Some(ui) = weak_ui_confirm.upgrade() {
+                // 条目数变化影响侧栏分类计数，需与条目列表一并刷新
+                ui_sync::refresh_categories_ui(&ui, &state_confirm.borrow());
+                ui_sync::refresh_items_ui(&ui, &state_confirm.borrow(), &cur, &query);
+            }
+            // F8/4.1：条目集合变化后重注册条目热键
+            ui_sync::sync_item_hotkeys(&state_confirm.borrow());
+            let loc_m = state_confirm.borrow().loc.clone();
+            let tip = if removed > 0 {
+                loc_m.borrow()
+                    .tr("Tip_CleanInvalidDone")
+                    .replace("{0}", &removed.to_string())
+            } else {
+                loc_m.borrow().tr("Tip_CleanInvalidNone").to_string()
+            };
+            if let Some(ui) = weak_ui_confirm.upgrade() {
+                ui_sync::show_toast(&ui, tip, false);
+            }
+            // 清理项处理完毕后必须返回，避免与后续 pending 分支级联执行
             return;
         }
         // 提权运行确认（右键菜单 → 确认弹窗 → 执行）

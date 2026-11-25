@@ -192,6 +192,33 @@ fn normalize_path(p: &std::path::Path) -> std::path::PathBuf {
     out
 }
 
+/// 条目目标静态有效性判定（"一键清理无效条目"）：与 `execute` 的运行期拒绝
+/// 路径同构——空 target 对应 EmptyTarget，非 URL 且 PATH/相对路径解析与
+/// 存在性检查均失败对应 FileNotFound。判定结果即"该条目现在能否启动"。
+/// 差异点：`%so%`/`%so-url%` 搜索参数模板的 target 由运行时搜索文本解析，
+/// 静止时本就不是文件路径，视为有效，避免误伤搜索型条目。
+pub fn is_item_target_valid(item: &Item) -> bool {
+    let trimmed = item.target.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if uses_search_var(trimmed) {
+        return true;
+    }
+    let base = item.target.clone();
+    let expanded = expand_pre(&item.target, &base);
+    if is_url(&expanded) {
+        return true;
+    }
+    if resolve_bare_name(&expanded).is_some() {
+        return true;
+    }
+    if resolve_relative(&expanded).is_some() {
+        return true;
+    }
+    Path::new(&expanded).exists()
+}
+
 fn execute(item: &Item, admin: bool, search_param: &str) -> RunResult {
     // 空 target（如历史占位 "New Item"）直接拒绝并给出明确错误，经 toast 提示用户
     if item.target.trim().is_empty() {
@@ -852,5 +879,66 @@ mod tests {
         assert!(!is_url("C:\\Windows\\notepad.exe"));
         assert!(!is_url("D:\\Games\\game.exe"));
         assert!(!is_url("relative/path/file.txt"));
+    }
+
+    fn mk_validity_item(target: &str) -> Item {
+        Item {
+            name: "t".into(),
+            target: target.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_is_item_target_valid_empty_target() {
+        // 空/空白 target：运行期 EmptyTarget，判无效
+        assert!(!is_item_target_valid(&mk_validity_item("")));
+        assert!(!is_item_target_valid(&mk_validity_item("   ")));
+    }
+
+    #[test]
+    fn test_is_item_target_valid_url_always_valid() {
+        assert!(is_item_target_valid(&mk_validity_item("https://example.com")));
+        assert!(is_item_target_valid(&mk_validity_item("steam://run/123")));
+    }
+
+    #[test]
+    fn test_is_item_target_valid_search_template_valid() {
+        // %so%/%so-url% 模板由运行时搜索文本解析，静止时非文件路径，视为有效
+        assert!(is_item_target_valid(&mk_validity_item(
+            "https://www.bing.com/search?q=%so%"
+        )));
+        assert!(is_item_target_valid(&mk_validity_item(
+            "https://example.com/%so-url%"
+        )));
+    }
+
+    #[test]
+    fn test_is_item_target_valid_existing_file() {
+        let path = std::env::temp_dir().join("gorun_validity_existing.txt");
+        std::fs::write(&path, b"x").unwrap();
+        assert!(is_item_target_valid(&mk_validity_item(
+            &path.to_string_lossy()
+        )));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_is_item_target_valid_missing_file() {
+        // 父目录不存在的绝对路径：双平台均判无效（与运行期 FileNotFound 同构）
+        let path = std::env::temp_dir()
+            .join("gorun_no_such_dir_9x7")
+            .join("nope.txt");
+        assert!(!is_item_target_valid(&mk_validity_item(
+            &path.to_string_lossy()
+        )));
+    }
+
+    #[test]
+    fn test_is_item_target_valid_missing_relative_path() {
+        // 含分隔符的相对路径：解析不到且不存在 → 无效
+        assert!(!is_item_target_valid(&mk_validity_item(
+            "gorun_no_such_dir_9x7/nope.txt"
+        )));
     }
 }

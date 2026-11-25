@@ -483,6 +483,19 @@ impl ItemManager {
         self.config.data.items.iter().find(|i| i.id == id)
     }
 
+    /// "一键清理无效条目"：返回所有目标已失效条目的 id（判定见
+    /// `runner::is_item_target_valid`——空目标或非 URL 目标不存在，
+    /// 与运行期 EmptyTarget/FileNotFound 同构）。
+    pub fn invalid_item_ids(&self) -> Vec<String> {
+        self.config
+            .data
+            .items
+            .iter()
+            .filter(|i| !crate::runner::is_item_target_valid(i))
+            .map(|i| i.id.clone())
+            .collect()
+    }
+
     /// 按名称排序分类内项目（背景右键菜单"按名称排序"）。
     pub fn sort_items_by_name(&mut self, category_id: &str) {
         self.sort_category_items(category_id, |a, b| {
@@ -687,6 +700,32 @@ mod tests {
         assert!(m.delete_item("i1"));
         assert!(m.config.data.items.is_empty());
         assert!(!m.delete_item("nope"));
+    }
+
+    #[test]
+    fn test_invalid_item_ids() {
+        // 有效：存在的本地文件 / URL / %so% 搜索模板；无效：空 target / 缺失路径
+        let valid_path = std::env::temp_dir().join("gorun_invalid_ids_ok.txt");
+        std::fs::write(&valid_path, b"x").unwrap();
+        let mut valid = make_item("ok", "Ok", "c1");
+        valid.target = valid_path.to_string_lossy().to_string();
+        let mut url = make_item("u", "Url", "c1");
+        url.target = "https://example.com".into();
+        let mut tpl = make_item("tpl", "Tpl", "c1");
+        tpl.target = "https://example.com/?q=%so%".into();
+        let mut empty = make_item("e", "Empty", "c1");
+        empty.target = "  ".into();
+        let mut gone = make_item("g", "Gone", "c1");
+        gone.target = std::env::temp_dir()
+            .join("gorun_no_such_dir_9x7")
+            .join("nope.txt")
+            .to_string_lossy()
+            .to_string();
+        let m = make_manager(vec![valid, url, tpl, empty, gone]);
+        let mut ids = m.invalid_item_ids();
+        ids.sort();
+        assert_eq!(ids, vec!["e".to_string(), "g".to_string()]);
+        let _ = std::fs::remove_file(&valid_path);
     }
 
     #[test]

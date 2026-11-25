@@ -165,6 +165,12 @@ mod tests {
             "Status_Imported",
             "Status_HotkeyConflict",
             "Tip_ImportConfirm",
+            "Menu_CleanInvalid",
+            "Title_CleanInvalid",
+            "Tip_CleanInvalidConfirm",
+            "Tip_CleanInvalidDone",
+            "Tip_CleanInvalidNone",
+            "Tip_CleanScanFail",
         ];
         for key in essential {
             assert_ne!(loc.tr(key), key, "zh-CN.json 缺少关键文案 key: {}", key);
