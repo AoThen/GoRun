@@ -1152,6 +1152,106 @@ fn test_confirm_ok_twice_has_single_effect() {
     );
 }
 
+// ===== "移动到..."折叠子菜单（下钻式）回归 =====
+
+/// 在当前弹出的项目菜单（context-menu-items）中按文本定位索引。
+fn find_context_item_index(ui: &MainWindow, text: &str) -> i32 {
+    let items = ui.get_context_menu_items();
+    for i in 0..items.row_count() {
+        if items.row_data(i).unwrap().as_str() == text {
+            return i as i32;
+        }
+    }
+    panic!("项目菜单中未找到项: {}", text);
+}
+
+/// 下钻流程：右键 → 点"移动到..." → 菜单不关闭且换为 [返回, 目标分类]
+/// → 点返回恢复一级 → 再下钻点目标分类 → 条目归属变更。
+#[test]
+fn test_move_to_submenu_drilldown_and_back() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items.clone());
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+
+    // 右键 cat_1 的第一个条目（Notepad，属 cat_1）。
+    // invoke 直达 Rust 回调；真实 UI 的 visible=true 由 .slint 侧 ItemGrid
+    // handler 设置（invoke 不经过该链路），此处先模拟打开动作。
+    ui.set_context_menu_visible(true);
+    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    // 一级菜单末位为折叠入口，不再随分类数平铺
+    let entry_idx = find_context_item_index(&ui, "移动到...");
+    assert!(ui.get_context_menu_visible(), "右键后菜单应可见");
+
+    // 下钻：菜单保持打开，内容换为 [返回, Games]（排除条目当前分类 cat_1）
+    ui.invoke_menu_item_selected(entry_idx);
+    assert!(ui.get_context_menu_visible(), "下钻后菜单应保持可见");
+    assert_eq!(
+        find_context_item_index(&ui, "返回"),
+        0,
+        "二级菜单首项应为返回"
+    );
+    let games_idx = find_context_item_index(&ui, "Games");
+    assert!(games_idx > 0, "二级菜单应含目标分类 Games");
+
+    // 返回：恢复一级菜单（折叠入口仍在，二级菜单内容已不在）
+    let back_idx = find_context_item_index(&ui, "返回");
+    ui.invoke_menu_item_selected(back_idx);
+    assert!(ui.get_context_menu_visible(), "返回后菜单应保持可见");
+    let _ = find_context_item_index(&ui, "移动到...");
+    let _ = find_context_item_index(&ui, "编辑");
+    let items_model = ui.get_context_menu_items();
+    for i in 0..items_model.row_count() {
+        assert_ne!(
+            items_model.row_data(i).unwrap().as_str(),
+            "返回",
+            "返回一级后不应再有返回项"
+        );
+    }
+
+    // 再次下钻并选择目标分类：条目移动到 cat_2
+    let entry_idx2 = find_context_item_index(&ui, "移动到...");
+    ui.invoke_menu_item_selected(entry_idx2);
+    let games_idx2 = find_context_item_index(&ui, "Games");
+    ui.invoke_menu_item_selected(games_idx2);
+    assert!(
+        !ui.get_context_menu_visible(),
+        "选择目标分类后菜单应关闭"
+    );
+    let moved = state
+        .borrow()
+        .manager
+        .all_items()
+        .into_iter()
+        .find(|it| it.id == items[0].id)
+        .expect("条目应仍存在");
+    assert_eq!(moved.category_id, "cat_2", "条目应移入 Games 分类");
+}
+
+/// 单分类时一级菜单不显示"移动到..."（无可移动目标）。
+#[test]
+fn test_move_to_submenu_hidden_with_single_category() {
+    let (mut cats, items) = sample_data();
+    cats.truncate(1);
+    let items: Vec<Item> = items
+        .into_iter()
+        .filter(|it| it.category_id == cats[0].id)
+        .collect();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+
+    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    let items_model = ui.get_context_menu_items();
+    for i in 0..items_model.row_count() {
+        assert_ne!(
+            items_model.row_data(i).unwrap().as_str(),
+            "移动到...",
+            "单分类不应出现移动到入口"
+        );
+    }
+}
+
 /// 至少保留一个分类：删除最后分类被拒，Toast 提示且数据不变。
 #[test]
 fn test_confirm_delete_last_category_rejected() {

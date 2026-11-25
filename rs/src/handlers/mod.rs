@@ -29,6 +29,17 @@ fn menu_content_height(items: &[slint::SharedString]) -> f32 {
         + 8.0
 }
 
+/// 统一写入右键菜单三属性（items/danger/content-height）。
+/// danger 与 items 必须等长（平行数组）；高度由 items 推导（项 28px/分隔 1px + padding）。
+/// 不触碰 x/y/visible——锚点与开关由调用方按语义自行控制（下钻复用原锚点）。
+fn set_context_menu(ui: &MainWindow, items: Vec<slint::SharedString>, danger: Vec<bool>) {
+    debug_assert_eq!(items.len(), danger.len(), "菜单文本与 danger 必须平行等长");
+    let content_h = menu_content_height(&items);
+    ui.set_context_menu_content_height(content_h);
+    ui.set_context_menu_items(Rc::new(slint::VecModel::from(items)).into());
+    ui.set_context_menu_danger(Rc::new(slint::VecModel::from(danger)).into());
+}
+
 /// "运行全部"进度快照（M-4）：工作线程写，UI 轮询 Timer 读（Mutex 保护）。
 #[derive(Default, Clone, Copy)]
 struct RunAllProgress {
@@ -67,13 +78,17 @@ enum ItemMenuAction {
     Run,
     RefreshIcon,
     Properties,
+    /// 一级菜单"移动到..."入口（点击后原地下钻为分类列表，见 build_move_to_menu）。
+    MoveToMenu,
+    /// 二级菜单携带目标分类 id（排除条目当前所在分类，见 build_move_to_menu）。
     MoveTo(String),
-    OpenFolder,
+    /// 二级菜单"返回"：恢复一级菜单内容。
+    Back,
 }
 
 /// 项目右键菜单条目构建（纯函数）：返回文本与动作的平行数组。
 /// 搜索态隐藏上移/下移（搜索结果排序语义与全局向量不一致，建议④）；
-/// MoveTo 每分类一项（携带目标分类 id），OpenFolder 固定末位。
+/// "移动到..." 单项折叠（cats.len()>=2 才显示），点击后下钻为分类列表。
 fn build_item_menu(
     lb: &Localization,
     searching: bool,
@@ -104,13 +119,32 @@ fn build_item_menu(
     texts.push(lb.tr("Menu_Properties").into());
     actions.push(ItemMenuAction::Properties);
     let move_to = lb.tr("Menu_MoveTo").to_string();
-    let open_folder = lb.tr("Menu_OpenFolder").to_string();
+    // 折叠入口：仅存在 ≥2 个分类时可移动（单分类无目标，旧版会显示无意义的"移动到唯一分类"）
+    if cats.len() >= 2 {
+        texts.push(slint::SharedString::from(format!("{}...", move_to)));
+        actions.push(ItemMenuAction::MoveToMenu);
+    }
+    (texts, actions)
+}
+
+/// "移动到..."二级菜单条目构建（纯函数）：首项"返回"，其后为可移动的分类列表。
+/// `exclude_id` 为条目当前所在分类（移入原分类无意义，排除）。
+fn build_move_to_menu(
+    lb: &Localization,
+    cats: &[(String, String)],
+    exclude_id: &str,
+) -> (Vec<slint::SharedString>, Vec<ItemMenuAction>) {
+    let mut texts: Vec<slint::SharedString> = Vec::new();
+    let mut actions: Vec<ItemMenuAction> = Vec::new();
+    texts.push(lb.tr("Menu_Back").into());
+    actions.push(ItemMenuAction::Back);
     for (cat_id, name) in cats {
-        texts.push(slint::SharedString::from(format!("{} {}", move_to, name)));
+        if cat_id == exclude_id {
+            continue;
+        }
+        texts.push(name.as_str().into());
         actions.push(ItemMenuAction::MoveTo(cat_id.clone()));
     }
-    texts.push(open_folder.into());
-    actions.push(ItemMenuAction::OpenFolder);
     (texts, actions)
 }
 
@@ -692,21 +726,15 @@ pub fn wire_handler(
         // 菜单文本与动作平行构建（纯函数，增删项不依赖手写索引）
         let (menu_vec, actions) = build_item_menu(&lb, searching, &cats);
         drop(lb);
-        *item_actions_build.borrow_mut() = actions;
-        let item_count = menu_vec.len();
-        let content_h = menu_content_height(&menu_vec);
-        let menu_items = Rc::new(slint::VecModel::from(menu_vec));
         // v2 危险项标红：删除项为 danger；由 action 映射生成，避免索引错位
-        let danger: Vec<bool> = item_actions_build
-            .borrow()
+        let danger: Vec<bool> = actions
             .iter()
             .map(|a| matches!(a, ItemMenuAction::Delete))
             .collect();
-        let danger_model = Rc::new(slint::VecModel::from(danger));
+        *item_actions_build.borrow_mut() = actions;
+        let item_count = menu_vec.len();
         if let Some(ui) = weak_ui_right.upgrade() {
-            ui.set_context_menu_content_height(content_h);
-            ui.set_context_menu_items(menu_items.into());
-            ui.set_context_menu_danger(danger_model.into());
+            set_context_menu(&ui, menu_vec, danger);
             geometry::position_menu_at_cursor(&ui, x, y, item_count);
         }
     });
@@ -736,13 +764,9 @@ pub fn wire_handler(
             slint::SharedString::from(sort_tpl.replace("{0}", &sort_usage)),
             slint::SharedString::from(lb.tr("Menu_RunAll")),
         ];
-        let content_h = menu_content_height(&menu_vec);
         if let Some(ui) = weak_ui_bg.upgrade() {
-            ui.set_context_menu_content_height(content_h);
-            ui.set_context_menu_items(Rc::new(slint::VecModel::from(menu_vec)).into());
             // v2：背景菜单无危险项
-            let danger: Vec<bool> = vec![false; 7];
-            ui.set_context_menu_danger(Rc::new(slint::VecModel::from(danger)).into());
+            set_context_menu(&ui, menu_vec, vec![false; 7]);
             geometry::position_menu_at_cursor(&ui, x, y, 7);
         }
     });
@@ -766,13 +790,9 @@ pub fn wire_handler(
             slint::SharedString::from(lb.tr("Menu_MoveUp")),
             slint::SharedString::from(lb.tr("Menu_MoveDown")),
         ];
-        let content_h = menu_content_height(&menu_vec);
         if let Some(ui) = weak_ui_cat_right.upgrade() {
-            ui.set_context_menu_content_height(content_h);
-            ui.set_context_menu_items(Rc::new(slint::VecModel::from(menu_vec)).into());
             // v2 危险项标红：删除分类(index 1)
-            let danger: Vec<bool> = vec![false, true, false, false];
-            ui.set_context_menu_danger(Rc::new(slint::VecModel::from(danger)).into());
+            set_context_menu(&ui, menu_vec, vec![false, true, false, false]);
             geometry::position_menu_at_cursor(&ui, x, y, 4);
         }
     });
@@ -1367,6 +1387,55 @@ pub fn wire_handler(
                             fileops::show_properties(&item.target);
                         }
                     }
+                    // 下钻：一级"移动到..." → 原地换内容为分类列表（菜单不关闭）。
+                    // .slint 的 selected() 已置 visible=false；同一事件回调内重建后
+                    // 再置 true，重绘发生在回调结束后，无闪烁。x/y 锚点不重设。
+                    Some(ItemMenuAction::MoveToMenu) => {
+                        let loc_m = state.loc.clone();
+                        let cats: Vec<(String, String)> = state
+                            .manager
+                            .categories()
+                            .iter()
+                            .map(|c| (c.id.clone(), c.name.clone()))
+                            .collect();
+                        drop(state);
+                        let lb = loc_m.borrow();
+                        let (menu_vec, actions) =
+                            build_move_to_menu(&lb, &cats, &item.category_id);
+                        drop(lb);
+                        *item_menu_actions_menu.borrow_mut() = actions;
+                        if let Some(ui) = weak_ui_menu.upgrade() {
+                            // 先取长度再 move（参数从左到右求值，内联写法会 E0382）
+                            let danger = vec![false; menu_vec.len()];
+                            set_context_menu(&ui, menu_vec, danger);
+                            ui.set_context_menu_visible(true);
+                        }
+                    }
+                    // 返回：恢复一级菜单（搜索态/分类列表以当前 state 为准重建）。
+                    Some(ItemMenuAction::Back) => {
+                        let loc_m = state.loc.clone();
+                        let searching = !state.search_query.is_empty();
+                        let cats: Vec<(String, String)> = state
+                            .manager
+                            .categories()
+                            .iter()
+                            .map(|c| (c.id.clone(), c.name.clone()))
+                            .collect();
+                        drop(state);
+                        let lb = loc_m.borrow();
+                        let (menu_vec, actions) = build_item_menu(&lb, searching, &cats);
+                        drop(lb);
+                        *item_menu_actions_menu.borrow_mut() = actions;
+                        if let Some(ui) = weak_ui_menu.upgrade() {
+                            let danger: Vec<bool> = item_menu_actions_menu
+                                .borrow()
+                                .iter()
+                                .map(|a| matches!(a, ItemMenuAction::Delete))
+                                .collect();
+                            set_context_menu(&ui, menu_vec, danger);
+                            ui.set_context_menu_visible(true);
+                        }
+                    }
                     Some(ItemMenuAction::MoveTo(target_cat)) => {
                         if state.manager.move_item(&item.id, &target_cat) {
                             state.save_if_modified();
@@ -1374,6 +1443,10 @@ pub fn wire_handler(
                             let q = state.search_query.clone();
                             drop(state);
                             if let Some(ui) = weak_ui_menu.upgrade() {
+                                // 真实 UI 中 .slint selected() 已关菜单；此处显式
+                                // 复位保持与下钻/返回的 visible 控制对称（测试
+                                // invoke 不经 .slint 链路，依赖本写法关闭）。
+                                ui.set_context_menu_visible(false);
                                 ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                             }
                         }
@@ -1399,9 +1472,6 @@ pub fn wire_handler(
                                 ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                             }
                         }
-                    }
-                    Some(ItemMenuAction::OpenFolder) => {
-                        crate::fileops::open_folder(&item.target);
                     }
                     None => {}
                 }
@@ -1812,32 +1882,80 @@ mod tests {
     #[test]
     fn test_item_menu_build_normal_mode() {
         let loc = Localization::new("zh-CN");
-        let cats = vec![("c1".to_string(), "Apps".to_string())];
+        // ≥2 分类才显示"移动到..."折叠入口
+        let cats = vec![
+            ("c1".to_string(), "Apps".to_string()),
+            ("c2".to_string(), "Games".to_string()),
+        ];
         let (texts, actions) = build_item_menu(&loc, false, &cats);
         assert_eq!(texts.len(), actions.len(), "文本与动作必须平行");
-        // 固定 9 项 + 上移/下移 + 1 个 MoveTo + OpenFolder = 12
-        assert_eq!(texts.len(), 12);
+        // 固定 8 项 + 上移/下移 + 1 个"移动到..."入口 = 11（与分类数无关）
+        assert_eq!(texts.len(), 11);
         assert!(matches!(actions[2], ItemMenuAction::Delete), "第 3 项应为删除");
         let danger_count = actions
             .iter()
             .filter(|a| matches!(a, ItemMenuAction::Delete))
             .count();
         assert_eq!(danger_count, 1, "仅删除项为 danger");
-        assert!(matches!(actions.last(), Some(ItemMenuAction::OpenFolder)));
-        assert!(matches!(&actions[10], ItemMenuAction::MoveTo(id) if id == "c1"));
+        // 末位为折叠入口；平铺的 MoveTo/旧打开文件夹项不再出现在一级菜单
+        assert!(matches!(actions.last(), Some(ItemMenuAction::MoveToMenu)));
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, ItemMenuAction::MoveTo(_) | ItemMenuAction::Back)));
+        assert_eq!(texts.last().unwrap().as_str(), "移动到...");
     }
 
     #[test]
     fn test_item_menu_build_search_mode_hides_reorder() {
         let loc = Localization::new("zh-CN");
-        let cats = vec![("c1".to_string(), "Apps".to_string())];
+        let cats = vec![
+            ("c1".to_string(), "Apps".to_string()),
+            ("c2".to_string(), "Games".to_string()),
+        ];
         let (texts, actions) = build_item_menu(&loc, true, &cats);
         assert_eq!(texts.len(), actions.len());
-        // 搜索态隐藏上移/下移：12 - 2 = 10 项
-        assert_eq!(texts.len(), 10);
+        // 搜索态隐藏上移/下移：11 - 2 = 9 项
+        assert_eq!(texts.len(), 9);
         assert!(!actions
             .iter()
             .any(|a| matches!(a, ItemMenuAction::MoveUp | ItemMenuAction::MoveDown)));
+        assert!(matches!(actions.last(), Some(ItemMenuAction::MoveToMenu)));
+    }
+
+    #[test]
+    fn test_item_menu_single_category_hides_move_to() {
+        // 单分类：无可移动目标，折叠入口整体隐藏（含搜索态）
+        let loc = Localization::new("zh-CN");
+        let cats = vec![("c1".to_string(), "Apps".to_string())];
+        let (texts, actions) = build_item_menu(&loc, false, &cats);
+        assert_eq!(texts.len(), 10, "固定 8 项 + 上移/下移");
+        assert!(!actions.iter().any(|a| matches!(a, ItemMenuAction::MoveToMenu)));
+        let (texts_s, actions_s) = build_item_menu(&loc, true, &cats);
+        assert_eq!(texts_s.len(), 8, "搜索态固定 8 项");
+        assert!(!actions_s.iter().any(|a| matches!(a, ItemMenuAction::MoveToMenu)));
+    }
+
+    #[test]
+    fn test_move_to_menu_build_excludes_current_category() {
+        // 二级菜单：首项"返回"，排除条目当前分类，其余按序列出
+        let loc = Localization::new("zh-CN");
+        let cats = vec![
+            ("c1".to_string(), "Apps".to_string()),
+            ("c2".to_string(), "Games".to_string()),
+            ("c3".to_string(), "Tools".to_string()),
+        ];
+        let (texts, actions) = build_move_to_menu(&loc, &cats, "c1");
+        assert_eq!(texts.len(), actions.len(), "文本与动作必须平行");
+        assert_eq!(texts.len(), 3, "返回 + 2 个可移动分类");
+        assert_eq!(texts[0].as_str(), "返回");
+        assert!(matches!(actions[0], ItemMenuAction::Back));
+        assert!(matches!(&actions[1], ItemMenuAction::MoveTo(id) if id == "c2"));
+        assert_eq!(texts[1].as_str(), "Games");
+        assert!(matches!(&actions[2], ItemMenuAction::MoveTo(id) if id == "c3"));
+        // 全部被排除（单分类）时仅剩"返回"
+        let (texts_one, actions_one) = build_move_to_menu(&loc, &cats[..1], "c1");
+        assert_eq!(texts_one.len(), 1);
+        assert!(matches!(actions_one[0], ItemMenuAction::Back));
     }
 
     /// 构造带 1 分类 3 条目的 AppState（不依赖窗口；storage 指向独立临时文件）。
