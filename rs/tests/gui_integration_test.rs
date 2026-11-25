@@ -5,7 +5,7 @@ use GoRun::app_state::AppState;
 use GoRun::icon_cache::IconCache;
 use GoRun::item_manager::ItemManager;
 use GoRun::localization::Localization;
-use GoRun::model::{AppConfig, AppData, Category, Config, Item};
+use GoRun::model::{AppConfig, AppData, Category, Config, Item, ViewType};
 use GoRun::storage::Storage;
 use GoRun::*;
 
@@ -1529,4 +1529,761 @@ fn test_run_all_double_confirm_and_cancel() {
         .map(|i| i.run_count)
         .sum();
     assert_eq!(ran, 0, "取消后不得执行任何条目");
+}
+
+// ===== P0 缺口补测：主题持久化 / 图标缓存文件级联删除 / 运行结果队列 / 条目热键 =====
+
+/// 主题切换：UI 状态翻转且 extra_config "theme" 键落盘（"0"=Light/"1"=Dark）。
+#[test]
+fn test_theme_toggle_persists_extra_config() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    assert!(!ui.get_is_dark_theme(), "默认应为浅色主题");
+    ui.invoke_toggle_theme();
+    assert!(ui.get_is_dark_theme(), "切换后应为深色主题");
+    assert_eq!(
+        state.borrow().manager.config().extra_config.get("theme"),
+        Some(&"1".to_string()),
+        "深色主题应持久化 theme=1"
+    );
+    ui.invoke_toggle_theme();
+    assert!(!ui.get_is_dark_theme(), "再次切换应回到浅色");
+    assert_eq!(
+        state.borrow().manager.config().extra_config.get("theme"),
+        Some(&"0".to_string()),
+        "切回浅色应持久化 theme=0"
+    );
+}
+
+/// 删除条目：磁盘上的图标缓存文件应随条目同步删除（缓存键按条目字段重算）。
+#[test]
+fn test_delete_item_removes_cached_icon_file() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let cat_id = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = cat_id;
+
+    // 预置条目 i1 对应的图标缓存文件（cache_path 由条目字段重算，与删除路径同构）
+    let item = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == "i1")
+        .cloned()
+        .unwrap();
+    let cache_file = state.borrow().icon_cache.cache_path(&item);
+    std::fs::write(&cache_file, b"fake-icon").unwrap();
+    assert!(cache_file.exists(), "预置缓存文件应存在");
+
+    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    let idx = find_context_danger_index(&ui);
+    ui.invoke_menu_item_selected(idx);
+    assert!(ui.get_confirm_dialog_visible(), "删除确认框应弹出");
+    ui.invoke_confirm_dialog_ok();
+
+    assert_eq!(state.borrow().manager.all_items().len(), 2, "条目应被删除");
+    assert!(
+        !cache_file.exists(),
+        "删除条目应同步删除其磁盘图标缓存文件"
+    );
+}
+
+/// 删除分类级联：分类内条目的图标缓存文件随级联删除；保留分类的缓存不动。
+#[test]
+fn test_delete_category_removes_cached_icon_files() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    // 当前分类切到 cat_2（含 i3）：汉堡菜单 danger 项删除的是当前分类
+    state.borrow_mut().current_category_id = "cat_2".into();
+
+    let (i2, i3) = {
+        let all = state.borrow().manager.all_items();
+        let a = all.iter().find(|i| i.id == "i2").cloned().unwrap();
+        let b = all.iter().find(|i| i.id == "i3").cloned().unwrap();
+        (a, b)
+    };
+    let p2 = state.borrow().icon_cache.cache_path(&i2);
+    let p3 = state.borrow().icon_cache.cache_path(&i3);
+    std::fs::write(&p2, b"fake-icon").unwrap();
+    std::fs::write(&p3, b"fake-icon").unwrap();
+
+    ui.invoke_hamburger_clicked();
+    let idx = find_first_danger_index(&ui);
+    ui.invoke_menu_popup_selected(idx);
+    assert!(ui.get_confirm_dialog_visible(), "删除分类确认框应弹出");
+    ui.invoke_confirm_dialog_ok();
+
+    let cats_after = state.borrow().manager.categories();
+    assert_eq!(cats_after.len(), 1, "应删掉当前分类，保留最后一个");
+    assert!(cats_after.iter().any(|c| c.id == "cat_1"));
+    assert!(!p3.exists(), "被删分类内条目的缓存文件应级联删除");
+    assert!(p2.exists(), "保留分类的条目缓存文件不应被动");
+}
+
+/// 运行结果队列：失败结果由工作线程推入、drain 清空且不增运行计数；
+/// 成功结果 drain 时回写运行计数（M-5/M-6 队列语义）。
+/// 两平台均安全：execute 对不存在目标在 ShellExecute 之前即返回 FileNotFound。
+#[test]
+fn test_run_failure_queued_drain_success_increments_count() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let cat_id = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = cat_id;
+
+    // 点击首条（目标在两平台 CI 环境均不存在）→ 异步线程推入失败结果
+    ui.invoke_item_tile_clicked(0);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        let n = state
+            .borrow()
+            .pending_run_results
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len();
+        if n > 0 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "运行结果应在 3 秒内推入队列"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    let drained = GoRun::ui_sync::drain_run_results(&state);
+    assert_eq!(drained.len(), 1, "drain 应取走运行结果");
+    assert!(!drained[0].success, "不存在目标的运行应失败");
+    assert!(
+        state.borrow().pending_run_results.lock().unwrap().is_empty(),
+        "drain 后队列应清空"
+    );
+    let count = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == "i1")
+        .unwrap()
+        .run_count;
+    assert_eq!(count, 0, "失败运行不应递增运行计数");
+
+    // 成功结果：drain 时回写运行计数
+    {
+        let mut q = state.borrow_mut().pending_run_results.lock().unwrap();
+        q.push(GoRun::app_state::RunOutcome {
+            item_id: "i1".into(),
+            item_name: "Notepad".into(),
+            success: true,
+            error: GoRun::model::RunError::None,
+        });
+    }
+    let drained2 = GoRun::ui_sync::drain_run_results(&state);
+    assert_eq!(drained2.len(), 1, "成功结果应被取走");
+    let count2 = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == "i1")
+        .unwrap()
+        .run_count;
+    assert_eq!(count2, 1, "成功结果 drain 后运行计数应 +1");
+}
+
+/// 条目热键：有效热键保存后同步注册无失败；清空后空集合同步正常。
+/// （非 Windows 平台不支持条目热键，sync 约定不报失败，见 hotkey 泵实现）
+#[test]
+fn test_item_hotkey_sync_valid_then_cleared() {
+    let (cats, items) = sample_data();
+    let (_ui, state) = setup_wired_ui(cats, items);
+
+    let mut it = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == "i1")
+        .cloned()
+        .unwrap();
+    it.hotkey = "Ctrl+Shift+F8".into();
+    state.borrow_mut().manager.update_item(&it);
+
+    let failed = GoRun::ui_sync::sync_item_hotkeys(&state);
+    assert!(failed.is_empty(), "有效热键同步注册不应失败: {failed:?}");
+
+    it.hotkey = String::new();
+    state.borrow_mut().manager.update_item(&it);
+    let failed2 = GoRun::ui_sync::sync_item_hotkeys(&state);
+    assert!(failed2.is_empty(), "热键清空（空集合）同步不应失败: {failed2:?}");
+}
+
+/// （Windows）两条目共用同一热键：后注册者必须失败上报，不得静默吞掉。
+#[cfg(windows)]
+#[test]
+fn test_item_hotkey_conflict_reported_on_windows() {
+    let (cats, items) = sample_data();
+    let (_ui, state) = setup_wired_ui(cats, items);
+
+    let mut it1 = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == "i1")
+        .cloned()
+        .unwrap();
+    it1.hotkey = "Ctrl+Shift+F8".into();
+    let mut it2 = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == "i2")
+        .cloned()
+        .unwrap();
+    it2.hotkey = "Ctrl+Shift+F8".into();
+    state.borrow_mut().manager.update_item(&it1);
+    state.borrow_mut().manager.update_item(&it2);
+
+    let failed = GoRun::ui_sync::sync_item_hotkeys(&state);
+    assert!(
+        failed.iter().any(|f| f == "Ctrl+Shift+F8"),
+        "冲突热键应上报失败: {failed:?}"
+    );
+}
+
+/// （Windows）不可解析的热键串（含 `+` 键位无法表达的组合）应失败上报。
+#[cfg(windows)]
+#[test]
+fn test_item_hotkey_invalid_string_reported_on_windows() {
+    let (cats, items) = sample_data();
+    let (_ui, state) = setup_wired_ui(cats, items);
+
+    let mut it = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == "i1")
+        .cloned()
+        .unwrap();
+    it.hotkey = "Ctrl++".into();
+    state.borrow_mut().manager.update_item(&it);
+
+    let failed = GoRun::ui_sync::sync_item_hotkeys(&state);
+    assert!(
+        failed.iter().any(|f| f == "Ctrl++"),
+        "非法热键串应上报失败: {failed:?}"
+    );
+}
+
+// ===== P1 缺口补测：背景图恢复 / 视图跟随 / 拖放消费 / 剪贴板 / 开机自启 =====
+
+/// 背景图恢复链（ui_sync::restore_background_image）：
+/// 无键不动 → 有效图片铺底生效 → 暗化遮罩随同恢复 → 失效路径降级并清除键。
+#[test]
+fn test_background_image_restore_valid_and_invalid() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    // 无背景键：恢复调用无副作用
+    GoRun::ui_sync::restore_background_image(&ui, &state);
+    assert!(!ui.get_has_bg_image(), "无背景键时不应铺底");
+
+    // 有效图片：复用仓库应用图标（解码管线支持 ico）
+    let bg_path = std::env::temp_dir().join(format!("gorun_bg_test_{}.ico", std::process::id()));
+    std::fs::write(&bg_path, include_bytes!("../../resources/icons/app.ico")).unwrap();
+    state
+        .borrow_mut()
+        .manager
+        .config_mut()
+        .extra_config
+        .insert("background_image".into(), bg_path.to_string_lossy().to_string());
+    GoRun::ui_sync::restore_background_image(&ui, &state);
+    assert!(ui.get_has_bg_image(), "有效背景图应铺底生效");
+
+    // 暗化遮罩：40% → bg_dim 0.4
+    state
+        .borrow_mut()
+        .manager
+        .config_mut()
+        .extra_config
+        .insert("background_dim_enabled".into(), "1".into());
+    state
+        .borrow_mut()
+        .manager
+        .config_mut()
+        .extra_config
+        .insert("background_dim".into(), "40".into());
+    GoRun::ui_sync::restore_background_image(&ui, &state);
+    assert!(ui.get_bg_dim_enabled(), "暗化开关应恢复");
+    assert!((ui.get_bg_dim() - 0.4).abs() < 0.001, "暗化浓度应恢复（40% → 0.4）");
+
+    // 失效路径：降级纯色并清除键（键清除后后续启动不再尝试该路径）
+    state
+        .borrow_mut()
+        .manager
+        .config_mut()
+        .extra_config
+        .insert("background_image".into(), "/no/such/background.png".into());
+    GoRun::ui_sync::restore_background_image(&ui, &state);
+    assert!(
+        state
+            .borrow()
+            .manager
+            .config()
+            .extra_config
+            .get("background_image")
+            .is_none(),
+            "失效路径应被清除"
+    );
+    let _ = std::fs::remove_file(&bg_path);
+}
+
+/// 按分类视图类型：切换分类后视图跟随该分类的 view_type（各分类独立互不影响）。
+#[test]
+fn test_view_type_follows_category_independently() {
+    let (mut cats, items) = sample_data();
+    cats[0].view_type = ViewType::Icon;
+    cats[1].view_type = ViewType::List;
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    ui.invoke_category_selected(0);
+    assert!(ui.get_is_icon_view(), "cat_1 图标模式应生效");
+
+    ui.invoke_category_selected(1);
+    assert!(!ui.get_is_icon_view(), "cat_2 列表模式，不应受 cat_1 影响");
+
+    ui.invoke_toggle_view();
+    assert!(ui.get_is_icon_view(), "切换后 cat_2 应翻转为图标模式");
+    let view2 = state.borrow().manager.categories()[1].view_type;
+    assert_eq!(view2, ViewType::Icon, "切换应写回当前分类的 view_type");
+
+    ui.invoke_category_selected(0);
+    assert!(ui.get_is_icon_view(), "cat_1 应保持图标模式");
+}
+
+/// （Windows）拖放消费线程：Drop 消息 → file-dropped 回调 → 条目入当前分类；
+/// 一次落下多文件应批量添加。
+#[cfg(windows)]
+#[test]
+fn test_drop_consumer_drop_message_adds_items_batch() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let cat_id = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = cat_id.clone();
+    let before = state.borrow().manager.items(&cat_id).len();
+
+    let (tx, rx) = std::sync::mpsc::channel::<GoRun::platform::DropMessage>();
+    GoRun::drop_handler::spawn_drop_consumer(
+        ui.as_weak(),
+        rx,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+
+    let base = std::env::temp_dir().join(format!("gorun_drop_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let f1 = base.join("dropa.txt");
+    let f2 = base.join("dropb.txt");
+    std::fs::write(&f1, b"a").unwrap();
+    std::fs::write(&f2, b"b").unwrap();
+
+    tx.send(GoRun::platform::DropMessage::Drop(vec![f1, f2])).unwrap();
+    // 消费线程经 invoke_from_event_loop 转发回调，testing 后端须手动泵事件
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        slint::platform::update_timers();
+        if state.borrow().manager.items(&cat_id).len() == before + 2 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "两个拖入文件应在 3 秒内全部入列"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let names: Vec<String> = state
+        .borrow()
+        .manager
+        .items(&cat_id)
+        .iter()
+        .map(|i| i.name.clone())
+        .collect();
+    assert!(
+        names.iter().any(|n| n == "dropa") && names.iter().any(|n| n == "dropb"),
+        "拖入文件应以文件名为条目名入列: {names:?}"
+    );
+    drop(tx); // 终止消费线程
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// （Windows）MouseLeft 自动隐藏门控：开关关闭时消费线程不进入延迟窗口且保持存活；
+/// 开关打开时延迟窗口内回到窗口取消隐藏，窗口内到达的 Drop 不丢（L-12）。
+#[cfg(windows)]
+#[test]
+fn test_drop_consumer_mouse_left_gate() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let cat_id = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = cat_id.clone();
+    let count = || state.borrow().manager.items(&cat_id).len();
+
+    let auto_hide = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (tx, rx) = std::sync::mpsc::channel::<GoRun::platform::DropMessage>();
+    GoRun::drop_handler::spawn_drop_consumer(ui.as_weak(), rx, auto_hide.clone());
+
+    let base = std::env::temp_dir().join(format!("gorun_drop_gate_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let f1 = base.join("gate_a.txt");
+    let f2 = base.join("gate_b.txt");
+    std::fs::write(&f1, b"a").unwrap();
+    std::fs::write(&f2, b"b").unwrap();
+
+    // 开关关闭：MouseLeft 被忽略（线程继续存活，不进延迟窗口）
+    tx.send(GoRun::platform::DropMessage::MouseLeft).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    tx.send(GoRun::platform::DropMessage::Drop(vec![f1])).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while count() < 1 {
+        slint::platform::update_timers();
+        assert!(
+            std::time::Instant::now() < deadline,
+            "开关关闭时 Drop 仍应被消费（线程存活）"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    // 开关打开：MouseLeft 进入 1s 延迟窗口，MouseEnter 取消隐藏；
+    // 窗口内到达的 Drop 不丢（延迟窗口收集后统一转发）
+    auto_hide.store(true, std::sync::atomic::Ordering::Relaxed);
+    tx.send(GoRun::platform::DropMessage::MouseLeft).unwrap();
+    tx.send(GoRun::platform::DropMessage::MouseEnter).unwrap();
+    tx.send(GoRun::platform::DropMessage::Drop(vec![f2])).unwrap();
+    let deadline2 = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while count() < 2 {
+        slint::platform::update_timers();
+        assert!(std::time::Instant::now() < deadline2, "延迟窗口内的 Drop 不应丢失");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    drop(tx);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// （Windows）剪贴板文件列表往返：写入 CF_HDROP 文件列表后 clipboard_files
+/// 应读回原路径（粘贴入分类依赖本管线）；结束清空剪贴板避免污染后续测试。
+#[cfg(windows)]
+#[test]
+fn test_clipboard_files_roundtrip() {
+    use windows::Win32::Foundation::{HANDLE, HWND};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+    };
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+    use windows::Win32::System::Ole::CF_HDROP;
+
+    let p1 = std::env::temp_dir().join(format!("gorun_clip_a_{}.txt", std::process::id()));
+    let p2 = std::env::temp_dir().join(format!("gorun_clip_b_{}.txt", std::process::id()));
+    std::fs::write(&p1, b"a").unwrap();
+    std::fs::write(&p2, b"b").unwrap();
+
+    // HDROP 格式：每条路径 NUL 结尾，尾部双 NUL
+    let w1: Vec<u16> = p1.as_os_str().encode_utf16().chain(std::iter::once(0)).collect();
+    let w2: Vec<u16> = p2.as_os_str().encode_utf16().chain(std::iter::once(0)).collect();
+    let data: Vec<u16> = w1
+        .into_iter()
+        .chain(w2.into_iter())
+        .chain(std::iter::once(0))
+        .collect();
+
+    // 句柄在 SetClipboardData 成功后归系统所有（系统负责释放），不得 GlobalFree
+    unsafe {
+        OpenClipboard(Some(HWND::default())).unwrap();
+        EmptyClipboard().unwrap();
+        let h = GlobalAlloc(GMEM_MOVEABLE, data.len() * 2).unwrap();
+        let ptr = GlobalLock(h) as *mut u16;
+        std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
+        let _ = GlobalUnlock(h);
+        SetClipboardData(CF_HDROP.0 as u32, HANDLE(h.0)).unwrap();
+        CloseClipboard().unwrap();
+    }
+
+    let got = GoRun::clipboard::clipboard_files();
+    assert_eq!(got.len(), 2, "剪贴板应读回 2 个文件路径");
+    assert_eq!(got[0], p1);
+    assert_eq!(got[1], p2);
+
+    // 清理：清空剪贴板与临时文件
+    unsafe {
+        OpenClipboard(Some(HWND::default())).unwrap();
+        EmptyClipboard().unwrap();
+        CloseClipboard().unwrap();
+    }
+    let _ = std::fs::remove_file(&p1);
+    let _ = std::fs::remove_file(&p2);
+}
+
+/// （Windows）开机自启开关：两次切换应得相反状态（注册表为唯一事实源），
+/// 收尾确保还原为关闭，不污染 runner。
+#[cfg(windows)]
+#[test]
+fn test_autostart_toggle_registry_roundtrip() {
+    let first = GoRun::tray::toggle_autostart().expect("Windows CI 上注册表操作应成功");
+    let second = GoRun::tray::toggle_autostart().expect("第二次切换也应成功");
+    assert_ne!(first, second, "两次切换应得相反状态");
+    if second {
+        assert!(
+            GoRun::tray::toggle_autostart().unwrap(),
+            "收尾切换应成功"
+        );
+    }
+    assert!(
+        !GoRun::tray::is_autostart_enabled(),
+        "收尾后开机自启应为关闭"
+    );
+}
+
+// ===== P2/P3 缺口补测：运行全部结果队列 / 托盘动作 / 一键清理 / 设置档位 =====
+
+/// 运行全部：双确认通过后批量执行；两项目均不存在（execute 存在性预检在
+/// ShellExecute 之前返回 FileNotFound，两平台一致且无系统弹窗）→ 全部失败，
+/// 完成后经 100ms 轮询 Timer 弹"成功 0, 失败 2"汇总 Toast，且不写运行计数。
+#[test]
+fn test_run_all_reports_failure_summary() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let cat_id = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = cat_id;
+
+    ui.invoke_background_right_clicked(10.0, 10.0);
+    let idx = find_context_item_index(&ui, "运行全部");
+    ui.invoke_menu_item_selected(idx);
+    ui.invoke_confirm_dialog_ok();
+    assert!(ui.get_confirm_dialog_visible(), "第二道确认应弹出");
+    // 轮询 Timer 对不可见窗口会取消剩余批次：先显示窗口再执行第二道确认
+    ui.show();
+    ui.invoke_confirm_dialog_ok();
+
+    // 工作线程批量执行（批间 50ms）→ 100ms 轮询 Timer 发现 done → 弹汇总
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        slint::platform::update_timers();
+        if ui.get_toast_visible() {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "运行全部应在 10 秒内完成并弹汇总提示"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let msg = ui.get_toast_message().as_str().to_string();
+    assert!(
+        msg.contains("成功 0") && msg.contains("失败 2"),
+        "汇总应含成功/失败计数（0/2）: {msg}"
+    );
+    let total: i32 = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .map(|i| i.run_count)
+        .sum();
+    assert_eq!(total, 0, "全部失败不得写运行计数");
+}
+
+/// 托盘 UI 动作：跟随鼠标 / 低驻留切换应翻转配置开关并标脏落盘。
+#[test]
+fn test_tray_ui_actions_toggle_and_persist() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    GoRun::tray_ui::handle_tray_ui_action(
+        GoRun::tray_ui::TrayUiAction::ToggleFollowMouse,
+        &ui,
+        &state,
+    );
+    assert!(
+        state
+            .borrow()
+            .manager
+            .config()
+            .extra_get_bool("follow_mouse"),
+        "跟随鼠标开关应翻转为开并持久化"
+    );
+
+    GoRun::tray_ui::handle_tray_ui_action(
+        GoRun::tray_ui::TrayUiAction::ToggleLowResident,
+        &ui,
+        &state,
+    );
+    let st = state.borrow();
+    assert!(st.low_resident.get(), "低驻留标志应翻转为开");
+    assert!(
+        st.manager.config().extra_get_bool("low_resident"),
+        "低驻留开关应持久化"
+    );
+}
+
+/// 一键清理无效条目：后台扫描识别无效项 → 确认框预览 → 确认后批量删除，
+/// 有效条目保留（扫描经轮询 Timer 回送，testing 后端需手动泵事件）。
+#[test]
+fn test_clean_invalid_scan_removes_invalid_keeps_valid() {
+    let (cats, mut items) = sample_data();
+    // i1 空目标（必无效）；i2 指向真实存在的文件（有效）；i3 目标两平台 CI 均不存在（无效）
+    items.iter_mut().find(|i| i.id == "i1").unwrap().target = String::new();
+    let valid_path =
+        std::env::temp_dir().join(format!("gorun_valid_target_{}.txt", std::process::id()));
+    std::fs::write(&valid_path, b"ok").unwrap();
+    items
+        .iter_mut()
+        .find(|i| i.id == "i2")
+        .unwrap()
+        .target = valid_path.to_string_lossy().to_string();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    ui.invoke_hamburger_clicked();
+    let idx = find_menu_text_index(&ui, "清理无效条目…");
+    ui.invoke_menu_popup_selected(idx);
+
+    // 轮询 Timer（50ms）收到扫描结果后弹确认框：手动泵事件直至弹出
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        slint::platform::update_timers();
+        if ui.get_confirm_dialog_visible() {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "扫描结果应在 5 秒内弹出确认框"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let msg = ui.get_confirm_dialog_message().as_str().to_string();
+    assert!(
+        msg.contains("Notepad") && msg.contains("Minesweeper"),
+        "预览应列出无效条目名称: {msg}"
+    );
+    assert!(!msg.contains("Notepad++"), "有效条目不应出现在预览: {msg}");
+
+    ui.invoke_confirm_dialog_ok();
+    let ids: Vec<String> = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .map(|i| i.id.clone())
+        .collect();
+    assert!(
+        ids.contains(&"i2".to_string()) && !ids.contains(&"i1".to_string())
+            && !ids.contains(&"i3".to_string()),
+        "确认后无效条目应被删除、有效条目保留: {ids:?}"
+    );
+    let _ = std::fs::remove_file(&valid_path);
+}
+
+/// 设置页档位：图标大小写 extra 并同步全局提取尺寸（同档重选为 no-op），
+/// 字号档位写 extra；收尾还原默认档避免跨测试污染缓存键。
+#[test]
+fn test_settings_icon_font_size_persists() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    // 选与当前全局尺寸不同的档位（0=32 或 2=64）保证写入路径可达
+    let target_idx: i32 = if GoRun::icon_cache::current_icon_size() == 32 {
+        2
+    } else {
+        0
+    };
+    ui.invoke_settings_icon_size_changed(target_idx);
+    let size: i32 = if target_idx == 0 {
+        32
+    } else {
+        64
+    };
+    assert_eq!(
+        GoRun::icon_cache::current_icon_size(),
+        size,
+        "全局图标提取尺寸应随档位更新"
+    );
+    assert_eq!(
+        state
+            .borrow()
+            .manager
+            .config()
+            .extra_config
+            .get("icon_size"),
+        Some(&size.to_string()),
+        "图标大小档位应持久化"
+    );
+
+    // 字号：index 0=小(0.85)，写 extra "0" 并注入缩放
+    ui.invoke_settings_font_size_changed(0);
+    assert_eq!(
+        state
+            .borrow()
+            .manager
+            .config()
+            .extra_config
+            .get("font_size"),
+        Some(&"0".to_string()),
+        "字号档位应持久化"
+    );
+    assert!((ui.get_font_scale() - 0.85).abs() < 0.001, "缩放应注入 UI");
+
+    // 还原默认档（48/中），避免污染后续测试的图标缓存键
+    ui.invoke_settings_icon_size_changed(1);
+    ui.invoke_settings_font_size_changed(1);
+    assert_eq!(
+        GoRun::icon_cache::current_icon_size(),
+        48,
+        "收尾应还原默认图标尺寸"
+    );
+}
+
+/// 搜索 300ms 防抖：搜索文本立即写状态，UI 过滤结果须待防抖窗口到期才刷新
+/// （Timer 由闭包持有，testing 后端需手动泵事件 + 真实等待）。
+#[test]
+fn test_search_debounce_applies_after_window() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    state.borrow_mut().current_category_id = "cat_1".into();
+
+    ui.invoke_search_changed("Notepad".into());
+    assert_eq!(
+        state.borrow().search_query.as_str(),
+        "Notepad",
+        "搜索文本应立即写入状态"
+    );
+
+    // 100ms 处仍在 300ms 窗口内：UI 视图未过滤（仍为初始全量 3 条）
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    slint::platform::update_timers();
+    assert_eq!(
+        ui.get_items().row_count(),
+        3,
+        "防抖窗口到期前 UI 应保持未过滤视图"
+    );
+
+    // 泵事件直至 300ms Timer 触发（窗口到期后过滤生效）
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        slint::platform::update_timers();
+        if ui.get_items().row_count() == 2 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "搜索过滤应在 300ms 防抖窗口后生效"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert_eq!(
+        ui.get_items().row_count(),
+        2,
+        "搜索结果应为 2 条 Notepad 条目（Minesweeper 不命中）"
+    );
 }

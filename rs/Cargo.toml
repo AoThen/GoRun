@@ -73,6 +73,16 @@ windows = { version = "0.62", features = [
 # implement 宏展开引用 windows_core 路径，需显式依赖方可解析
 windows-core = "0.62"
 
+# Windows 专属测试依赖：gui_integration_test 的剪贴板 CF_HDROP 往返测试需要
+# 写剪贴板 API（模块归属与主依赖同源：DataExchange/Memory/Ole/Foundation）。
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "0.62", features = [
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_Foundation",
+] }
+
 [profile.release]
 opt-level = 3
 lto = true
