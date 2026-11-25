@@ -84,6 +84,69 @@ fn forward_drop_paths(
     });
 }
 
+/// 延迟隐藏窗口决策（纯 channel 状态机，供 MouseLeft 延迟窗口与测试复用）：
+/// 在 deadline 前消费消息——MouseEnter 取消隐藏；窗口内到达的 Drop 照常
+/// 收集不丢（L-12：原实现 `Ok(_) => continue` 会丢弃延迟窗口内的 Drop，
+/// 依赖"OLE DragEnter 必先于 Drop"的隐式时序）；MouseLeft 无效果。
+/// 返回 (是否仍需隐藏, 窗口内收到的待转发路径)。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn drain_hide_window(
+    rx: &std::sync::mpsc::Receiver<crate::platform::DropMessage>,
+    deadline: std::time::Instant,
+) -> (bool, Vec<std::path::PathBuf>) {
+    let mut hide = true;
+    let mut dropped: Vec<std::path::PathBuf> = Vec::new();
+    while hide {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            break;
+        }
+        match rx.recv_timeout(deadline - now) {
+            Ok(crate::platform::DropMessage::MouseEnter) => hide = false,
+            Ok(crate::platform::DropMessage::Drop(paths)) => dropped.extend(paths),
+            Ok(crate::platform::DropMessage::MouseLeft) => {}
+            Err(_) => break,
+        }
+    }
+    (hide, dropped)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::DropMessage;
+    use std::path::PathBuf;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn test_drain_hide_window_mouse_enter_cancels_hide() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(DropMessage::MouseEnter).unwrap();
+        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(50));
+        assert!(!hide, "窗口内 MouseEnter 应取消隐藏");
+        assert!(dropped.is_empty());
+    }
+
+    #[test]
+    fn test_drain_hide_window_drop_not_lost() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(DropMessage::Drop(vec![PathBuf::from("C:\\a.exe")]))
+            .unwrap();
+        // 无 MouseEnter：超时后仍隐藏，但窗口内 Drop 必须带出（不丢消息）
+        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(50));
+        assert!(hide);
+        assert_eq!(dropped, vec![PathBuf::from("C:\\a.exe")]);
+    }
+
+    #[test]
+    fn test_drain_hide_window_timeout_hides() {
+        let (_tx, rx) = std::sync::mpsc::channel::<DropMessage>();
+        let (hide, dropped) = drain_hide_window(&rx, Instant::now() + Duration::from_millis(30));
+        assert!(hide, "超时无 MouseEnter 应保持隐藏");
+        assert!(dropped.is_empty());
+    }
+}
+
 /// 启动消费线程：把落下的路径转成 UI 的 `file-dropped` 回调；
 /// 光标离开（F7 自动隐藏）延迟 1s 后隐藏，期间回到窗口则取消。
 #[cfg(windows)]
@@ -104,28 +167,13 @@ pub fn spawn_drop_consumer(
                     if !auto_hide.load(std::sync::atomic::Ordering::Relaxed) {
                         continue;
                     }
-                    // 延迟 1s 窗口：期间回到窗口（MouseEnter）则取消隐藏；窗口内
-                    // 到达的其他消息不吞掉——Drop 按正常路径转发后继续等待剩余
-                    // 窗口（L-12：原实现 `Ok(_) => continue` 会丢弃延迟窗口内
-                    // 收到的 Drop 消息，依赖"OLE DragEnter 必先于 Drop"的隐式时序）
+                    // 延迟 1s 窗口：期间回到窗口（MouseEnter）则取消隐藏；
+                    // 窗口内到达的 Drop 不丢（L-12），统一在窗口结束后转发
                     let deadline =
                         std::time::Instant::now() + std::time::Duration::from_secs(1);
-                    let mut hide = true;
-                    while hide {
-                        let now = std::time::Instant::now();
-                        if now >= deadline {
-                            break;
-                        }
-                        match rx.recv_timeout(deadline - now) {
-                            Ok(crate::platform::DropMessage::MouseEnter) => {
-                                hide = false;
-                            }
-                            Ok(crate::platform::DropMessage::Drop(paths)) => {
-                                forward_drop_paths(&ui_weak, &paths);
-                            }
-                            Ok(crate::platform::DropMessage::MouseLeft) => {}
-                            Err(_) => break,
-                        }
+                    let (hide, dropped) = drain_hide_window(&rx, deadline);
+                    if !dropped.is_empty() {
+                        forward_drop_paths(&ui_weak, &dropped);
                     }
                     if hide {
                         let weak = ui_weak.clone();

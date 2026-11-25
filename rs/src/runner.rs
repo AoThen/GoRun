@@ -837,4 +837,20 @@ mod tests {
         assert_eq!(resolve_bare_name("C:\\x\\a.exe"), None);
         assert_eq!(resolve_bare_name("rel/a"), None);
     }
+
+    #[test]
+    fn test_is_url_http() {
+        assert!(is_url("http://example.com"));
+        assert!(is_url("https://example.com"));
+        assert!(is_url("ftp://files.example.com"));
+        assert!(is_url("steam://run/123"));
+        assert!(is_url("mailto:test@example.com"));
+    }
+
+    #[test]
+    fn test_is_url_not_url() {
+        assert!(!is_url("C:\\Windows\\notepad.exe"));
+        assert!(!is_url("D:\\Games\\game.exe"));
+        assert!(!is_url("relative/path/file.txt"));
+    }
 }

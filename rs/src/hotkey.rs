@@ -547,21 +547,26 @@ impl ItemHotkeyManager {
     /// 非 Windows 平台不支持条目热键，返回空列表（不视为失败，避免误报）。
     /// P3 差量：集合未变（归一化比较）且 pump 线程存活时跳过注销重建，
     /// 消除"保存未改热键的条目也全量重注册"的开销与热键短暂失效窗口。
-    pub fn register_all(
-        &mut self,
-        hotkeys: &[(String, String)],
-        sender: Sender<String>,
-    ) -> Vec<String> {
-        // 已知微窗口（P3，接受）：pump 因 MsgWait 失败自行退出与本次调用并发时，
-        // is_finished() 可能仍为 false 而误跳过——发生条件极苛刻，且下次任意
-        // 集合变化会自愈；旧全量路径无此窗口但每次保存都杀线程重建。
-        if self.pump_active
+    /// 差量跳过判定（纯判定，便于跨平台测试）：pump 存活且新集合与当前
+    /// 注册集合归一化相等时跳过重建。
+    /// 已知微窗口（P3，接受）：pump 因 MsgWait 失败自行退出与本次调用并发时，
+    /// is_finished() 可能仍为 false 而误跳过——发生条件极苛刻，且下次任意
+    /// 集合变化会自愈；旧全量路径无此窗口但每次保存都杀线程重建。
+    fn can_skip_reregister(&self, hotkeys: &[(String, String)]) -> bool {
+        self.pump_active
             && self
                 .thread_handle
                 .as_ref()
                 .is_some_and(|h| !h.is_finished())
             && normalized_hotkey_set(hotkeys) == normalized_hotkey_set(&self.current)
-        {
+    }
+
+    pub fn register_all(
+        &mut self,
+        hotkeys: &[(String, String)],
+        sender: Sender<String>,
+    ) -> Vec<String> {
+        if self.can_skip_reregister(hotkeys) {
             return Vec::new();
         }
         self.unregister();
@@ -790,6 +795,7 @@ impl Drop for ItemHotkeyManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_parse_ctrl_alt_m() {
@@ -874,5 +880,48 @@ mod tests {
             dedup_hotkey_strings(&hk),
             vec!["Ctrl+M".to_string(), "Ctrl+X".to_string()]
         );
+    }
+
+    #[test]
+    fn test_can_skip_reregister_when_unchanged_and_alive() {
+        let mut mgr = ItemHotkeyManager::new();
+        mgr.pump_active = true;
+        mgr.thread_handle = Some(thread::spawn(|| {
+            thread::sleep(Duration::from_millis(300));
+        }));
+        mgr.current = vec![("i1".into(), "Ctrl+1".into())];
+        assert!(mgr.can_skip_reregister(&[("i1".into(), "Ctrl+1".into())]));
+        // 大小写/空白归一化后相等仍视为未变
+        assert!(mgr.can_skip_reregister(&[("i1".into(), " ctrl+1 ".into())]));
+    }
+
+    #[test]
+    fn test_can_skip_reregister_false_when_set_changed() {
+        let mut mgr = ItemHotkeyManager::new();
+        mgr.pump_active = true;
+        mgr.thread_handle = Some(thread::spawn(|| {
+            thread::sleep(Duration::from_millis(300));
+        }));
+        mgr.current = vec![("i1".into(), "Ctrl+1".into())];
+        // 热键迁移到另一条目（id 变化）：集合不同，不得跳过
+        assert!(!mgr.can_skip_reregister(&[("i2".into(), "Ctrl+1".into())]));
+        // 新增条目热键：集合不同，不得跳过
+        assert!(!mgr.can_skip_reregister(&[
+            ("i1".into(), "Ctrl+1".into()),
+            ("i2".into(), "Ctrl+2".into())
+        ]));
+    }
+
+    #[test]
+    fn test_can_skip_reregister_false_when_pump_dead() {
+        let mut mgr = ItemHotkeyManager::new();
+        mgr.current = vec![("i1".into(), "Ctrl+1".into())];
+        // pump 未激活：不跳过
+        assert!(!mgr.can_skip_reregister(&[("i1".into(), "Ctrl+1".into())]));
+        // pump 线程已结束：不跳过
+        mgr.pump_active = true;
+        mgr.thread_handle = Some(thread::spawn(|| {}));
+        thread::sleep(Duration::from_millis(50));
+        assert!(!mgr.can_skip_reregister(&[("i1".into(), "Ctrl+1".into())]));
     }
 }

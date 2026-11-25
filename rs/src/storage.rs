@@ -1002,4 +1002,44 @@ mod edge_tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn test_cleanup_stale_tmp_removes_only_stale() {
+        use std::time::{Duration, SystemTime};
+        let dir = std::env::temp_dir().join(format!("gorun_cleanup_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let config_path = dir.join("config.json");
+
+        // 上次运行残留的 tmp（mtime 一小时前）→ 应清理
+        let stale = dir.join("config.json.tmp.123");
+        std::fs::write(&stale, b"{}").unwrap();
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&stale)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(3600))
+            .unwrap();
+
+        // 并发实例正在写的 tmp（mtime 晚于本次清理启动）→ 保留
+        let fresh = dir.join("config.json.tmp.456");
+        std::fs::write(&fresh, b"{}").unwrap();
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&fresh)
+            .unwrap()
+            .set_modified(SystemTime::now() + Duration::from_secs(3600))
+            .unwrap();
+
+        // 其他前缀的 tmp（非本配置文件）→ 保留
+        let other = dir.join("other.json.tmp.789");
+        std::fs::write(&other, b"{}").unwrap();
+
+        let removed = Storage::cleanup_stale_tmp(&config_path);
+        assert_eq!(removed, 1, "只应清理 stale tmp");
+        assert!(!stale.exists());
+        assert!(fresh.exists(), "并发实例的 tmp 不得误删");
+        assert!(other.exists(), "无关前缀不得误删");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

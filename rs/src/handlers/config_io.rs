@@ -282,4 +282,90 @@ mod tests {
         let kept = filter_session_prefs(&extra);
         assert!(kept.is_empty(), "全非会话偏好应得空: {:?}", kept);
     }
+
+    /// 构造最小 AppState（1 空分类；storage 指向独立临时文件），供热键测试用。
+    fn make_hotkey_state() -> Rc<RefCell<AppState>> {
+        use crate::icon_cache::IconCache;
+        use crate::item_manager::ItemManager;
+        use crate::model::{AppConfig, AppData, Category, Config};
+        use crate::storage::Storage;
+        let app_config = AppConfig {
+            version: "test".into(),
+            data: AppData {
+                categories: vec![Category {
+                    id: "cat_1".into(),
+                    name: "P".into(),
+                    ..Default::default()
+                }],
+                items: vec![],
+            },
+            config: Config {
+                global_hotkey: "Ctrl+/".into(),
+                ..Default::default()
+            },
+            extra_config: Default::default(),
+        };
+        Rc::new(RefCell::new(AppState {
+            manager: ItemManager::new(app_config),
+            storage: Storage::new(
+                std::env::temp_dir()
+                    .join(format!("gorun_cfgio_{}.json", std::process::id()))
+                    .to_string_lossy()
+                    .to_string(),
+            ),
+            icon_cache: IconCache::new(),
+            current_category_id: "cat_1".into(),
+            search_query: String::new(),
+            edit_dialog: None,
+            loc: Rc::new(RefCell::new(crate::localization::Localization::new("zh-CN"))),
+            save_fail_notified: false,
+            pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
+            icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+            drop_handler: None,
+            geometry_dirty: false,
+            last_geometry_change: None,
+            soft_dirty: false,
+            last_soft_change: None,
+            pending_run_results: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            item_hotkey_mgr: Rc::new(RefCell::new(crate::hotkey::ItemHotkeyManager::new())),
+            item_hotkey_tx: {
+                let (tx, _rx) = std::sync::mpsc::channel::<String>();
+                tx
+            },
+            low_resident: Rc::new(std::cell::Cell::new(false)),
+            auto_hide_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }))
+    }
+
+    #[test]
+    fn test_apply_global_hotkey_no_channel_fails_and_keeps_old() {
+        // hk_tx=None：注册通知通道不可用 → 新键注册失败 → 回滚，配置保持旧键
+        let state = make_hotkey_state();
+        let hk_mgr = Rc::new(RefCell::new(crate::hotkey::HotkeyManager::new()));
+        let hk_tx: Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>> = Rc::new(RefCell::new(None));
+        let ok = apply_global_hotkey(&state, &hk_mgr, &hk_tx, "Ctrl+Shift+G", "Ctrl+/");
+        assert!(!ok, "注册通道不可用时应返回失败");
+        assert_eq!(
+            state.borrow().manager.config().config.global_hotkey,
+            "Ctrl+/",
+            "失败后配置应保持旧键"
+        );
+    }
+
+    #[test]
+    fn test_apply_global_hotkey_invalid_key_rolls_back() {
+        // 非法键字符串：任何平台均解析/注册失败 → 回滚旧键
+        let state = make_hotkey_state();
+        let hk_mgr = Rc::new(RefCell::new(crate::hotkey::HotkeyManager::new()));
+        let (tx, _rx) = std::sync::mpsc::channel::<()>();
+        let hk_tx: Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>> =
+            Rc::new(RefCell::new(Some(tx)));
+        let ok = apply_global_hotkey(&state, &hk_mgr, &hk_tx, "NotAHotkey", "Ctrl+/");
+        assert!(!ok, "非法热键应注册失败");
+        assert_eq!(
+            state.borrow().manager.config().config.global_hotkey,
+            "Ctrl+/",
+            "失败后配置应回滚为旧键"
+        );
+    }
 }

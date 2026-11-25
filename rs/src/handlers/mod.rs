@@ -38,6 +38,313 @@ struct RunAllProgress {
     done: bool,
 }
 
+/// 单击防抖判定（v2 单击即启动）：同一条目 400ms 内的重复点击视为双击
+/// 误触。按条目 id（而非下标）判定——切换分类/搜索后同一下标指向不同
+/// 条目，用下标会把"切分类后点第一项"误判为同一项。
+/// 命中后由调用方刷新时间戳，保证窗口内任意次点击都被抑制。
+fn click_is_debounced(
+    last: Option<&(String, std::time::Instant)>,
+    item_id: &str,
+    now: std::time::Instant,
+) -> bool {
+    matches!(last,
+        Some((last_id, last_time))
+            if last_id == item_id && now.duration_since(*last_time).as_millis() < 400
+    )
+}
+
+/// 项目右键菜单动作（v2 动作映射分发）：文本/动作/danger 三数组平行，
+/// 增删菜单项不依赖手写索引。
+#[derive(Clone, PartialEq)]
+enum ItemMenuAction {
+    Edit,
+    RunAsAdmin,
+    Delete,
+    CopyPath,
+    OpenLocation,
+    MoveUp,
+    MoveDown,
+    Run,
+    RefreshIcon,
+    Properties,
+    MoveTo(String),
+    OpenFolder,
+}
+
+/// 项目右键菜单条目构建（纯函数）：返回文本与动作的平行数组。
+/// 搜索态隐藏上移/下移（搜索结果排序语义与全局向量不一致，建议④）；
+/// MoveTo 每分类一项（携带目标分类 id），OpenFolder 固定末位。
+fn build_item_menu(
+    lb: &Localization,
+    searching: bool,
+    cats: &[(String, String)],
+) -> (Vec<slint::SharedString>, Vec<ItemMenuAction>) {
+    let mut texts: Vec<slint::SharedString> = Vec::new();
+    let mut actions: Vec<ItemMenuAction> = Vec::new();
+    texts.push(lb.tr("Menu_Edit").into());
+    actions.push(ItemMenuAction::Edit);
+    texts.push(lb.tr("Menu_RunAsAdmin").into());
+    actions.push(ItemMenuAction::RunAsAdmin);
+    texts.push(lb.tr("Menu_DelItem").into());
+    actions.push(ItemMenuAction::Delete);
+    texts.push(lb.tr("Menu_CopyPath").into());
+    actions.push(ItemMenuAction::CopyPath);
+    texts.push(lb.tr("Menu_OpenLocationFile").into());
+    actions.push(ItemMenuAction::OpenLocation);
+    if !searching {
+        texts.push(lb.tr("Menu_MoveUp").into());
+        actions.push(ItemMenuAction::MoveUp);
+        texts.push(lb.tr("Menu_MoveDown").into());
+        actions.push(ItemMenuAction::MoveDown);
+    }
+    texts.push(lb.tr("Menu_Run").into());
+    actions.push(ItemMenuAction::Run);
+    texts.push(lb.tr("Menu_RefreshIcon").into());
+    actions.push(ItemMenuAction::RefreshIcon);
+    texts.push(lb.tr("Menu_Properties").into());
+    actions.push(ItemMenuAction::Properties);
+    let move_to = lb.tr("Menu_MoveTo").to_string();
+    let open_folder = lb.tr("Menu_OpenFolder").to_string();
+    for (cat_id, name) in cats {
+        texts.push(slint::SharedString::from(format!("{} {}", move_to, name)));
+        actions.push(ItemMenuAction::MoveTo(cat_id.clone()));
+    }
+    texts.push(open_folder.into());
+    actions.push(ItemMenuAction::OpenFolder);
+    (texts, actions)
+}
+
+/// "运行全部"完成汇总文案（纯函数）：全部成功用单参数模板，
+/// 部分失败用双参数模板（成功数/失败数）。
+fn run_all_summary_text(loc: &Localization, success: i32, failed: i32) -> String {
+    if failed == 0 {
+        loc.tr("Status_RunAllDone")
+            .replace("{0}", &success.to_string())
+    } else {
+        loc.tr("Status_RunAllDonePartial")
+            .replace("{0}", &success.to_string())
+            .replace("{1}", &failed.to_string())
+    }
+}
+
+/// 条目拖拽排序落点处理（纯状态操作，on_dropped_on 回调与测试复用）：
+/// 守卫（越界/同位/搜索态/空分类）+ 重排 + 落盘。返回是否发生重排。
+/// 搜索态排序语义与全局向量不一致，直接忽略（与菜单隐藏上移/下移同理）。
+fn apply_item_drop(state: &Rc<RefCell<AppState>>, source: usize, target: usize) -> bool {
+    if source == usize::MAX || source == target {
+        return false;
+    }
+    let mut state = state.borrow_mut();
+    if !state.search_query.is_empty() {
+        log::debug!("Drop ignored during search");
+        return false;
+    }
+    let cat_id = state.current_category_id.clone();
+    if cat_id.is_empty() {
+        return false;
+    }
+    if !state.manager.move_item_to_index(&cat_id, source, target) {
+        return false;
+    }
+    state.save_if_modified();
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_click_debounce_same_item_within_window() {
+        let now = std::time::Instant::now();
+        let last = ("i1".to_string(), now - std::time::Duration::from_millis(100));
+        assert!(click_is_debounced(Some(&last), "i1", now));
+    }
+
+    #[test]
+    fn test_click_debounce_other_item_not_suppressed() {
+        let now = std::time::Instant::now();
+        let last = ("i1".to_string(), now - std::time::Duration::from_millis(100));
+        assert!(!click_is_debounced(Some(&last), "i2", now));
+    }
+
+    #[test]
+    fn test_click_debounce_expired_window_runs() {
+        let now = std::time::Instant::now();
+        let last = ("i1".to_string(), now - std::time::Duration::from_millis(401));
+        assert!(!click_is_debounced(Some(&last), "i1", now));
+    }
+
+    #[test]
+    fn test_click_debounce_no_history_runs() {
+        assert!(!click_is_debounced(None, "i1", std::time::Instant::now()));
+    }
+
+    #[test]
+    fn test_item_menu_build_normal_mode() {
+        let loc = Localization::new("zh-CN");
+        let cats = vec![("c1".to_string(), "Apps".to_string())];
+        let (texts, actions) = build_item_menu(&loc, false, &cats);
+        assert_eq!(texts.len(), actions.len(), "文本与动作必须平行");
+        // 固定 9 项 + 上移/下移 + 1 个 MoveTo + OpenFolder = 12
+        assert_eq!(texts.len(), 12);
+        assert!(matches!(actions[2], ItemMenuAction::Delete), "第 3 项应为删除");
+        let danger_count = actions
+            .iter()
+            .filter(|a| matches!(a, ItemMenuAction::Delete))
+            .count();
+        assert_eq!(danger_count, 1, "仅删除项为 danger");
+        assert!(matches!(actions.last(), Some(ItemMenuAction::OpenFolder)));
+        assert!(matches!(&actions[10], ItemMenuAction::MoveTo(id) if id == "c1"));
+    }
+
+    #[test]
+    fn test_item_menu_build_search_mode_hides_reorder() {
+        let loc = Localization::new("zh-CN");
+        let cats = vec![("c1".to_string(), "Apps".to_string())];
+        let (texts, actions) = build_item_menu(&loc, true, &cats);
+        assert_eq!(texts.len(), actions.len());
+        // 搜索态隐藏上移/下移：12 - 2 = 10 项
+        assert_eq!(texts.len(), 10);
+        assert!(!actions
+            .iter()
+            .any(|a| matches!(a, ItemMenuAction::MoveUp | ItemMenuAction::MoveDown)));
+    }
+
+    /// 构造带 1 分类 3 条目的 AppState（不依赖窗口；storage 指向独立临时文件）。
+    fn make_drop_state() -> Rc<RefCell<AppState>> {
+        use crate::icon_cache::IconCache;
+        use crate::item_manager::ItemManager;
+        use crate::model::{AppConfig, AppData, Category, Config, Item};
+        use crate::storage::Storage;
+        let app_config = AppConfig {
+            version: "test".into(),
+            data: AppData {
+                categories: vec![Category {
+                    id: "cat_1".into(),
+                    name: "Programs".into(),
+                    ..Default::default()
+                }],
+                items: vec![
+                    Item {
+                        id: "i1".into(),
+                        name: "A".into(),
+                        target: "C:\\a.exe".into(),
+                        category_id: "cat_1".into(),
+                        sort_order: 0,
+                        ..Default::default()
+                    },
+                    Item {
+                        id: "i2".into(),
+                        name: "B".into(),
+                        target: "C:\\b.exe".into(),
+                        category_id: "cat_1".into(),
+                        sort_order: 1,
+                        ..Default::default()
+                    },
+                    Item {
+                        id: "i3".into(),
+                        name: "C".into(),
+                        target: "C:\\c.exe".into(),
+                        category_id: "cat_1".into(),
+                        sort_order: 2,
+                        ..Default::default()
+                    },
+                ],
+            },
+            config: Config::default(),
+            extra_config: Default::default(),
+        };
+        Rc::new(RefCell::new(AppState {
+            manager: ItemManager::new(app_config),
+            storage: Storage::new(
+                std::env::temp_dir()
+                    .join(format!("gorun_handlers_drop_{}.json", std::process::id()))
+                    .to_string_lossy()
+                    .to_string(),
+            ),
+            icon_cache: IconCache::new(),
+            current_category_id: "cat_1".into(),
+            search_query: String::new(),
+            edit_dialog: None,
+            loc: Rc::new(RefCell::new(Localization::new("zh-CN"))),
+            save_fail_notified: false,
+            pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+            drop_handler: None,
+            geometry_dirty: false,
+            last_geometry_change: None,
+            soft_dirty: false,
+            last_soft_change: None,
+            pending_run_results: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            item_hotkey_mgr: Rc::new(RefCell::new(crate::hotkey::ItemHotkeyManager::new())),
+            item_hotkey_tx: {
+                let (tx, _rx) = std::sync::mpsc::channel::<String>();
+                tx
+            },
+            low_resident: Rc::new(std::cell::Cell::new(false)),
+            auto_hide_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }))
+    }
+
+    #[test]
+    fn test_apply_item_drop_reorders_and_persists() {
+        let state = make_drop_state();
+        assert!(apply_item_drop(&state, 0, 2), "有效拖拽应重排成功");
+        let order: Vec<String> = state
+            .borrow()
+            .manager
+            .items("cat_1")
+            .iter()
+            .map(|it| it.id.clone())
+            .collect();
+        assert_eq!(order, vec!["i2".to_string(), "i3".to_string(), "i1".to_string()]);
+    }
+
+    #[test]
+    fn test_apply_item_drop_ignores_same_source_target() {
+        let state = make_drop_state();
+        assert!(!apply_item_drop(&state, 1, 1), "同位拖拽应忽略");
+        let order: Vec<String> = state
+            .borrow()
+            .manager
+            .items("cat_1")
+            .iter()
+            .map(|it| it.id.clone())
+            .collect();
+        assert_eq!(order, vec!["i1".to_string(), "i2".to_string(), "i3".to_string()]);
+    }
+
+    #[test]
+    fn test_apply_item_drop_ignores_in_search_mode() {
+        let state = make_drop_state();
+        state.borrow_mut().search_query = "a".into();
+        assert!(!apply_item_drop(&state, 0, 2), "搜索态拖拽应忽略");
+        assert_eq!(state.borrow().manager.items("cat_1").len(), 3, "顺序不变");
+    }
+
+    #[test]
+    fn test_run_all_summary_text_all_success() {
+        let loc = Localization::new("zh-CN");
+        let msg = run_all_summary_text(&loc, 3, 0);
+        assert!(msg.contains("3"), "全部成功模板应含成功数: {}", msg);
+        assert!(!msg.is_empty());
+    }
+
+    #[test]
+    fn test_run_all_summary_text_partial_failure() {
+        let loc = Localization::new("zh-CN");
+        let msg = run_all_summary_text(&loc, 2, 1);
+        assert!(
+            msg.contains("2") && msg.contains("1"),
+            "部分失败模板应同时含成功数与失败数: {}",
+            msg
+        );
+    }
+}
+
 fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) -> bool {
     let Some(decoded) = crate::background::decode(path) else {
         log::warn!("Background decode failed: {}", path);
@@ -442,15 +749,7 @@ pub fn wire_handler(
         };
         // 防抖：同 id 400ms 内的重复点击直接忽略（命中后也更新 last_click，
         // 保证 400ms 窗口内任意次点击都被抑制）。
-        let debounced = {
-            let lc = last_click.borrow();
-            matches!(
-                lc.as_ref(),
-                Some((last_id, last_time))
-                    if *last_id == clicked_id
-                        && now.duration_since(*last_time).as_millis() < 400
-            )
-        };
+        let debounced = click_is_debounced(last_click.borrow().as_ref(), &clicked_id, now);
         if debounced {
             log::debug!("Item click debounced: index={}", index);
             last_click.borrow_mut().replace((clicked_id, now));
@@ -481,25 +780,11 @@ pub fn wire_handler(
             .unwrap_or(usize::MAX);
         let target = target.max(0) as usize;
         log::debug!("Item dropped: source={}, target={}", source, target);
-        if source == usize::MAX || source == target {
-            return;
-        }
-        let mut state = state_drop.borrow_mut();
-        if !state.search_query.is_empty() {
-            log::debug!("Drop ignored during search");
-            return;
-        }
-        let cat_id = state.current_category_id.clone();
-        if cat_id.is_empty() {
-            return;
-        }
-        if !state.manager.move_item_to_index(&cat_id, source, target) {
-            return;
-        }
-        state.save_if_modified();
-        drop(state);
-        if let Some(ui) = weak_ui_drop.upgrade() {
-            ui_sync::refresh_items_ui(&ui, &state_drop.borrow(), &cat_id, "");
+        if apply_item_drop(&state_drop, source, target) {
+            let cat_id = state_drop.borrow().current_category_id.clone();
+            if let Some(ui) = weak_ui_drop.upgrade() {
+                ui_sync::refresh_items_ui(&ui, &state_drop.borrow(), &cat_id, "");
+            }
         }
     });
 
@@ -576,21 +861,6 @@ pub fn wire_handler(
     });
     // 项目右键菜单（v2 重构）：动作映射分发（对齐汉堡菜单模式）。
     // MoveTo 携带目标分类 id（替代 moveto_base + 位置的索引换算）。
-    #[derive(Clone, PartialEq)]
-    enum ItemMenuAction {
-        Edit,
-        RunAsAdmin,
-        Delete,
-        CopyPath,
-        OpenLocation,
-        MoveUp,
-        MoveDown,
-        Run,
-        RefreshIcon,
-        Properties,
-        MoveTo(String),
-        OpenFolder,
-    }
     let item_menu_actions: Rc<RefCell<Vec<ItemMenuAction>>> = Rc::new(RefCell::new(Vec::new()));
 
     let rci = right_clicked_index.clone();
@@ -614,40 +884,9 @@ pub fn wire_handler(
         let loc_m = st.loc.clone();
         drop(st);
         let lb = loc_m.borrow();
-        // 菜单文本与动作平行构建（对齐汉堡菜单模式，增删项不再依赖手写索引）
-        let mut menu_vec: Vec<slint::SharedString> = Vec::new();
-        let mut actions: Vec<ItemMenuAction> = Vec::new();
-        menu_vec.push(lb.tr("Menu_Edit").into());
-        actions.push(ItemMenuAction::Edit);
-        menu_vec.push(lb.tr("Menu_RunAsAdmin").into());
-        actions.push(ItemMenuAction::RunAsAdmin);
-        menu_vec.push(lb.tr("Menu_DelItem").into());
-        actions.push(ItemMenuAction::Delete);
-        menu_vec.push(lb.tr("Menu_CopyPath").into());
-        actions.push(ItemMenuAction::CopyPath);
-        menu_vec.push(lb.tr("Menu_OpenLocationFile").into());
-        actions.push(ItemMenuAction::OpenLocation);
-        if !searching {
-            menu_vec.push(lb.tr("Menu_MoveUp").into());
-            actions.push(ItemMenuAction::MoveUp);
-            menu_vec.push(lb.tr("Menu_MoveDown").into());
-            actions.push(ItemMenuAction::MoveDown);
-        }
-        menu_vec.push(lb.tr("Menu_Run").into());
-        actions.push(ItemMenuAction::Run);
-        menu_vec.push(lb.tr("Menu_RefreshIcon").into());
-        actions.push(ItemMenuAction::RefreshIcon);
-        menu_vec.push(lb.tr("Menu_Properties").into());
-        actions.push(ItemMenuAction::Properties);
-        let move_to = lb.tr("Menu_MoveTo").to_string();
-        let open_folder = lb.tr("Menu_OpenFolder").to_string();
+        // 菜单文本与动作平行构建（纯函数，增删项不依赖手写索引）
+        let (menu_vec, actions) = build_item_menu(&lb, searching, &cats);
         drop(lb);
-        for (cat_id, name) in &cats {
-            menu_vec.push(slint::SharedString::from(format!("{} {}", move_to, name)));
-            actions.push(ItemMenuAction::MoveTo(cat_id.clone()));
-        }
-        menu_vec.push(open_folder.into());
-        actions.push(ItemMenuAction::OpenFolder);
         *item_actions_build.borrow_mut() = actions;
         let item_count = menu_vec.len();
         let content_h = menu_content_height(&menu_vec);
@@ -1577,16 +1816,7 @@ pub fn wire_handler(
                         let msg = {
                             let loc = state_r.borrow().loc.clone();
                             let loc_b = loc.borrow();
-                            if pg.failed == 0 {
-                                loc_b
-                                    .tr("Status_RunAllDone")
-                                    .replace("{0}", &pg.success.to_string())
-                            } else {
-                                loc_b
-                                    .tr("Status_RunAllDonePartial")
-                                    .replace("{0}", &pg.success.to_string())
-                                    .replace("{1}", &pg.failed.to_string())
-                            }
+                            run_all_summary_text(&loc_b, pg.success, pg.failed)
                         };
                         if let Some(ui) = weak.upgrade() {
                             ui_sync::show_toast(&ui, msg, pg.failed > 0);
