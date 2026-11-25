@@ -1991,11 +1991,12 @@ fn test_clipboard_files_roundtrip() {
     std::fs::write(&p1, b"a").unwrap();
     std::fs::write(&p2, b"b").unwrap();
 
-    // HDROP 格式：DROPFILES 头（pFiles=8：路径列表相对结构体起始的偏移，
-    // fWide=1：UTF-16）+ 每条路径 NUL 结尾 + 尾部双 NUL（DragQueryFileW 依赖）
+    // HDROP 格式：DROPFILES 头（共 20 字节：pFiles=20——文件列表相对结构体
+    // 起始的偏移即结构体大小；pt={0,0}；fNC=0；fWide=1 表示 UTF-16，小端写出）
+    // + 每条路径 NUL 结尾 + 尾部双 NUL（DragQueryFileW 依赖）
     let w1: Vec<u16> = p1.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     let w2: Vec<u16> = p2.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
-    let mut data: Vec<u16> = vec![8, 0, 1, 0];
+    let mut data: Vec<u16> = vec![20, 0, 0, 0, 0, 0, 0, 0, 1, 0];
     data.extend_from_slice(&w1);
     data.extend_from_slice(&w2);
     data.push(0);
