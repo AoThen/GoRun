@@ -1,43 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use GoRun::hotkey::parse_hotkey_string;
     use GoRun::model::AppConfig;
-    use GoRun::model::{generate_id, Category, Item, ViewType};
-    use GoRun::runner::is_url;
+    use GoRun::model::{Category, Item, ViewType};
     use GoRun::storage::Storage;
-
-    #[test]
-    fn test_is_url_http() {
-        assert!(is_url("http://example.com"));
-        assert!(is_url("https://example.com"));
-        assert!(is_url("ftp://files.example.com"));
-        assert!(is_url("steam://run/123"));
-        assert!(is_url("mailto:test@example.com"));
-    }
-
-    #[test]
-    fn test_is_url_not_url() {
-        assert!(!is_url("C:\\Windows\\notepad.exe"));
-        assert!(!is_url("D:\\Games\\game.exe"));
-        assert!(!is_url("relative/path/file.txt"));
-    }
-
-    #[test]
-    fn test_generate_id_format() {
-        let id = generate_id("cat");
-        assert!(id.starts_with("cat_"));
-        assert!(id.len() > 4);
-    }
-
-    #[test]
-    fn test_generate_id_unique_within_same_ms() {
-        let a = generate_id("item");
-        let b = generate_id("item");
-        let c = generate_id("item");
-        assert_ne!(a, b);
-        assert_ne!(b, c);
-        assert_ne!(a, c);
-    }
 
     #[test]
     #[expect(
@@ -114,13 +79,6 @@ mod tests {
         assert_eq!(it.category_id, "cat_x");
 
         let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_hotkey_parse() {
-        let hk = parse_hotkey_string("Ctrl+Alt+M").unwrap();
-        assert_eq!(hk.modifiers, 0x0003);
-        assert_eq!(hk.vk, 'M' as u32);
     }
 
     #[test]

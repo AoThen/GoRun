@@ -372,8 +372,17 @@ fn test_menu_popup_properties() {
 fn test_hamburger_menu_callbacks_exist() {
     let ui = setup_ui_with_data(vec![], vec![]);
     ui.invoke_hamburger_clicked();
+    // 菜单文本与危险项数组必须平行构建（增删菜单项时二者同步变化）
+    let items = ui.get_menu_popup_items();
+    let danger = ui.get_menu_popup_danger();
+    assert!(items.row_count() > 0, "汉堡菜单应至少有一项");
+    assert_eq!(
+        items.row_count(),
+        danger.row_count(),
+        "菜单文本与 danger 数组行数必须一致"
+    );
     ui.invoke_menu_popup_selected(0);
-    // 末位索引 = 退出（插入"设置"项后由 22 变 23）
+    // 越界索引必须安全忽略（不 panic、不触发任何动作）
     ui.invoke_menu_popup_selected(23);
 }
 
@@ -799,14 +808,34 @@ fn setup_wired_ui(
     categories: Vec<Category>,
     items: Vec<Item>,
 ) -> (MainWindow, Rc<RefCell<AppState>>) {
+    let (ui, state, _, _) = setup_wired_ui_full(categories, items);
+    (ui, state)
+}
+
+/// wire 全量回调并额外返回热键句柄（导入配置等需直接操作热键管理器的测试用）。
+fn setup_wired_ui_full(
+    categories: Vec<Category>,
+    items: Vec<Item>,
+) -> (
+    MainWindow,
+    Rc<RefCell<AppState>>,
+    Rc<RefCell<GoRun::hotkey::HotkeyManager>>,
+    Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>>,
+) {
     let state = setup_app_state(categories.clone(), items.clone());
     let ui = setup_ui_with_data(categories, items);
     let loc = state.borrow().loc.clone();
     let hotkey_mgr = Rc::new(RefCell::new(GoRun::hotkey::HotkeyManager::new()));
     let (hk_tx, _rx) = mpsc::channel::<()>();
     let hk_shared = Rc::new(RefCell::new(Some(hk_tx)));
-    GoRun::handlers::wire_handler(&ui, state.clone(), &loc, hotkey_mgr, hk_shared);
-    (ui, state)
+    GoRun::handlers::wire_handler(
+        &ui,
+        state.clone(),
+        &loc,
+        hotkey_mgr.clone(),
+        hk_shared.clone(),
+    );
+    (ui, state, hotkey_mgr, hk_shared)
 }
 
 /// 取当前打开的编辑对话框（wire 后由对话框逻辑存入 state.edit_dialog，
@@ -1026,4 +1055,331 @@ fn test_clear_search_and_refresh() {
     let cat_id = state.borrow().current_category_id.clone();
     let runnable = state.borrow().manager.items(&cat_id).len();
     assert_eq!(shown, runnable, "清搜索后应显示当前分类全量条目");
+}
+
+// ===== 确认框分支回归（P0：防误操作核心路径） =====
+
+/// 在当前弹出的菜单 danger 数组中定位首个危险项索引。
+/// 菜单项随状态增删、文案随语言资源变化，禁止硬编码索引：
+/// 项目菜单仅 Delete 为 danger；汉堡菜单 danger 含 DelCategory（前）与
+/// Exit（末位），首个 danger 即"删除当前分类"。
+fn find_first_danger_index(ui: &MainWindow) -> i32 {
+    let danger = ui.get_menu_popup_danger();
+    for i in 0..danger.row_count() {
+        if danger.row_data(i).unwrap() {
+            return i as i32;
+        }
+    }
+    panic!("菜单中未找到 danger 项");
+}
+
+/// 项目右键菜单（context-menu 系列）的 danger 定位：仅 Delete 为 danger。
+fn find_context_danger_index(ui: &MainWindow) -> i32 {
+    let danger = ui.get_context_menu_danger();
+    for i in 0..danger.row_count() {
+        if danger.row_data(i).unwrap() {
+            return i as i32;
+        }
+    }
+    panic!("项目菜单中未找到 danger 项");
+}
+
+/// 删除条目：右键菜单 Delete → 确认框 ok → 条目删除。
+#[test]
+fn test_confirm_delete_item_removes_item() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+    let before = state.borrow().manager.all_items().len();
+
+    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    let idx = find_context_danger_index(&ui);
+    ui.invoke_menu_item_selected(idx);
+    assert!(ui.get_confirm_dialog_visible(), "删除确认框应弹出");
+    ui.invoke_confirm_dialog_ok();
+
+    assert_eq!(
+        state.borrow().manager.all_items().len(),
+        before - 1,
+        "确认后条目应被删除"
+    );
+}
+
+/// 删除条目确认框：取消（cancel）不得改动数据。
+#[test]
+fn test_confirm_cancel_keeps_data() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+    let before = state.borrow().manager.all_items().len();
+
+    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    let idx = find_context_danger_index(&ui);
+    ui.invoke_menu_item_selected(idx);
+    ui.invoke_confirm_dialog_cancel();
+
+    assert_eq!(
+        state.borrow().manager.all_items().len(),
+        before,
+        "取消后条目不得被删除"
+    );
+}
+
+/// take-once 语义：ok 只消费一次 pending，重复 ok 无二次效果。
+#[test]
+fn test_confirm_ok_twice_has_single_effect() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+    let before = state.borrow().manager.all_items().len();
+
+    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    let idx = find_context_danger_index(&ui);
+    ui.invoke_menu_item_selected(idx);
+    ui.invoke_confirm_dialog_ok();
+    let after_first = state.borrow().manager.all_items().len();
+    assert_eq!(after_first, before - 1, "首次 ok 应删除一条");
+
+    ui.invoke_confirm_dialog_ok();
+    assert_eq!(
+        state.borrow().manager.all_items().len(),
+        after_first,
+        "pending 已 take，重复 ok 不得二次删除"
+    );
+}
+
+/// 至少保留一个分类：删除最后分类被拒，Toast 提示且数据不变。
+#[test]
+fn test_confirm_delete_last_category_rejected() {
+    let (mut cats, items) = sample_data();
+    cats.truncate(1);
+    let items: Vec<Item> = items
+        .into_iter()
+        .filter(|it| it.category_id == cats[0].id)
+        .collect();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+    let cats_before = state.borrow().manager.categories().len();
+
+    ui.invoke_hamburger_clicked();
+    let idx = find_first_danger_index(&ui);
+    ui.invoke_menu_popup_selected(idx);
+    assert!(ui.get_confirm_dialog_visible(), "删除分类确认框应弹出");
+    ui.invoke_confirm_dialog_ok();
+
+    assert_eq!(
+        state.borrow().manager.categories().len(),
+        cats_before,
+        "最后分类不可删除"
+    );
+    assert!(ui.get_toast_visible(), "拒绝时应弹出 Toast 提示");
+    assert_eq!(ui.get_toast_message().as_str(), "至少需要保留一个分类");
+}
+
+// ===== 业务路径补测（P1：导入/拖入/滚轮/重命名） =====
+
+/// 按文本在汉堡菜单中定位条目索引（非 danger 项无法用 danger 数组定位）。
+fn find_menu_text_index(ui: &MainWindow, text: &str) -> i32 {
+    let items = ui.get_menu_popup_items();
+    for i in 0..items.row_count() {
+        if items.row_data(i).unwrap().as_str() == text {
+            return i as i32;
+        }
+    }
+    panic!("汉堡菜单中未找到条目: {}", text);
+}
+
+/// import_config_apply：整体替换数据 + 孤儿归首分类 + 会话偏好保留 +
+/// 搜索态清空 + 当前分类归一（H-1）。
+#[test]
+fn test_import_config_apply_replaces_and_preserves_prefs() {
+    let (cats, items) = sample_data();
+    let (ui, state, hk_mgr, hk_tx) = setup_wired_ui_full(cats, items);
+    {
+        let mut st = state.borrow_mut();
+        st.current_category_id = "cat_2".into();
+        st.search_query = "Notepad".into();
+        st.manager
+            .config_mut()
+            .extra_config
+            .insert("follow_mouse".into(), "1".into());
+    }
+
+    // 导入配置：1 个新分类 + 1 个指向不存在分类的孤儿条目 + 不同的全局热键
+    let imported = AppConfig {
+        version: "9.9.9".into(),
+        data: AppData {
+            categories: vec![Category {
+                id: "c_new".into(),
+                name: "Imported".into(),
+                ..Default::default()
+            }],
+            items: vec![Item {
+                id: "it_new".into(),
+                name: "New".into(),
+                target: "C:\\x.exe".into(),
+                category_id: "c_missing".into(),
+                ..Default::default()
+            }],
+        },
+        config: Config {
+            global_hotkey: "Ctrl+Shift+G".into(),
+            ..Default::default()
+        },
+        extra_config: Default::default(),
+    };
+    GoRun::handlers::config_io::import_config_apply(
+        &ui, &state, &hk_mgr, &hk_tx, "test.json", imported,
+    );
+
+    let st = state.borrow();
+    assert_eq!(st.manager.all_items().len(), 1, "数据应整体替换");
+    assert_eq!(st.manager.categories().len(), 1);
+    assert_eq!(st.manager.categories()[0].id, "c_new");
+    assert_eq!(
+        st.manager.all_items()[0].category_id, "c_new",
+        "孤儿条目应归入首分类"
+    );
+    assert_eq!(
+        st.manager.config().extra_config.get("follow_mouse").map(String::as_str),
+        Some("1"),
+        "会话偏好（跟随鼠标）应保留"
+    );
+    assert!(st.search_query.is_empty(), "导入后搜索态应清空（H-1）");
+    assert_eq!(st.current_category_id, "c_new", "当前分类应归一为首分类");
+}
+
+/// 拖入添加幂等：重复 target 第二次拖入不重复添加。
+#[test]
+fn test_file_dropped_duplicate_target_idempotent() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+    let before = state.borrow().manager.all_items().len();
+
+    ui.invoke_file_dropped("NewApp".into(), "C:\\newapp.exe".into());
+    let after_first = state.borrow().manager.all_items().len();
+    assert_eq!(after_first, before + 1, "首次拖入应新增条目");
+
+    ui.invoke_file_dropped("NewApp".into(), "C:\\newapp.exe".into());
+    assert_eq!(
+        state.borrow().manager.all_items().len(),
+        after_first,
+        "重复 target 应幂等跳过"
+    );
+}
+
+/// 滚轮切页首尾回绕：首分类向上滚到末分类，末分类向下滚回首分类。
+#[test]
+fn test_wheel_switch_wraps_around() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    state.borrow_mut().current_category_id = "cat_1".into();
+
+    ui.invoke_wheel_switch(-1);
+    assert_eq!(
+        state.borrow().current_category_id, "cat_2",
+        "首分类向上滚应回绕到末分类"
+    );
+    ui.invoke_wheel_switch(1);
+    assert_eq!(
+        state.borrow().current_category_id, "cat_1",
+        "末分类向下滚应回绕回首分类"
+    );
+}
+
+/// 分类重命名：空名（含纯空白）拒绝并保持对话框打开；正常名生效落盘。
+#[test]
+fn test_rename_category_empty_name_rejected() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    state.borrow_mut().current_category_id = "cat_1".into();
+
+    ui.invoke_hamburger_clicked();
+    let idx = find_menu_text_index(&ui, "重命名当前分类");
+    ui.invoke_menu_popup_selected(idx);
+    assert!(ui.get_input_dialog_visible(), "重命名对话框应打开");
+
+    ui.set_input_dialog_text("   ".into());
+    ui.invoke_input_dialog_ok();
+    assert_eq!(
+        state.borrow().manager.categories()[0].name,
+        "Programs",
+        "空名应被拒绝，名称不变"
+    );
+    assert!(ui.get_input_dialog_visible(), "空名拒绝后对话框应保持打开");
+
+    ui.set_input_dialog_text("Renamed".into());
+    ui.invoke_input_dialog_ok();
+    assert_eq!(
+        state.borrow().manager.categories()[0].name, "Renamed",
+        "正常名应生效"
+    );
+}
+
+/// 设置页：日志档位切换写 extra_config（0=warn 1=info 2=debug）。
+#[test]
+fn test_settings_log_changed_persists() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    ui.invoke_settings_log_changed(2);
+    assert_eq!(
+        state
+            .borrow()
+            .manager
+            .config()
+            .extra_config
+            .get("log_level")
+            .map(String::as_str),
+        Some("debug"),
+        "档位 2 应写入 debug"
+    );
+
+    ui.invoke_settings_log_changed(0);
+    assert_eq!(
+        state
+            .borrow()
+            .manager
+            .config()
+            .extra_config
+            .get("log_level")
+            .map(String::as_str),
+        Some("warn"),
+        "档位 0 应写入 warn"
+    );
+}
+
+/// 设置页：自动隐藏开关同步写 extra_config 与运行时共享标志。
+#[test]
+fn test_settings_auto_hide_toggled_updates_flag() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    ui.invoke_settings_auto_hide_toggled(true);
+    {
+        let st = state.borrow();
+        assert!(
+            st.auto_hide_flag.load(std::sync::atomic::Ordering::Relaxed),
+            "开启后共享标志应为 true"
+        );
+        assert_eq!(
+            st.manager.config().extra_config.get("auto_hide").map(String::as_str),
+            Some("1"),
+            "开启后 extra_config 应记录 1"
+        );
+    }
+
+    ui.invoke_settings_auto_hide_toggled(false);
+    let st = state.borrow();
+    assert!(!st.auto_hide_flag.load(std::sync::atomic::Ordering::Relaxed));
+    assert_eq!(
+        st.manager.config().extra_config.get("auto_hide").map(String::as_str),
+        Some("0")
+    );
 }
