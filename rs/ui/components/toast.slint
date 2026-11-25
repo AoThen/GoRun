@@ -14,7 +14,7 @@ export component Toast {
         x: parent.width - self.width - 12px;
         y: parent.height - self.height - 12px;
         width: min(360px, toast-text.preferred-width + 26px);
-        min-height: 36px;
+        height: max(36px, toast-box.preferred-height);
         background: Theme.bg-2;
         border-width: 1px;
         border-color: Theme.stroke-1;
@@ -28,7 +28,7 @@ export component Toast {
             pointer-event(PointerEvent) => { EventResult.accept }
         }
 
-        HorizontalBox {
+        toast-box := HorizontalBox {
             padding: Theme.spacing-md;
             spacing: Theme.spacing-sm;
 
