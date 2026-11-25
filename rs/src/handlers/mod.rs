@@ -1054,6 +1054,8 @@ pub fn wire_handler(
                 clean_scan_mps.set(true);
                 let items: Vec<crate::model::Item> = state_mps.borrow().manager.all_items();
                 let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<(String, String)>, ()>>();
+                // Sender 非 Copy：克隆一份随闭包 move 进线程，原 tx 留给 spawn 失败兜底
+                let tx_thread = tx.clone();
                 let spawned = std::thread::Builder::new()
                     .name("clean-invalid-scan".to_string())
                     .spawn(move || {
@@ -1070,7 +1072,7 @@ pub fn wire_handler(
                                 invalid.push((it.id.clone(), display));
                             }
                         }
-                        let _ = tx.send(Ok(invalid));
+                        let _ = tx_thread.send(Ok(invalid));
                     });
                 if let Err(e) = spawned {
                     // 线程创建失败（极端）：直接送失败标记，让轮询 Timer 正常收尾
