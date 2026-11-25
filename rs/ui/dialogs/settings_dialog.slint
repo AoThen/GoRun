@@ -21,6 +21,11 @@ export component SettingsDialog {
     in property <string> font-size-label: "Font size";
     in property <[string]> font-size-model: [];
     in property <int> font-size-index: 1;
+    // 字体族（系统字体枚举，Rust 后台扫描后填充模型）：选项文本即显示名，
+    // selected 上报文本由 Rust 反查族名（动态列表无法在 Slint 内固定映射索引）
+    in property <string> font-family-label: "Font";
+    in property <[string]> font-family-model: [];
+    in property <int> font-family-index: 0;
     in property <string> auto-hide-label: "";
     in property <bool> auto-hide-enabled: false;
     in property <bool> has-background: false;
@@ -34,6 +39,7 @@ export component SettingsDialog {
     callback log-level-changed(index: int);
     callback icon-size-changed(index: int);
     callback font-size-changed(index: int);
+    callback font-family-changed(label: string);
     callback auto-hide-toggled(enabled: bool);
     callback close();
 
@@ -208,6 +214,26 @@ export component SettingsDialog {
                                         value == root.font-size-model[0] ? 0 :
                                         value == root.font-size-model[1] ? 1 : 2
                                     );
+                                }
+                            }
+                        }
+
+                        // 字体族（系统字体枚举，后台扫描后填充）：切换即时生效
+                        HorizontalBox {
+                            spacing: Theme.spacing-md;
+                            Text {
+                                text: root.font-family-label;
+                                color: Theme.text-1;
+                                font-size: Theme.font-size-md;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                min-width: 160px;
+                                horizontal-stretch: 1;
+                                model: root.font-family-model;
+                                current-index: root.font-family-index;
+                                selected(value) => {
+                                    root.font-family-changed(value);
                                 }
                             }
                         }

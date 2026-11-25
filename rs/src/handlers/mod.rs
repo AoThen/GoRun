@@ -208,6 +208,139 @@ fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) 
     true
 }
 
+/// 枚举系统已安装字体族：返回 (显示名, 族名) 列表，按显示名排序（不含
+/// "默认"项，由回填方按本地化文案插入头部）。显示名优先取本地化名（非
+/// ASCII，如"微软雅黑"），族名取 ASCII 名（如 "Microsoft YaHei"，与
+/// Slint/fontdb 匹配路径一致）；仅有本地化名的字体以该名兼任族名。
+fn enumerate_system_fonts() -> Vec<(String, String)> {
+    let mut db = fontdb::Database::new();
+    db.load_system_fonts();
+    let mut seen = std::collections::HashSet::new();
+    let mut out: Vec<(String, String)> = Vec::new();
+    for face in db.faces() {
+        let value = face
+            .families
+            .iter()
+            .find(|(n, _)| n.is_ascii())
+            .or_else(|| face.families.first())
+            .map(|(n, _)| n.trim().to_string())
+            .unwrap_or_default();
+        if value.is_empty() || !seen.insert(value.to_lowercase()) {
+            continue;
+        }
+        let label = face
+            .families
+            .iter()
+            .find(|(n, _)| !n.is_ascii())
+            .map(|(n, _)| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| value.clone());
+        out.push((label, value));
+    }
+    out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    out
+}
+
+/// 将字体候选写入设置页 ComboBox 模型，并按当前配置回填选中索引
+/// （0=默认；配置值未命中候选时也回 0，与"缺失回退默认"语义一致）。
+fn apply_font_family_model(
+    ui: &MainWindow,
+    state: &Rc<RefCell<AppState>>,
+    list: &[(String, String)],
+) {
+    let default_label = {
+        let st = state.borrow();
+        let lb = st.loc.borrow();
+        lb.tr("SI_Font_Default").to_string()
+    };
+    let mut labels: Vec<slint::SharedString> = Vec::with_capacity(list.len() + 1);
+    labels.push(default_label.into());
+    for (label, _) in list {
+        labels.push(label.clone().into());
+    }
+    ui.set_settings_font_family_model(slint::ModelRc::from(Rc::new(slint::VecModel::from(
+        labels,
+    ))));
+    let current = {
+        let st = state.borrow();
+        let cfg = st.manager.config();
+        cfg.extra_config.get("font_family").cloned().unwrap_or_default()
+    };
+    let idx = if current.is_empty() {
+        0
+    } else {
+        list.iter()
+            .position(|(_, v)| v.eq_ignore_ascii_case(&current))
+            .map(|i| (i + 1) as i32)
+            .unwrap_or(0)
+    };
+    ui.set_settings_font_family_index(idx);
+}
+
+/// 确保设置页字体候选就绪：已缓存→立即回填；未缓存且未在扫描→后台线程
+/// 枚举（fontdb 解析约百毫秒级，不可阻塞 UI），经 mpsc+轮询 Timer 回送
+/// （Rc/AppState 非 Send，不能经 invoke_from_event_loop 捕获，与清理
+/// 扫描/条目热键回送同款模式）。
+fn ensure_font_family_list(
+    ui: &MainWindow,
+    state: &Rc<RefCell<AppState>>,
+    cache: &Rc<RefCell<Option<Vec<(String, String)>>>>,
+    in_flight: &Rc<std::cell::Cell<bool>>,
+) {
+    if let Some(list) = cache.borrow().as_ref() {
+        apply_font_family_model(ui, state, list);
+        return;
+    }
+    if in_flight.get() {
+        // 扫描中：完成后由 Timer 回填，本次先展示占位项
+        return;
+    }
+    in_flight.set(true);
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<(String, String)>>();
+    let tx_thread = tx.clone();
+    let spawned = std::thread::Builder::new()
+        .name("font-family-scan".to_string())
+        .spawn(move || {
+            let list = enumerate_system_fonts();
+            let _ = tx_thread.send(list);
+        });
+    if let Err(e) = spawned {
+        // 线程创建失败（极端）：空候选兜底（仅剩"默认"项），复位 in-flight
+        log::error!("Failed to spawn font-family scan thread: {}", e);
+        *cache.borrow_mut() = Some(Vec::new());
+        in_flight.set(false);
+        apply_font_family_model(ui, state, &[]);
+        return;
+    }
+    let weak = ui.as_weak();
+    let state_t = state.clone();
+    let cache_t = cache.clone();
+    let in_flight_t = in_flight.clone();
+    let timer = Rc::new(slint::Timer::default());
+    let timer_slot = Rc::new(RefCell::new(Some(timer.clone())));
+    timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(50),
+        move || {
+            // Empty=扫描未完成继续轮询；Disconnected=线程异常退出按空候选收尾
+            let list = match rx.try_recv() {
+                Ok(l) => l,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Vec::new(),
+            };
+            // 收到结果：打破 Timer 循环引用并复位 in-flight
+            if let Some(t) = timer_slot.borrow_mut().take() {
+                t.stop();
+            }
+            in_flight_t.set(false);
+            *cache_t.borrow_mut() = Some(list.clone());
+            if let Some(ui) = weak.upgrade() {
+                apply_font_family_model(&ui, &state_t, &list);
+            }
+        },
+    );
+}
+
 pub fn wire_handler(
     ui: &MainWindow,
     state: Rc<RefCell<AppState>>,
@@ -233,6 +366,12 @@ pub fn wire_handler(
         Rc::new(std::cell::RefCell::new(None));
     // 一键清理无效条目扫描 in-flight 标记：扫描期间禁止重复触发，结果到达（含失败）即复位
     let clean_scan_in_flight: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(false));
+    // 设置页"字体"候选缓存：(显示名, 族名) 列表，None=尚未扫描。系统字体枚举
+    // （fontdb 解析全部字体表）约百毫秒级且结果不变，仅在设置页首次打开时后台
+    // 执行一次，后续打开直接回填；in-flight 防重复触发。
+    let font_family_list: Rc<std::cell::RefCell<Option<Vec<(String, String)>>>> =
+        Rc::new(std::cell::RefCell::new(None));
+    let font_scan_in_flight: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(false));
     // 右键菜单来源：0=项目 1=背景 2=分类（单个 ContextMenu 复用，按来源分发）
     let menu_kind: Rc<std::cell::Cell<u8>> = Rc::new(std::cell::Cell::new(0));
     let right_clicked_category: Rc<std::cell::Cell<Option<i32>>> =
@@ -935,6 +1074,8 @@ pub fn wire_handler(
     let im_mps = input_mode.clone();
     let menu_actions_mps = menu_actions.clone();
     let clean_scan_mps = clean_scan_in_flight.clone();
+    let font_family_list_mps = font_family_list.clone();
+    let font_scan_in_flight_mps = font_scan_in_flight.clone();
     ui.on_menu_popup_selected(move |index| {
         log::debug!("Menu popup item selected: index={}", index);
         let ui = match weak_ui_mps.upgrade() {
@@ -1195,6 +1336,13 @@ pub fn wire_handler(
                 ui.set_settings_icon_size_index(icon_size_index);
                 ui.set_settings_font_size_index(font_size_index);
                 ui.set_settings_auto_hide(auto_hide);
+                // 字体候选：首次打开时后台枚举系统字体（结果缓存，后续打开即时回填）
+                ensure_font_family_list(
+                    &ui,
+                    &state_mps,
+                    &font_family_list_mps,
+                    &font_scan_in_flight_mps,
+                );
                 ui.set_settings_dialog_visible(true);
             }
             Some(MenuAction::About) => ui.set_about_dialog_visible(true),
@@ -2075,6 +2223,67 @@ pub fn wire_handler(
         log::info!("Font scale changed to {}", scale);
         if let Some(ui) = weak_ui_fontsz.upgrade() {
             ui.set_font_scale(scale);
+        }
+    });
+
+    // 字体族切换：选项文本反查族名（候选缓存内唯一），写配置落盘 → 注入
+    // Window.default-font-family 全局即时生效（图标为像素缓存，无需重提取）。
+    // "默认"或未知文本 → 空串 = 跟随系统样式默认字体。
+    let state_fontfam = state.clone();
+    let weak_ui_fontfam = ui.as_weak();
+    let font_family_list_cb = font_family_list.clone();
+    ui.on_settings_font_family_changed(move |label| {
+        let label = label.to_string();
+        let default_label = {
+            let st = state_fontfam.borrow();
+            let lb = st.loc.borrow();
+            lb.tr("SI_Font_Default").to_string()
+        };
+        let (index, value) = {
+            let cache = font_family_list_cb.borrow();
+            // Ref<Option<Vec>> 无 as_deref 方法：经 Deref 走 Option::as_ref 取切片
+            let list: &[(String, String)] = match cache.as_ref() {
+                Some(v) => v,
+                None => &[],
+            };
+            if label == default_label {
+                (0, String::new())
+            } else {
+                match list.iter().position(|(l, _)| *l == label) {
+                    Some(i) => (i as i32 + 1, list[i].1.clone()),
+                    // 未知文本（理论不可达）：兜底回默认
+                    None => (0, String::new()),
+                }
+            }
+        };
+        // 同值短路：重复选择当前字体不触发落盘与全局重渲染
+        let current = {
+            let st = state_fontfam.borrow();
+            let cfg = st.manager.config();
+            cfg.extra_config.get("font_family").cloned().unwrap_or_default()
+        };
+        if current == value {
+            return;
+        }
+        {
+            let mut st = state_fontfam.borrow_mut();
+            st.manager
+                .config_mut()
+                .extra_config
+                .insert("font_family".into(), value.clone());
+            st.save_if_modified();
+        }
+        log::info!(
+            "Font family changed to {}",
+            if value.is_empty() {
+                "(default)".to_string()
+            } else {
+                value.clone()
+            }
+        );
+        if let Some(ui) = weak_ui_fontfam.upgrade() {
+            ui.set_settings_font_family_index(index);
+            ui.set_font_family(value.into());
         }
     });
 

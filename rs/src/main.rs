@@ -450,11 +450,18 @@ fn main() {
             Some("2") => 1.2f32,
             _ => 1.0f32,
         };
+        // 字体族：""=跟随系统默认；其余为系统字体英文族名（设置页枚举所得）
+        let font_family = cfg
+            .extra_config
+            .get("font_family")
+            .cloned()
+            .unwrap_or_default();
         drop(st);
         // 图标缓存键/提取尺寸依赖全局尺寸，须先于任何图标读取初始化
         icon_cache::set_current_icon_size(icon_size);
         ui.set_icon_size(icon_size as f32);
         ui.set_font_scale(font_scale);
+        ui.set_font_family(font_family.into());
     }
 
     // 背景图恢复（设置页 V1）：路径失效/解码失败时降级纯色、清除失效路径并告警，不阻断启动

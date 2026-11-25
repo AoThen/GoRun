@@ -126,13 +126,20 @@ export component Sidebar {
                                         horizontal-stretch: 1;
                                     }
 
-                                    // 计数徽章（v2：行尾右对齐 11px）
+                                    // 计数徽章（v2：行尾右对齐 11px）；
+                                    // 尾部 8px 留白与左缘内缩（3px 指示条 + 5px）对称，
+                                    // 避免数字贴着行底/窗口边框
                                     Text {
                                         text: cat.count;
                                         color: Theme.text-2;
                                         font-size: Theme.font-size-xs;
                                         vertical-alignment: center;
                                         horizontal-alignment: right;
+                                    }
+
+                                    Rectangle {
+                                        width: Theme.spacing-md;
+                                        height: 100%;
                                     }
                                 }
                             }

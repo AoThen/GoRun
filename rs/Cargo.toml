@@ -37,6 +37,10 @@ log = { version = "0.4", features = ["max_level_debug", "release_max_level_debug
 chrono = "0.4"
 pinyin = "0.10"
 raw-window-handle = "0.6"
+# 设置页"字体"选择：枚举系统已安装字体族。Slint 渲染端内部同用 fontdb
+# 做字体匹配（版本随依赖树锁定 0.24），枚举结果与可渲染字体天然一致；
+# 仅在打开设置页时后台线程调用一次，结果缓存复用。
+fontdb = "0.24"
 
 # Windows 平台专属依赖：仅 Windows 目标声明，避免 Linux 构建报 unused dependency。
 # features 虽未被 rs/ 源码直接引用，但 windows-rs 内部 item（如 ShellExecuteExW/

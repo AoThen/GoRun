@@ -96,6 +96,11 @@ export component MainWindow inherits Window {
     // 全局字体缩放（设置项 font_size：0小/1中/2大 → 0.85/1.0/1.2）
     in-out property <float> font-scale: 1.0;
     changed font-scale => { Theme.font-scale = root.font-scale; }
+    // 全局字体族（设置项 font_family：""=跟随系统默认，否则为系统字体
+    // 英文族名如 "Microsoft YaHei"）。经 Window 内建 default-font-family
+    // 全局生效（含对话框/菜单/标准控件）；空串时 Slint 回退样式默认字体。
+    in-out property <string> font-family: "";
+    default-font-family: root.font-family;
     in-out property <bool> is-icon-view: false;
 
     // v2 Toast（替代 StatusBar）
@@ -170,6 +175,12 @@ export component MainWindow inherits Window {
     in property <[string]> settings-font-size-model: [];
     in-out property <int> settings-font-size-index: 1;
     callback settings-font-size-changed(index: int);
+    // 字体族（系统字体枚举，后台扫描后由 Rust 填充模型；""=默认跟随系统）。
+    // 模型为动态列表，selected 回调传选项文本，由 Rust 反查族名与索引。
+    in property <string> settings-font-family-label: "Font";
+    in property <[string]> settings-font-family-model: [];
+    in-out property <int> settings-font-family-index: 0;
+    callback settings-font-family-changed(label: string);
     // 背景图当前状态与遮罩设置（Rust 侧回填/持久化）
     in-out property <string> settings-bg-status: "";
     in-out property <bool> settings-bg-dim-enabled: true;
@@ -514,6 +525,9 @@ export component MainWindow inherits Window {
             font-size-label: root.settings-font-size-label;
             font-size-model: root.settings-font-size-model;
             font-size-index: root.settings-font-size-index;
+            font-family-label: root.settings-font-family-label;
+            font-family-model: root.settings-font-family-model;
+            font-family-index: root.settings-font-family-index;
             has-background: root.has-bg-image;
             bg-dim-enabled: root.settings-bg-dim-enabled;
             bg-dim-percent: root.settings-bg-dim-percent;
@@ -544,6 +558,9 @@ export component MainWindow inherits Window {
             font-size-changed(i) => {
                 root.settings-font-size-index = i;
                 root.settings-font-size-changed(i);
+            }
+            font-family-changed(label) => {
+                root.settings-font-family-changed(label);
             }
             auto-hide-toggled(v) => {
                 root.settings-auto-hide = v;

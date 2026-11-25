@@ -169,6 +169,14 @@ pub fn apply_localized_texts(ui: &MainWindow, loc: &Rc<RefCell<Localization>>, _
         lb.tr("SI_Font_Large").to_string().into(),
     ]));
     ui.set_settings_font_size_model(slint::ModelRc::from(font_size_model));
+    // 字体族（系统字体枚举）：先注入标签与"默认"单项占位；完整候选在设置页
+    // 打开时由 handlers 后台扫描系统字体后替换模型并回填选中项（枚举约
+    // 百毫秒级，不阻塞 UI/启动）。
+    ui.set_settings_font_family_label(lb.tr("Dlg_Font_Family").into());
+    let font_family_model = Rc::new(slint::VecModel::from(vec![
+        lb.tr("SI_Font_Default").to_string().into(),
+    ]));
+    ui.set_settings_font_family_model(slint::ModelRc::from(font_family_model));
     #[cfg(windows)]
     crate::tray::set_ui_texts(crate::tray::TrayTexts {
         show: lb.tr("Tray_ShowHide").to_string(),
