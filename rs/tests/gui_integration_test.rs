@@ -1531,7 +1531,7 @@ fn test_settings_hotkey_apply_same_value_noop() {
 
     let cur = state.borrow().manager.config().config.global_hotkey.clone();
     ui.set_settings_hotkey_msg("stale-msg".into());
-    ui.set_settings_hotkey_text(cur.clone());
+    ui.set_settings_hotkey_text(cur.clone().into());
     ui.invoke_settings_hotkey_apply();
     assert_eq!(
         state.borrow().manager.config().config.global_hotkey,
