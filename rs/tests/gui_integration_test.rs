@@ -12,12 +12,21 @@ use GoRun::*;
 fn init_testing_backend() {
     // 每个测试都重新初始化 testing 后端：winit 的 EventLoop 不可重建，
     // 第二个测试的 MainWindow::new() 会落到 winit 而失败（probe_test 已复现）。
-    // init_no_event_loop() 重复调用返回 AlreadySet 错误，不 panic，可安全重复。
+    // 直接构造 TestingBackend 并 set_platform：init_no_event_loop 固定
+    // mock_time=true，slint Timer 只随 mock_elapsed_time 推进，依赖真实
+    // 睡眠轮询 Timer 的用例会超时；这里取 mock_time=false 走真实时钟。
+    // 重复初始化返回 AlreadySet 错误，忽略即可（无 panic）。
     #[cfg(feature = "backend-testing")]
     {
-        let _ = std::panic::catch_unwind(|| {
-            i_slint_backend_testing::init_no_event_loop();
-        });
+        let _ = slint::platform::set_platform(Box::new(
+            i_slint_backend_testing::TestingBackend::new(
+                i_slint_backend_testing::TestingBackendOptions {
+                    mock_time: false,
+                    threading: false,
+                    ..Default::default()
+                },
+            ),
+        ));
     }
 }
 
@@ -1994,8 +2003,8 @@ fn test_clipboard_files_roundtrip() {
     std::fs::write(&p2, b"b").unwrap();
 
     // HDROP 格式：每条路径 NUL 结尾，尾部双 NUL
-    let w1: Vec<u16> = p1.as_os_str().encode_utf16().chain(std::iter::once(0)).collect();
-    let w2: Vec<u16> = p2.as_os_str().encode_utf16().chain(std::iter::once(0)).collect();
+    let w1: Vec<u16> = p1.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let w2: Vec<u16> = p2.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     let data: Vec<u16> = w1
         .into_iter()
         .chain(w2.into_iter())
