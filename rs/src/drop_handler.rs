@@ -60,6 +60,22 @@ pub fn try_get_hwnd(_ui: &crate::MainWindow) -> Option<isize> {
     None
 }
 
+/// 把路径列表逐条转成 UI 的 `file-dropped` 回调（一次落下多文件的批量入口）。
+/// 供事件循环转发闭包与测试复用；`name` 取文件名词干，`target` 为完整路径。
+pub fn apply_drop_paths(ui: &crate::MainWindow, paths: &[std::path::PathBuf]) {
+    for path in paths {
+        let target = path.to_string_lossy().to_string();
+        let name = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| target.clone());
+        ui.invoke_file_dropped(
+            slint::SharedString::from(name),
+            slint::SharedString::from(target),
+        );
+    }
+}
+
 /// 把落下的路径转发到 UI 的 `file-dropped` 回调（Drop 消费共用，L-12）。
 fn forward_drop_paths(
     ui_weak: &slint::Weak<crate::MainWindow>,
@@ -69,17 +85,7 @@ fn forward_drop_paths(
     let paths = paths.to_vec();
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(ui) = weak.upgrade() {
-            for path in &paths {
-                let target = path.to_string_lossy().to_string();
-                let name = path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| target.clone());
-                ui.invoke_file_dropped(
-                    slint::SharedString::from(name),
-                    slint::SharedString::from(target),
-                );
-            }
+            apply_drop_paths(&ui, &paths);
         }
     });
 }

@@ -15,16 +15,16 @@ fn init_testing_backend() {
     // 直接构造 TestingBackend 并 set_platform：init_no_event_loop 固定
     // mock_time=true，slint Timer 只随 mock_elapsed_time 推进，依赖真实
     // 睡眠轮询 Timer 的用例会超时；这里取 mock_time=false 走真实时钟。
-    // threading=true 提供 event loop 代理，invoke_from_event_loop 才能入列
-    // （拖放消费线程依赖，须配合 run_event_loop 执行）。重复初始化返回
-    // AlreadySet 错误，忽略即可（无 panic）。
+    // threading 保持 false：测试框架多线程并行，平台单例绑定首个用例线程，
+    // 启用代理会令其余用例报 "platform was initialized in another thread"
+    // （CI #216 实测 62/67 失败）。重复初始化返回 AlreadySet 错误，忽略即可。
     #[cfg(feature = "backend-testing")]
     {
         let _ = slint::platform::set_platform(Box::new(
             i_slint_backend_testing::TestingBackend::new(
                 i_slint_backend_testing::TestingBackendOptions {
                     mock_time: false,
-                    threading: true,
+                    threading: false,
                     ..Default::default()
                 },
             ),
@@ -1888,13 +1888,6 @@ fn test_drop_consumer_drop_message_adds_items_batch() {
     state.borrow_mut().current_category_id = cat_id.clone();
     let before = state.borrow().manager.items(&cat_id).len();
 
-    let (tx, rx) = std::sync::mpsc::channel::<GoRun::platform::DropMessage>();
-    GoRun::drop_handler::spawn_drop_consumer(
-        ui.as_weak(),
-        rx,
-        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-    );
-
     let base = std::env::temp_dir().join(format!("gorun_drop_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
@@ -1903,16 +1896,10 @@ fn test_drop_consumer_drop_message_adds_items_batch() {
     std::fs::write(&f1, b"a").unwrap();
     std::fs::write(&f2, b"b").unwrap();
 
-    // 消费线程经 invoke_from_event_loop 把转发闭包入列到 UI 线程事件循环；
-    // testing 后端（threading=true）须真正运行事件循环才会执行，故以看门狗
-    // 3 秒兜底退出，避免转发失败时测试卡死。
-    tx.send(GoRun::platform::DropMessage::Drop(vec![f1, f2])).unwrap();
-    std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_secs(3));
-        let _ = slint::quit_event_loop();
-    });
-    slint::run_event_loop().unwrap();
-    drop(tx); // 终止消费线程
+    // 消费线程把 Drop 经 invoke_from_event_loop 转发回 UI 线程；testing 后端
+    // 无事件循环代理（threading 必须为 false，见 init_testing_backend 注释），
+    // 故在测试线程直接调用转发闭包所用的同一生产逻辑，覆盖多文件批量入列。
+    GoRun::drop_handler::apply_drop_paths(&ui, &[f1.clone(), f2.clone()]);
 
     let names: Vec<String> = state
         .borrow()
