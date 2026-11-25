@@ -51,7 +51,9 @@ export component Sidebar {
         // 分类量级（<50）无需 ListView 虚拟化，全量渲染性能无损。
         ScrollView {
             vertical-stretch: 1;
+            // 约束在视口宽度内：超长分类名按宽度省略，而非撑破侧栏
             VerticalLayout {
+                width: 100%;
                 for cat[index] in categories: Rectangle {
                     height: 32px;
                     // 拖入高亮优先于选中底（同为 accent-subtle，视觉一致）

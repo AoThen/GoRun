@@ -40,8 +40,8 @@ export component ConfirmDialog {
 
             Rectangle {
                 // 小窗口自适应：卡片不超过窗口的 92%，避免按钮/内容被裁出窗外
-                width: min(340px, root.width * 0.92);
-                height: min(max(self.preferred-height, 160px), root.height * 0.92);
+                width: min(420px, root.width * 0.92);
+                height: min(max(self.preferred-height, 180px), root.height * 0.92);
                 cross-axis-self-alignment: center;
                 background: Theme.bg-2;
                 border-radius: Theme.radius-lg;
@@ -66,6 +66,9 @@ export component ConfirmDialog {
                         text: root.message;
                         color: Theme.text-2;
                         font-size: 13px;
+                        // 约束在 ScrollView 视口宽度内换行：否则按 preferred 宽度
+                        // （整行不换行）溢出卡片，两端被裁（同覆盖层 100% 规则）
+                        width: 100%;
                         wrap: word-wrap;
                     }
                 }

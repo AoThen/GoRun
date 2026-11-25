@@ -54,6 +54,8 @@ export component EditDialog inherits Window {
             vertical-stretch: 1;
 
         VerticalBox {
+            // 约束在视口宽度内：输入框按 horizontal-stretch 撑满卡片
+            width: 100%;
             padding: 0px;
             spacing: 6px;
 

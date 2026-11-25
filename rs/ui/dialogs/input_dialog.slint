@@ -107,6 +107,8 @@ export component InputDialog {
                     text: root.error-message;
                     color: Theme.danger;
                     font-size: Theme.font-size-sm;
+                    // 长错误文案在卡片内换行，不溢出
+                    wrap: word-wrap;
                     visible: root.error-message != "";
                 }
 

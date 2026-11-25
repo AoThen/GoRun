@@ -93,6 +93,8 @@ export component SettingsDialog {
                     vertical-stretch: 1;
 
                     VerticalBox {
+                        // 约束在视口宽度内：stretch 控件撑满卡片、长文本按宽度省略
+                        width: 100%;
                         padding: 0px;
                         spacing: 12px;
 
