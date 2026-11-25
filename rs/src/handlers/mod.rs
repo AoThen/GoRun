@@ -677,6 +677,53 @@ pub fn wire_handler(
             log::info!("Auto hide toggled: {}", enabled);
         });
     }
+    // 设置页：应用全局快捷键（文本校验 → 重注册 → 持久化；注册失败回滚旧键，
+    // 与导入配置/汉堡菜单改键同构，复用 config_io::apply_global_hotkey）。
+    // 输入框仅存草稿：点「应用」或回车才提交；关闭设置页不提交。
+    {
+        let hotkey_mgr_hk = hotkey_mgr.clone();
+        let hk_tx_hk = hk_tx_shared.clone();
+        let state_hk = state.clone();
+        let weak_ui_hk = ui.as_weak();
+        ui.on_settings_hotkey_apply(move || {
+            let Some(ui) = weak_ui_hk.upgrade() else { return; };
+            let new_hk = ui.get_settings_hotkey_text().to_string();
+            let new_hk = new_hk.trim().to_string();
+            let cur_hk = state_hk
+                .borrow()
+                .manager
+                .config()
+                .config
+                .global_hotkey
+                .clone();
+            // 与当前值相同：静默清除消息
+            if new_hk == cur_hk {
+                ui.set_settings_hotkey_msg("".into());
+                return;
+            }
+            if hotkey::parse_hotkey_string(&new_hk).is_none() {
+                let loc = state_hk.borrow().loc.clone();
+                ui.set_settings_hotkey_msg_error(true);
+                ui.set_settings_hotkey_msg(loc.borrow().tr("Tip_InvalidHotkey").into());
+                return;
+            }
+            let ok = crate::handlers::config_io::apply_global_hotkey(
+                &state_hk,
+                &hotkey_mgr_hk,
+                &hk_tx_hk,
+                &new_hk,
+                &cur_hk,
+            );
+            let loc = state_hk.borrow().loc.clone();
+            if ok {
+                ui.set_settings_hotkey_msg_error(false);
+                ui.set_settings_hotkey_msg(util::tr_fill(&loc, "Tip_HotkeyUpdated", &new_hk).into());
+            } else {
+                ui.set_settings_hotkey_msg_error(true);
+                ui.set_settings_hotkey_msg(loc.borrow().tr("Tip_HotkeyRegisterFail").into());
+            }
+        });
+    }
 
     let state_new = state.clone();
     let weak_ui_new = ui.as_weak();
@@ -1337,6 +1384,7 @@ pub fn wire_handler(
                     // 未设置（空）与实际生效档位一致：默认中
                     _ => 1,
                 };
+                let hotkey_text = cfg.config.global_hotkey.clone();
                 drop(st);
                 ui.set_settings_bg_status(status.into());
                 ui.set_settings_bg_dim_enabled(dim_enabled);
@@ -1345,6 +1393,9 @@ pub fn wire_handler(
                 ui.set_settings_icon_size_index(icon_size_index);
                 ui.set_settings_font_size_index(font_size_index);
                 ui.set_settings_auto_hide(auto_hide);
+                // 全局快捷键行：回填当前生效键并清空校验消息（每次打开读取最新值）
+                ui.set_settings_hotkey_text(hotkey_text.into());
+                ui.set_settings_hotkey_msg("".into());
                 // 字体候选：首次打开时后台枚举系统字体（结果缓存，后续打开即时回填）
                 ensure_font_family_list(
                     &ui,

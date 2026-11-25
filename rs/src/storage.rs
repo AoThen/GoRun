@@ -76,7 +76,7 @@ fn default_version() -> String {
     crate::model::DEFAULT_VERSION.to_string()
 }
 fn default_hotkey() -> String {
-    "Ctrl+/".to_string()
+    "Alt+Z".to_string()
 }
 fn default_window_x() -> i32 {
     100
@@ -243,12 +243,12 @@ impl Storage {
 
         let config = Config {
             // 历史默认迁移链：Ctrl+Alt+M（全局注册易被其它程序占用）→ Ctrl+M → Ctrl+/
-            // （更冷门、冲突概率更低）。加载时把仍为任一旧默认的值逐级升级到当前默认，
-            // 用户自定义的其它键不受影响；当前默认值不在迁移源集合中，幂等。
+            // → Alt+Z（更冷门、冲突概率更低）。加载时把仍为任一旧默认的值逐级升级到
+            // 当前默认，用户自定义的其它键不受影响；当前默认值不在迁移源集合中，幂等。
             global_hotkey: match raw_config.global_hotkey.as_str() {
-                "Ctrl+Alt+M" | "Ctrl+M" => {
+                "Ctrl+Alt+M" | "Ctrl+M" | "Ctrl+/" => {
                     self.migrated_hotkey.set(true);
-                    "Ctrl+/".to_string()
+                    "Alt+Z".to_string()
                 }
                 other => other.to_string(),
             },
@@ -725,8 +725,8 @@ mod tests {
         fs::write(&path, json).unwrap();
         let storage = Storage::new(path_str.clone());
         let loaded = storage.load().expect("should load string config");
-        // 输入为最老默认 Ctrl+Alt+M，加载时应逐级升级到当前默认 Ctrl+/（迁移链锁定）
-        assert_eq!(loaded.config.global_hotkey, "Ctrl+/");
+        // 输入为最老默认 Ctrl+Alt+M，加载时应逐级升级到当前默认 Alt+Z（迁移链锁定）
+        assert_eq!(loaded.config.global_hotkey, "Alt+Z");
         assert_eq!(loaded.config.window_x, 100);
         assert_eq!(loaded.config.window_width, 800);
         assert_eq!(

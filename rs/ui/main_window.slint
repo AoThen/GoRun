@@ -187,6 +187,14 @@ export component MainWindow inherits Window {
     in-out property <float> settings-bg-dim-percent: 35;
     in property <string> settings-auto-hide-label: "";
     in-out property <bool> settings-auto-hide: false;
+    // 设置页全局快捷键行（Rust 侧回填当前值/校验消息，回调提交改键）
+    in property <string> settings-hotkey-label: "";
+    in-out property <string> settings-hotkey-text: "";
+    in property <string> settings-hotkey-apply-text: "";
+    in property <string> settings-hotkey-msg: "";
+    in property <bool> settings-hotkey-msg-error: true;
+    in property <string> settings-hotkey-hint: "";
+    callback settings-hotkey-apply();
     callback settings-select-background();
     callback settings-clear-background();
     callback settings-dim-toggled(enabled: bool);
@@ -533,6 +541,12 @@ export component MainWindow inherits Window {
             bg-dim-percent: root.settings-bg-dim-percent;
             auto-hide-label: root.settings-auto-hide-label;
             auto-hide-enabled: root.settings-auto-hide;
+            hotkey-label: root.settings-hotkey-label;
+            hotkey-text: root.settings-hotkey-text;
+            hotkey-apply-text: root.settings-hotkey-apply-text;
+            hotkey-msg: root.settings-hotkey-msg;
+            hotkey-msg-error: root.settings-hotkey-msg-error;
+            hotkey-hint: root.settings-hotkey-hint;
             select-background() => {
                 root.settings-select-background();
             }
@@ -565,6 +579,9 @@ export component MainWindow inherits Window {
             auto-hide-toggled(v) => {
                 root.settings-auto-hide = v;
                 root.settings-auto-hide-toggled(v);
+            }
+            hotkey-apply() => {
+                root.settings-hotkey-apply();
             }
             close() => {
                 root.settings-dialog-visible = false;

@@ -812,6 +812,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_alt_z() {
+        // 当前默认全局唤出键：Alt+Z（MOD_ALT=0x0001，'Z'=0x5A）
+        let hk = parse_hotkey_string("Alt+Z").unwrap();
+        assert_eq!(hk.modifiers, 0x0001);
+        assert_eq!(hk.vk, 'Z' as u32);
+    }
+
+    #[test]
     fn test_parse_punct_keys() {
         let hk = parse_hotkey_string("Ctrl+/").unwrap();
         assert_eq!(hk.modifiers, 0x0002);

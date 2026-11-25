@@ -94,7 +94,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            global_hotkey: "Ctrl+/".to_string(),
+            global_hotkey: "Alt+Z".to_string(),
             window_x: 100,
             window_y: 100,
             window_width: 800,
@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn test_config_default_values() {
         let c = Config::default();
-        assert_eq!(c.global_hotkey, "Ctrl+/");
+        assert_eq!(c.global_hotkey, "Alt+Z");
         assert_eq!(c.window_x, 100);
         assert_eq!(c.window_y, 100);
         assert_eq!(c.window_width, 800);

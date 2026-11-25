@@ -147,6 +147,10 @@ pub fn apply_localized_texts(ui: &MainWindow, loc: &Rc<RefCell<Localization>>, _
     ui.set_settings_close(lb.tr("Dlg_Close").into());
     ui.set_settings_log_label(lb.tr("Dlg_Log_Level").into());
     ui.set_settings_auto_hide_label(lb.tr("Dlg_Auto_Hide").into());
+    // 设置页全局快捷键行：标签/应用按钮/格式提示
+    ui.set_settings_hotkey_label(lb.tr("Dlg_Hotkey").into());
+    ui.set_settings_hotkey_apply_text(lb.tr("Btn_Apply").into());
+    ui.set_settings_hotkey_hint(lb.tr("Dlg_Hotkey_Hint").into());
     let log_model = Rc::new(slint::VecModel::from(vec![
         lb.tr("SI_Log_Min").to_string().into(),
         lb.tr("SI_Log_Std").to_string().into(),

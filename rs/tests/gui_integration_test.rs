@@ -1496,6 +1496,80 @@ fn test_settings_auto_hide_toggled_updates_flag() {
     );
 }
 
+// ===== 设置页全局快捷键行（settings_hotkey_apply） =====
+
+/// 设置页全局快捷键：非法串拒绝——配置保持旧键，行内展示格式错误消息。
+#[test]
+fn test_settings_hotkey_apply_invalid_keeps_old() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    let old_hk = state.borrow().manager.config().config.global_hotkey.clone();
+    ui.set_settings_hotkey_text("NotAHotkey".into());
+    ui.invoke_settings_hotkey_apply();
+    assert_eq!(
+        state.borrow().manager.config().config.global_hotkey,
+        old_hk,
+        "非法键应保持当前配置不变"
+    );
+    assert!(
+        ui.get_settings_hotkey_msg_error(),
+        "非法键应展示错误消息"
+    );
+    assert!(
+        ui.get_settings_hotkey_msg().as_str().contains("格式无效"),
+        "应提示格式无效: {}",
+        ui.get_settings_hotkey_msg().as_str()
+    );
+}
+
+/// 设置页全局快捷键：与当前值相同 → 静默无操作并清除残留消息。
+#[test]
+fn test_settings_hotkey_apply_same_value_noop() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    let cur = state.borrow().manager.config().config.global_hotkey.clone();
+    ui.set_settings_hotkey_msg("stale-msg".into());
+    ui.set_settings_hotkey_text(cur.clone());
+    ui.invoke_settings_hotkey_apply();
+    assert_eq!(
+        state.borrow().manager.config().config.global_hotkey,
+        cur,
+        "同值应用不应改动配置"
+    );
+    assert!(
+        ui.get_settings_hotkey_msg().as_str().is_empty(),
+        "同值应用应清除消息"
+    );
+}
+
+/// （Windows）设置页全局快捷键：合法键注册成功 → 配置更新、行内成功消息。
+/// 非 Windows 平台 register 约定返回 false（热键泵不支持），成功路径仅 Windows 验证。
+#[cfg(windows)]
+#[test]
+fn test_settings_hotkey_apply_valid_registers() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    ui.set_settings_hotkey_text("Ctrl+Shift+D".into());
+    ui.invoke_settings_hotkey_apply();
+    assert_eq!(
+        state.borrow().manager.config().config.global_hotkey,
+        "Ctrl+Shift+D",
+        "合法键应更新配置"
+    );
+    assert!(
+        !ui.get_settings_hotkey_msg_error(),
+        "注册成功应展示成功消息"
+    );
+    assert!(
+        ui.get_settings_hotkey_msg().as_str().contains("Ctrl+Shift+D"),
+        "成功消息应包含新键: {}",
+        ui.get_settings_hotkey_msg().as_str()
+    );
+}
+
 // ===== 运行全部：双重确认（P0 防误批量启动） =====
 
 /// 运行全部双重确认：第一道确认 → ok → 第二道确认（含数量）；

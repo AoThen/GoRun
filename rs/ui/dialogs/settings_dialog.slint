@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, Button, CheckBox, Slider, ComboBox, ScrollView } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, Button, CheckBox, Slider, ComboBox, ScrollView, LineEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 // 设置对话框（V1：背景图 + 日志档位 + 自动隐藏行为）。模式同 AboutDialog：普通覆盖层组件，
@@ -31,6 +31,14 @@ export component SettingsDialog {
     in property <bool> has-background: false;
     in property <bool> bg-dim-enabled: true;
     in property <float> bg-dim-percent: 35;
+    // 全局快捷键（唤出/隐藏窗口）：文本输入 + 应用按钮，行内校验消息（错误/成功）
+    in property <string> hotkey-label: "Hotkey";
+    in-out property <string> hotkey-text: "";
+    in property <string> hotkey-apply-text: "Apply";
+    in property <string> hotkey-msg: "";
+    in property <bool> hotkey-msg-error: true;
+    in property <string> hotkey-hint: "";
+    callback hotkey-apply();
     in property <string> close-text: "Close";
     callback select-background();
     callback clear-background();
@@ -147,6 +155,52 @@ export component SettingsDialog {
                                 changed(value) => {
                                     root.dim-changed(value);
                                 }
+                            }
+                        }
+
+                        // 全局快捷键行（唤出/隐藏窗口）：编辑仅存草稿，
+                        // 「应用」按钮或输入框内回车（accepted）才提交校验/注册
+                        VerticalBox {
+                            padding: 0px;
+                            spacing: 4px;
+
+                            HorizontalBox {
+                                spacing: Theme.spacing-md;
+                                Text {
+                                    text: root.hotkey-label;
+                                    color: Theme.text-1;
+                                    font-size: Theme.font-size-md;
+                                    vertical-alignment: center;
+                                }
+                                LineEdit {
+                                    text: root.hotkey-text;
+                                    edited => { root.hotkey-text = self.text; }
+                                    accepted(text) => {
+                                        root.hotkey-text = text;
+                                        root.hotkey-apply();
+                                    }
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: root.hotkey-apply-text;
+                                    primary: true;
+                                    clicked => { root.hotkey-apply(); }
+                                }
+                            }
+
+                            // 行内校验消息：错误红字 / 成功 accent 色（无专用绿令牌）
+                            Text {
+                                text: root.hotkey-msg;
+                                color: root.hotkey-msg-error ? Theme.danger : Theme.accent;
+                                font-size: Theme.font-size-sm;
+                                visible: root.hotkey-msg != "";
+                            }
+
+                            Text {
+                                text: root.hotkey-hint;
+                                color: Theme.text-2;
+                                font-size: Theme.font-size-sm;
+                                visible: root.hotkey-hint != "";
                             }
                         }
 
