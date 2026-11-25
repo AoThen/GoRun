@@ -1615,7 +1615,8 @@ fn test_delete_category_removes_cached_icon_files() {
     assert!(ui.get_confirm_dialog_visible(), "删除分类确认框应弹出");
     ui.invoke_confirm_dialog_ok();
 
-    let cats_after = state.borrow().manager.categories();
+    let cats_guard = state.borrow();
+    let cats_after = cats_guard.manager.categories();
     assert_eq!(cats_after.len(), 1, "应删掉当前分类，保留最后一个");
     assert!(cats_after.iter().any(|c| c.id == "cat_1"));
     assert!(!p3.exists(), "被删分类内条目的缓存文件应级联删除");
@@ -1671,7 +1672,8 @@ fn test_run_failure_queued_drain_success_increments_count() {
 
     // 成功结果：drain 时回写运行计数
     {
-        let mut q = state.borrow_mut().pending_run_results.lock().unwrap();
+        let st = state.borrow_mut();
+        let mut q = st.pending_run_results.lock().unwrap();
         q.push(GoRun::app_state::RunOutcome {
             item_id: "i1".into(),
             item_name: "Notepad".into(),
@@ -1710,12 +1712,12 @@ fn test_item_hotkey_sync_valid_then_cleared() {
     it.hotkey = "Ctrl+Shift+F8".into();
     state.borrow_mut().manager.update_item(&it);
 
-    let failed = GoRun::ui_sync::sync_item_hotkeys(&state);
+    let failed = GoRun::ui_sync::sync_item_hotkeys(&state.borrow());
     assert!(failed.is_empty(), "有效热键同步注册不应失败: {failed:?}");
 
     it.hotkey = String::new();
     state.borrow_mut().manager.update_item(&it);
-    let failed2 = GoRun::ui_sync::sync_item_hotkeys(&state);
+    let failed2 = GoRun::ui_sync::sync_item_hotkeys(&state.borrow());
     assert!(failed2.is_empty(), "热键清空（空集合）同步不应失败: {failed2:?}");
 }
 
@@ -1747,7 +1749,7 @@ fn test_item_hotkey_conflict_reported_on_windows() {
     state.borrow_mut().manager.update_item(&it1);
     state.borrow_mut().manager.update_item(&it2);
 
-    let failed = GoRun::ui_sync::sync_item_hotkeys(&state);
+    let failed = GoRun::ui_sync::sync_item_hotkeys(&state.borrow());
     assert!(
         failed.iter().any(|f| f == "Ctrl+Shift+F8"),
         "冲突热键应上报失败: {failed:?}"
@@ -1772,7 +1774,7 @@ fn test_item_hotkey_invalid_string_reported_on_windows() {
     it.hotkey = "Ctrl++".into();
     state.borrow_mut().manager.update_item(&it);
 
-    let failed = GoRun::ui_sync::sync_item_hotkeys(&state);
+    let failed = GoRun::ui_sync::sync_item_hotkeys(&state.borrow());
     assert!(
         failed.iter().any(|f| f == "Ctrl++"),
         "非法热键串应上报失败: {failed:?}"
@@ -1858,7 +1860,7 @@ fn test_view_type_follows_category_independently() {
 
     ui.invoke_toggle_view();
     assert!(ui.get_is_icon_view(), "切换后 cat_2 应翻转为图标模式");
-    let view2 = state.borrow().manager.categories()[1].view_type;
+    let view2 = state.borrow().manager.categories()[1].view_type.clone();
     assert_eq!(view2, ViewType::Icon, "切换应写回当前分类的 view_type");
 
     ui.invoke_category_selected(0);
@@ -1983,6 +1985,7 @@ fn test_clipboard_files_roundtrip() {
         CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
     };
     use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+    use std::os::windows::ffi::OsStrExt;
     use windows::Win32::System::Ole::CF_HDROP;
 
     let p1 = std::env::temp_dir().join(format!("gorun_clip_a_{}.txt", std::process::id()));
@@ -2007,7 +2010,7 @@ fn test_clipboard_files_roundtrip() {
         let ptr = GlobalLock(h) as *mut u16;
         std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
         let _ = GlobalUnlock(h);
-        SetClipboardData(CF_HDROP.0 as u32, HANDLE(h.0)).unwrap();
+        SetClipboardData(CF_HDROP.0 as u32, Some(HANDLE(h.0))).unwrap();
         CloseClipboard().unwrap();
     }
 
