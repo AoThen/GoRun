@@ -1484,3 +1484,49 @@ fn test_settings_auto_hide_toggled_updates_flag() {
         Some("0")
     );
 }
+
+// ===== 运行全部：双重确认（P0 防误批量启动） =====
+
+/// 运行全部双重确认：第一道确认 → ok → 第二道确认（含数量）；
+/// 取消第二道 → 关闭且任何条目 run_count 不变（未执行）。
+#[test]
+fn test_run_all_double_confirm_and_cancel() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+
+    // 背景右键弹出菜单，按文本定位"运行全部"（禁止硬编码索引）
+    ui.invoke_background_right_clicked(10.0, 10.0);
+    let idx = find_context_item_index(&ui, "运行全部");
+    ui.invoke_menu_item_selected(idx);
+
+    // 第一道确认：运行分类提示
+    assert!(ui.get_confirm_dialog_visible(), "第一道确认应弹出");
+    assert!(
+        ui.get_confirm_dialog_message().as_str().contains("运行分类"),
+        "第一道确认应提示运行分类"
+    );
+    ui.invoke_confirm_dialog_ok();
+
+    // 第二道确认：含将运行的项目数量
+    assert!(ui.get_confirm_dialog_visible(), "第二道确认应弹出");
+    let msg2 = ui.get_confirm_dialog_message().as_str().to_string();
+    assert!(
+        msg2.contains("连续运行") && msg2.contains("2 个项目"),
+        "第二道确认应含数量与连续运行提示，实际：{msg2}"
+    );
+
+    // 取消第二道（真实流程：组件先关弹窗再回调取消）→ 未执行任何条目
+    ui.set_confirm_dialog_visible(false);
+    ui.invoke_confirm_dialog_cancel();
+    assert!(!ui.get_confirm_dialog_visible(), "取消后确认框应关闭");
+    let ran: i32 = state
+        .borrow()
+        .manager
+        .all_items()
+        .iter()
+        .map(|i| i.run_count)
+        .sum();
+    assert_eq!(ran, 0, "取消后不得执行任何条目");
+}

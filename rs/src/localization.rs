@@ -173,6 +173,8 @@ mod tests {
             "Tip_CleanInvalidDone",
             "Tip_CleanInvalidNone",
             "Tip_CleanScanFail",
+            "Title_ConfirmRunAll2",
+            "Tip_RunAllConfirm2",
         ];
         for key in essential {
             assert_ne!(loc.tr(key), key, "zh-CN.json 缺少关键文案 key: {}", key);

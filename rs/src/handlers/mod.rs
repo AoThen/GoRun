@@ -359,6 +359,8 @@ pub fn wire_handler(
         DeleteItem(String),
         DeleteCategory(String),
         RunAll(String),
+        // 运行全部第二道确认：首次确认通过后待办改写为此变体，二次确认通过才执行
+        RunAllSecond(String),
         RunAsAdmin(String),
         // 一键清理无效条目：携带预扫描出的待删条目 id 列表
         CleanInvalid(Vec<String>),
@@ -1268,13 +1270,17 @@ pub fn wire_handler(
                             return;
                         }
                         let n = invalid.len();
-                        let mut names: Vec<String> =
-                            invalid.iter().map(|(_, d)| d.clone()).collect();
-                        names.truncate(3);
-                        let mut preview = names.join("、");
+                        // 预览逐行列表：前 3 个名称各占一行，超出追加"…等 N 项"，
+                        // 避免长行在窄卡片内换行拥挤
+                        let mut lines: Vec<String> = invalid
+                            .iter()
+                            .take(3)
+                            .map(|(_, d)| format!("· {}", d))
+                            .collect();
                         if n > 3 {
-                            preview = format!("{}…等 {} 项", preview, n);
+                            lines.push(format!("…等 {} 项", n));
                         }
+                        let preview = lines.join("\n");
                         let ids: Vec<String> = invalid.iter().map(|(id, _)| id.clone()).collect();
                         let loc = state_scan.borrow().loc.clone();
                         let msg_text = loc
@@ -1513,9 +1519,18 @@ pub fn wire_handler(
                     }
                 }
                 6 => {
-                    // 运行全部：弹确认框（Tip_RunAll），确认后逐一执行分类内项目
+                    // 运行全部：弹确认框（Tip_RunAll），确认后逐一执行分类内项目。
+                    // 空分类直接提示，不进入双重确认链。
                     let state = state_menu.borrow_mut();
                     let cat_id = state.current_category_id.clone();
+                    if state.manager.items(&cat_id).is_empty() {
+                        let tip = state.loc.borrow().tr("Tip_NoItems").to_string();
+                        drop(state);
+                        if let Some(ui) = weak_ui_menu.upgrade() {
+                            ui_sync::show_toast(&ui, tip, false);
+                        }
+                        return;
+                    }
                     let cat_name = state
                         .manager
                         .categories()
@@ -1920,11 +1935,40 @@ pub fn wire_handler(
             }
             return;
         }
-        // 运行全部（背景右键菜单 → 确认弹窗 → 逐一执行分类内项目）。
+        // 运行全部第一道确认通过：不直接执行，待办改写为二次确认并再次弹出。
+        // 第二道确认展示将运行的项目数量与分类名，通过后才进入下方批量执行。
+        // 本分支必须 return：RunAll 按值移动 cat_id 后 pending 部分移动，
+        // 后续分支再读 pending 会触发 E0382（与 Import 分支同纪律）。
+        if let Some(ConfirmAction::RunAll(cat_id)) = pending {
+            let count = state_confirm.borrow().manager.items(&cat_id).len();
+            let cat_name = state_confirm
+                .borrow()
+                .manager
+                .categories()
+                .iter()
+                .find(|c| c.id == cat_id)
+                .map(|c| c.name.clone())
+                .unwrap_or_default();
+            let loc_m = state_confirm.borrow().loc.clone();
+            *pcm_ok.borrow_mut() = Some(ConfirmAction::RunAllSecond(cat_id));
+            if let Some(ui) = weak_ui_confirm.upgrade() {
+                ui.set_confirm_dialog_title(loc_m.borrow().tr("Title_ConfirmRunAll2").into());
+                let msg = loc_m
+                    .borrow()
+                    .tr("Tip_RunAllConfirm2")
+                    .replace("{0}", &count.to_string())
+                    .replace("{1}", &cat_name);
+                ui.set_confirm_dialog_message(msg.into());
+                ui.set_confirm_confirm_text(loc_m.borrow().tr("Btn_Execute").to_string().into());
+                ui.set_confirm_dialog_visible(true);
+            }
+            return;
+        }
+        // 运行全部（背景右键菜单 → 两道确认 → 逐一执行分类内项目）。
         // M-4：启动全部移到工作线程逐项执行（项间 50ms 让出），UI 线程 Timer 仅
         // 轮询进度与汇总提示——UAC 提权弹窗/慢速目标不再冻结界面；窗口隐藏
         // （Esc/X/热键）或退出即取消剩余批次。
-        if let Some(ConfirmAction::RunAll(cat_id)) = pending {
+        if let Some(ConfirmAction::RunAllSecond(cat_id)) = pending {
             let items: Vec<crate::model::Item> = {
                 let state = state_confirm.borrow();
                 state.manager.items(&cat_id).to_vec()
