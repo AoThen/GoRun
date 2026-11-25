@@ -1895,7 +1895,7 @@ fn test_drop_consumer_drop_message_adds_items_batch() {
     // 消费线程经 invoke_from_event_loop 转发回调，testing 后端须手动泵事件
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     loop {
-        slint::platform::update_timers();
+        slint::platform::update_timers_and_animations();
         if state.borrow().manager.items(&cat_id).len() == before + 2 {
             break;
         }
@@ -1949,7 +1949,7 @@ fn test_drop_consumer_mouse_left_gate() {
     tx.send(GoRun::platform::DropMessage::Drop(vec![f1])).unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     while count() < 1 {
-        slint::platform::update_timers();
+        slint::platform::update_timers_and_animations();
         assert!(
             std::time::Instant::now() < deadline,
             "开关关闭时 Drop 仍应被消费（线程存活）"
@@ -1965,7 +1965,7 @@ fn test_drop_consumer_mouse_left_gate() {
     tx.send(GoRun::platform::DropMessage::Drop(vec![f2])).unwrap();
     let deadline2 = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while count() < 2 {
-        slint::platform::update_timers();
+        slint::platform::update_timers_and_animations();
         assert!(std::time::Instant::now() < deadline2, "延迟窗口内的 Drop 不应丢失");
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
@@ -2070,7 +2070,7 @@ fn test_run_all_reports_failure_summary() {
     // 工作线程批量执行（批间 50ms）→ 100ms 轮询 Timer 发现 done → 弹汇总
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        slint::platform::update_timers();
+        slint::platform::update_timers_and_animations();
         if ui.get_toast_visible() {
             break;
         }
@@ -2152,7 +2152,7 @@ fn test_clean_invalid_scan_removes_invalid_keeps_valid() {
     // 轮询 Timer（50ms）收到扫描结果后弹确认框：手动泵事件直至弹出
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
-        slint::platform::update_timers();
+        slint::platform::update_timers_and_animations();
         if ui.get_confirm_dialog_visible() {
             break;
         }
@@ -2261,7 +2261,7 @@ fn test_search_debounce_applies_after_window() {
 
     // 100ms 处仍在 300ms 窗口内：UI 视图未过滤（仍为初始全量 3 条）
     std::thread::sleep(std::time::Duration::from_millis(100));
-    slint::platform::update_timers();
+    slint::platform::update_timers_and_animations();
     assert_eq!(
         ui.get_items().row_count(),
         3,
@@ -2271,7 +2271,7 @@ fn test_search_debounce_applies_after_window() {
     // 泵事件直至 300ms Timer 触发（窗口到期后过滤生效）
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
-        slint::platform::update_timers();
+        slint::platform::update_timers_and_animations();
         if ui.get_items().row_count() == 2 {
             break;
         }
