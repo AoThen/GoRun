@@ -590,6 +590,28 @@ impl Storage {
     }
 }
 
+/// P2-05 损坏配置隔离（留证）：损坏且无可用备份时把坏文件改名为
+/// `<原路径>.corrupt.<ts>`，避免后续保存覆盖坏数据/污染备份链。
+/// 返回隔离后的路径；重命名失败（如文件已被外部删除）返回 None，
+/// 调用方继续以内存默认配置运行。
+pub fn quarantine_corrupt_file(config_path: &std::path::Path) -> Option<String> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let corrupt_path = format!("{}.corrupt.{}", config_path.display(), ts);
+    if std::fs::rename(config_path, &corrupt_path).is_ok() {
+        log::warn!("Corrupt config quarantined to: {}", corrupt_path);
+        Some(corrupt_path)
+    } else {
+        log::error!(
+            "Failed to quarantine corrupt config {}; will run with default in memory",
+            config_path.display()
+        );
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1041,5 +1063,36 @@ mod edge_tests {
         assert!(other.exists(), "无关前缀不得误删");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_quarantine_corrupt_file_renames_and_returns_path() {
+        let dir = std::env::temp_dir().join(format!(
+            "gorun_quarantine_test_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.json");
+        std::fs::write(&cfg, b"{not json").unwrap();
+
+        let q = quarantine_corrupt_file(&cfg).expect("隔离应成功");
+        assert!(!cfg.exists(), "坏文件应被移出原位");
+        let qpath = std::path::Path::new(&q);
+        assert!(qpath.exists(), "隔离后文件应存在（留证）");
+        let name = qpath.file_name().unwrap().to_string_lossy().to_string();
+        assert!(
+            name.starts_with("config.json.corrupt."),
+            "应带 .corrupt.<ts> 后缀: {name}"
+        );
+        assert_eq!(
+            std::fs::read(qpath).unwrap(),
+            b"{not json",
+            "隔离内容应保持原样"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        // 原文件不存在（已被移走/外部删除）→ 重命名失败，返回 None 不 panic
+        assert!(quarantine_corrupt_file(&cfg).is_none());
     }
 }

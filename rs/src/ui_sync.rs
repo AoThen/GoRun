@@ -334,6 +334,48 @@ pub fn drain_run_results(state: &Rc<RefCell<AppState>>) -> Vec<RunOutcome> {
     drained
 }
 
+/// 启动时恢复背景图（设置页 V1）：extra_config 有效图片 → 载入铺底；
+/// 路径失效/解码失败 → 降级纯色并清除失效键（不阻断启动）。
+/// 暗化遮罩（background_dim_enabled/background_dim）随同恢复。
+pub fn restore_background_image(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
+    let (bg_path, dim_enabled, dim_percent) = {
+        let st = state.borrow();
+        let cfg = st.manager.config();
+        (
+            cfg.extra_config.get("background_image").cloned(),
+            cfg.extra_config
+                .get("background_dim_enabled")
+                .map(|v| v == "1"),
+            cfg.extra_config
+                .get("background_dim")
+                .and_then(|v| v.parse::<f32>().ok()),
+        )
+    };
+    if let Some(path) = bg_path {
+        match crate::background::decode(&path) {
+            Some(decoded) => {
+                ui.set_bg_image(slint::Image::from_rgba8(decoded.buffer));
+                ui.set_has_bg_image(true);
+            }
+            None => {
+                log::warn!("Background restore failed, fallback to solid: {}", path);
+                let mut st = state.borrow_mut();
+                st.manager
+                    .config_mut()
+                    .extra_config
+                    .remove("background_image");
+                st.save_if_modified();
+            }
+        }
+    }
+    if let Some(v) = dim_enabled {
+        ui.set_bg_dim_enabled(v);
+    }
+    if let Some(p) = dim_percent {
+        ui.set_bg_dim((p / 100.0).clamp(0.0, 1.0));
+    }
+}
+
 pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, query: &str) {
     let items = if query.is_empty() {
         state.manager.items(category_id)
