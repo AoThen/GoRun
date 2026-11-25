@@ -1451,26 +1451,28 @@ pub fn wire_handler(
                             }
                         }
                     }
-                    Some(ItemMenuAction::MoveUp) => {
-                        if state.manager.move_item_up(&item.id) {
-                            state.save_if_modified();
-                            let cat_id = state.current_category_id.clone();
-                            let q = state.search_query.clone();
-                            drop(state);
-                            if let Some(ui) = weak_ui_menu.upgrade() {
-                                ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
-                            }
+                    // clippy::collapsible_match：guard 仅在本臂选中时求值一次，
+                    // 语义与"臂内 if 失败静默忽略"完全一致。
+                    Some(ItemMenuAction::MoveUp)
+                        if state.manager.move_item_up(&item.id) =>
+                    {
+                        state.save_if_modified();
+                        let cat_id = state.current_category_id.clone();
+                        let q = state.search_query.clone();
+                        drop(state);
+                        if let Some(ui) = weak_ui_menu.upgrade() {
+                            ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                         }
                     }
-                    Some(ItemMenuAction::MoveDown) => {
-                        if state.manager.move_item_down(&item.id) {
-                            state.save_if_modified();
-                            let cat_id = state.current_category_id.clone();
-                            let q = state.search_query.clone();
-                            drop(state);
-                            if let Some(ui) = weak_ui_menu.upgrade() {
-                                ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
-                            }
+                    Some(ItemMenuAction::MoveDown)
+                        if state.manager.move_item_down(&item.id) =>
+                    {
+                        state.save_if_modified();
+                        let cat_id = state.current_category_id.clone();
+                        let q = state.search_query.clone();
+                        drop(state);
+                        if let Some(ui) = weak_ui_menu.upgrade() {
+                            ui_sync::refresh_items_ui(&ui, &state_menu.borrow(), &cat_id, &q);
                         }
                     }
                     None => {}
