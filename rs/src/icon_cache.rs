@@ -857,21 +857,22 @@ mod restore_tests {
     #[test]
     fn test_image_cache_lru_evicts_least_recently_used() {
         let cache = IconCache::new();
-        let items: Vec<Item> = (0..IMAGE_CACHE_MAX + 2)
+        let items: Vec<Item> = (0..=IMAGE_CACHE_MAX)
             .map(|i| test_item(&format!("id_{i}")))
             .collect();
         let buf = slint::SharedPixelBuffer::new(1, 1);
-        for item in &items {
+        // 填满至上限（0..MAX-1 共 MAX 项），不触发逐出
+        for item in &items[..IMAGE_CACHE_MAX] {
             cache.store_image(item, buf.clone());
         }
         // 访问 id_0 刷新其 LRU 序号，使其成为最新
         assert!(cache.cached_image(&items[0]).is_some());
         // 再插入一项触发逐出：此时最久未用为 id_1（序号未被刷新）
-        cache.store_image(&items[IMAGE_CACHE_MAX + 1], buf.clone());
+        cache.store_image(&items[IMAGE_CACHE_MAX], buf.clone());
         assert!(cache.cached_image(&items[1]).is_none(), "id_1 应被逐出");
         assert!(cache.cached_image(&items[0]).is_some(), "刚访问的 id_0 应保留");
         assert!(
-            cache.cached_image(&items[IMAGE_CACHE_MAX + 1]).is_some(),
+            cache.cached_image(&items[IMAGE_CACHE_MAX]).is_some(),
             "刚插入的项应保留"
         );
     }
