@@ -11,12 +11,16 @@ use crate::model::{AppConfig, Category, Item};
 /// 条目键为文本原文，逐出后按需重算，无一致性风险）
 const PINYIN_CACHE_MAX: usize = 4096;
 
+/// 拼音缓存条目：文本 → （首字母, 全拼）对 + 最近访问序号。None 表示
+/// 不含 CJK。类型别名隔离 clippy type_complexity。
+type PinyinCacheEntry = (Option<(String, String)>, u64);
+
 pub struct ItemManager {
     config: AppConfig,
     modified: bool,
     /// P1-9：文本 → 拼音对（首字母, 全拼）缓存；None 表示不含 CJK（无需拼音匹配）。
     /// H3：值携带最近访问序号（LRU），超上限逐出最久未用单项。
-    pinyin_cache: RefCell<HashMap<String, (Option<(String, String)>, u64)>>,
+    pinyin_cache: RefCell<HashMap<String, PinyinCacheEntry>>,
     /// 拼音缓存 LRU 访问序号（仅 UI 线程访问，与缓存同一锁域）。
     pinyin_seq: std::cell::Cell<u64>,
 }

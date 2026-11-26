@@ -33,6 +33,10 @@ pub fn set_current_icon_size(size: i32) {
     CURRENT_ICON_SIZE.store(size, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// 内存缓存条目：解码后的像素 + 最近访问序号（H3 LRU）。类型别名隔离
+/// clippy type_complexity。
+type CachedImage = (slint::SharedPixelBuffer<slint::Rgba8Pixel>, u64);
+
 #[derive(Clone)]
 pub struct IconCache {
     cache_dir: PathBuf,
@@ -45,7 +49,7 @@ pub struct IconCache {
     /// 目的：搜索输入等高频刷新路径避免对同一 PNG 反复读盘解码。
     /// H3：值携带最近访问序号（LRU），超上限逐出最久未用单项——此前整体
     /// 清空使全部热缓存回退读盘重解码，影响面从整表降为一项。
-    images: Arc<Mutex<HashMap<u64, (slint::SharedPixelBuffer<slint::Rgba8Pixel>, u64)>>>,
+    images: Arc<Mutex<HashMap<u64, CachedImage>>>,
     /// LRU 访问序号（单调递增，Atomic 满足跨提取线程的存取）。
     seq: Arc<std::sync::atomic::AtomicU64>,
 }
@@ -854,7 +858,7 @@ mod restore_tests {
     fn test_image_cache_lru_evicts_least_recently_used() {
         let cache = IconCache::new();
         let items: Vec<Item> = (0..IMAGE_CACHE_MAX + 2)
-            .map(|i| test_item(format!("id_{i}")))
+            .map(|i| test_item(&format!("id_{i}")))
             .collect();
         let buf = slint::SharedPixelBuffer::new(1, 1);
         for item in &items {
@@ -884,7 +888,7 @@ mod restore_tests {
         // 持续访问 a 并插入新项至满：b 序号最旧，应先被逐出
         for i in 0..IMAGE_CACHE_MAX {
             let _ = cache.cached_image(&a);
-            cache.store_image(&test_item(format!("new_{i}")), buf.clone());
+            cache.store_image(&test_item(&format!("new_{i}")), buf.clone());
         }
         assert!(cache.cached_image(&a).is_some(), "反复访问的 a 应保留");
         assert!(cache.cached_image(&b).is_none(), "未再访问的 b 应被逐出");

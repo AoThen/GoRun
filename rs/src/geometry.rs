@@ -24,7 +24,7 @@ pub const GEOMETRY_SAVE_DEBOUNCE: std::time::Duration = std::time::Duration::fro
 /// H4：最大化状态持久化键（存于 extra_config，布尔 "1"/"0"，经 P3-12 的
 /// extra_get_bool/extra_set_bool 读写，零 schema 变更）。导入配置时随非会话
 /// 偏好一起被丢弃，与窗口几何整体替换语义一致。
-pub(crate) const WINDOW_MAXIMIZED_KEY: &str = "windowMaximized";
+pub const WINDOW_MAXIMIZED_KEY: &str = "windowMaximized";
 
 /// H4 几何保存决策（纯逻辑，单测覆盖）：将"是否落盘、落什么"与 UI 调用解耦。
 #[derive(Debug, PartialEq, Eq)]
@@ -42,6 +42,9 @@ pub(crate) enum GeometrySaveAction {
 /// 关键点：最大化时坐标不落盘（否则最大化坐标会污染还原几何）；
 /// "最大化→还原（未移动）"坐标无变化，标志清零不能被坐标相等早退吞掉，
 /// 故标志 diff 判定独立于坐标比较。
+// 决策函数集中窗口状态位，5 个 bool 触发 clippy fn_params_excessive_bools；
+// 语义直观（逐位命名），重构为枚举收益低，按仓库 util.rs 先例 allow。
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn geometry_save_decision(
     maximized: bool,
     minimized: bool,
@@ -96,7 +99,7 @@ fn save_window_geometry_with(ui: &MainWindow, state: &Rc<RefCell<AppState>>, for
         cur_flag,
         xywh_changed,
     ) {
-        GeometrySaveAction::Skip => return,
+        GeometrySaveAction::Skip => (),
         GeometrySaveAction::FlagOnly => {
             // H4：最大化仅维护标志（坐标不落盘，保留普通还原几何）；
             // 走几何去抖链（非轮转写），与坐标写同管线。
@@ -109,7 +112,6 @@ fn save_window_geometry_with(ui: &MainWindow, state: &Rc<RefCell<AppState>>, for
             if force {
                 st.flush_geometry();
             }
-            return;
         }
         GeometrySaveAction::FullUpdate => {
             // 诊断留痕：窗口尺寸/位置变化（定位"宽度无法拖动"类问题——若拖动边缘后
