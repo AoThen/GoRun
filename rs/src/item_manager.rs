@@ -82,8 +82,14 @@ impl ItemManager {
                 }
                 None => {
                     if cache.len() >= PINYIN_CACHE_MAX {
-                        // H3：逐出最久未访问单项（LRU），替代整体清空
-                        if let Some((&evict, _)) = cache.iter().min_by_key(|(_, (_, seq))| *seq) {
+                        // H3：逐出最久未访问单项（LRU），替代整体清空。
+                        // 键 String 非 Copy，先克隆出待逐出键，避免 iter 借用
+                        // 与 remove 可变借用冲突。
+                        let evict = cache
+                            .iter()
+                            .min_by_key(|(_, (_, seq))| *seq)
+                            .map(|(k, _)| k.clone());
+                        if let Some(evict) = evict {
                             cache.remove(&evict);
                         }
                     }

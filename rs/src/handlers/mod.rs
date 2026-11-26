@@ -916,7 +916,7 @@ pub fn wire_handler(
     ui.on_item_right_clicked(move |id, x, y| {
         log::debug!("Item right-clicked: id={}", id);
         mk_item.set(0);
-        rci.set(Some(id.to_string()));
+        rci.replace(Some(id.to_string()));
         // 搜索态排序语义与全局向量不一致，隐藏 Move Up/Down（建议④）
         let st = state_search_menu.borrow();
         let searching = !st.search_query.is_empty();
@@ -953,7 +953,7 @@ pub fn wire_handler(
     ui.on_background_right_clicked(move |x, y| {
         log::debug!("Background right-clicked");
         mk_bg.set(1);
-        rci_bg.set(None);
+        rci_bg.replace(None);
         let st = state_bg.borrow();
         let loc_m = st.loc.clone();
         drop(st);

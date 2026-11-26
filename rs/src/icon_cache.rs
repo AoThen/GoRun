@@ -756,6 +756,15 @@ mod restore_tests {
     use super::*;
     use crate::model::Item;
 
+    /// 构造测试条目（restore_tests 与 tests 模块隔离，无法复用其私有
+    /// test_item，故本地定义等价辅助）。
+    fn test_item(id: &str) -> Item {
+        Item {
+            id: id.to_string(),
+            ..Item::default()
+        }
+    }
+
     /// restored_icon_path：键校验通过且文件存在时返回路径；缺文件/空字段返回 None。
     #[test]
     fn test_restored_icon_path_hit_and_miss() {
