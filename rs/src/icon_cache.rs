@@ -43,7 +43,11 @@ pub struct IconCache {
     /// Image 持有 Slint 线程本地缓存、不是 Send，放进本结构会破坏
     /// spawn_icon_refresh 的线程边界。UI 线程用时再以 Image::from_rgba8 轻量包装。
     /// 目的：搜索输入等高频刷新路径避免对同一 PNG 反复读盘解码。
-    images: Arc<Mutex<HashMap<u64, slint::SharedPixelBuffer<slint::Rgba8Pixel>>>>,
+    /// H3：值携带最近访问序号（LRU），超上限逐出最久未用单项——此前整体
+    /// 清空使全部热缓存回退读盘重解码，影响面从整表降为一项。
+    images: Arc<Mutex<HashMap<u64, (slint::SharedPixelBuffer<slint::Rgba8Pixel>, u64)>>>,
+    /// LRU 访问序号（单调递增，Atomic 满足跨提取线程的存取）。
+    seq: Arc<std::sync::atomic::AtomicU64>,
 }
 
 // 锁恢复说明：images/item_keys 均为可丢弃可重建的缓存（解码失败/缺失即重新读盘），
@@ -66,29 +70,42 @@ impl IconCache {
             cache_dir: dir,
             item_keys: Arc::new(Mutex::new(HashMap::new())),
             images: Arc::new(Mutex::new(HashMap::new())),
+            seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
     /// 从内存缓存取已解码像素；未命中返回 None（调用方再读盘并回填）。
     /// 返回 SharedPixelBuffer 的轻量克隆，调用方包装成 slint::Image。
+    /// H3：命中时刷新该项的 LRU 访问序号。
     pub fn cached_image(&self, item: &Item) -> Option<slint::SharedPixelBuffer<slint::Rgba8Pixel>> {
         let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target, current_icon_size());
-        self.images
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&hash)
-            .cloned()
+        let mut map = self.images.lock().unwrap_or_else(|e| e.into_inner());
+        let seq = self
+            .seq
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        match map.get_mut(&hash) {
+            Some((buffer, entry_seq)) => {
+                *entry_seq = seq;
+                Some(buffer.clone())
+            }
+            None => None,
+        }
     }
 
     /// 回填内存缓存（读盘解码成功后调用）。
-    /// 超上限整体清空后插入：缓存可重建，清空仅回退到读盘路径（对齐拼音缓存策略）。
+    /// H3：超上限逐出最久未访问单项（LRU）后插入——替代此前的整体清空，
+    /// 避免全部热缓存一次性回退读盘重解码。淘汰扫描仅在满时插入触发，
+    /// O(IMAGE_CACHE_MAX)，锁内微秒级。
     pub fn store_image(&self, item: &Item, buffer: slint::SharedPixelBuffer<slint::Rgba8Pixel>) {
         let hash = Self::cache_key(&item.id, &item.icon_path, item.icon_index, &item.target, current_icon_size());
         let mut map = self.images.lock().unwrap_or_else(|e| e.into_inner());
         if map.len() >= IMAGE_CACHE_MAX {
-            map.clear();
+            if let Some((&evict_hash, _)) = map.iter().min_by_key(|(_, (_, seq))| *seq) {
+                map.remove(&evict_hash);
+            }
         }
-        map.insert(hash, buffer);
+        let seq = self.seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        map.insert(hash, (buffer, seq));
     }
 
     /// 失效某项的内存缓存（编辑图标/目标后）。
@@ -821,5 +838,46 @@ mod restore_tests {
         item.icon_path = "C:\\new_icon.ico".into();
         let p2 = cache.cache_path(&item);
         assert_ne!(p1, p2, "编辑 icon_path 后 cache_path 应变化");
+    }
+
+    /// H3：超上限逐出最久未访问单项（LRU），热项保留。
+    #[test]
+    fn test_image_cache_lru_evicts_least_recently_used() {
+        let cache = IconCache::new();
+        let items: Vec<Item> = (0..IMAGE_CACHE_MAX + 2)
+            .map(|i| test_item(format!("id_{i}")))
+            .collect();
+        let buf = slint::SharedPixelBuffer::new(1, 1);
+        for item in &items {
+            cache.store_image(item, buf.clone());
+        }
+        // 访问 id_0 刷新其 LRU 序号，使其成为最新
+        assert!(cache.cached_image(&items[0]).is_some());
+        // 再插入一项触发逐出：此时最久未用为 id_1（序号未被刷新）
+        cache.store_image(&items[IMAGE_CACHE_MAX + 1], buf.clone());
+        assert!(cache.cached_image(&items[1]).is_none(), "id_1 应被逐出");
+        assert!(cache.cached_image(&items[0]).is_some(), "刚访问的 id_0 应保留");
+        assert!(
+            cache.cached_image(&items[IMAGE_CACHE_MAX + 1]).is_some(),
+            "刚插入的项应保留"
+        );
+    }
+
+    /// H3：cached_image 命中刷新访问序号，参与后续逐出决策。
+    #[test]
+    fn test_image_cache_lru_hit_refreshes_seq() {
+        let cache = IconCache::new();
+        let a = test_item("a");
+        let b = test_item("b");
+        let buf = slint::SharedPixelBuffer::new(1, 1);
+        cache.store_image(&a, buf.clone());
+        cache.store_image(&b, buf.clone());
+        // 持续访问 a 并插入新项至满：b 序号最旧，应先被逐出
+        for i in 0..IMAGE_CACHE_MAX {
+            let _ = cache.cached_image(&a);
+            cache.store_image(&test_item(format!("new_{i}")), buf.clone());
+        }
+        assert!(cache.cached_image(&a).is_some(), "反复访问的 a 应保留");
+        assert!(cache.cached_image(&b).is_none(), "未再访问的 b 应被逐出");
     }
 }

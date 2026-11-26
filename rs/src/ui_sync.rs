@@ -38,6 +38,27 @@ pub fn show_toast(ui: &MainWindow, msg: impl Into<slint::SharedString>, error: b
     });
 }
 
+/// H1：图标工作线程的 COM 防御性初始化（镜像 runner.rs resolve_lnk 的
+/// COINIT_APARTMENTTHREADED 模式）。当前提取 API（PrivateExtractIconsW/
+/// SHGetFileInfoW/GetIconInfo）属 shell32/user32 非 COM 接口，不做初始化
+/// 也能工作；此处为未来改用 COM 系 shell API 预留线程模型。初始化失败不
+/// 阻断提取（COM 非当前必需），仅跳过配套的 CoUninitialize（须与成功
+/// 初始化配对，避免破坏其他线程的 COM 状态）。
+#[cfg(windows)]
+fn with_com_init(body: impl FnOnce()) {
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    let initialized = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok();
+    body();
+    if initialized {
+        unsafe { CoUninitialize() };
+    }
+}
+
+#[cfg(not(windows))]
+fn with_com_init(body: impl FnOnce()) {
+    body();
+}
+
 pub fn spawn_icon_refresh(
     ui: &MainWindow,
     icon_cache: IconCache,
@@ -49,66 +70,51 @@ pub fn spawn_icon_refresh(
     }
     let weak = ui.as_weak();
     std::thread::spawn(move || {
-        // P1：单线程内预收集所有更新，避免每项一次 invoke_from_event_loop
-        // 且每次 O(N) 扫描模型（旧实现总复杂度 O(N²)，大分类时卡顿 UI）。
-        // L-11：图标解码同样移到本工作线程（原在 invoke 回调/UI 线程逐项
-        // 读盘解码），产出 SharedPixelBuffer（Send+Sync）后仅在 UI 线程做
-        // 轻量 Image 包装与行更新。
-        let mut updates: Vec<(Item, slint::SharedPixelBuffer<slint::Rgba8Pixel>)> = Vec::new();
-        let mut persisted: Vec<(String, String)> = Vec::new();
-        for item in &items {
-            let Some(path) = icon_cache.refresh_icon(item) else {
-                continue;
-            };
-            let path_str = path.to_string_lossy().to_string();
-            // 与背景图同管线（image crate 解码 → RGBA8 → from_rgba8）：
-            // 软件渲染器不绘制 load_from_path 产物，且其 to_rgba8 可能取不到
-            // 像素，导致内存缓存永远无法回填、图标永久空白。
-            match crate::background::decode(&path_str) {
-                Some(decoded) => {
-                    icon_cache.store_image(item, decoded.buffer.clone());
-                    updates.push((item.clone(), decoded.buffer));
-                    persisted.push((item.id.clone(), path_str));
-                }
-                None => {
-                    // 解码失败必须留痕（此前静默降级为空图标，线上无从排查）
-                    log::warn!("Failed to decode extracted icon {:?}", path_str);
-                }
-            }
-        }
-        if updates.is_empty() {
-            return;
-        }
-        let _ = slint::invoke_from_event_loop(move || {
-            if let Some(ui) = weak.upgrade() {
-                use slint::Model;
-                // P0：先在事件循环线程登记缓存路径（供 Timer 回写并落盘），
-                // 否则进程重启后图标无从恢复（item_keys 只是内存映射）。
-                if let Ok(mut queue) = pending_icon_paths.lock() {
-                    for (id, path) in &persisted {
-                        queue.insert(id.clone(), path.clone());
+        with_com_init(|| {
+            // P1：单线程内预收集所有更新，避免每项一次 invoke_from_event_loop
+            // 且每次 O(N) 扫描模型（旧实现总复杂度 O(N²)，大分类时卡顿 UI）。
+            // L-11：图标解码同样移到本工作线程（原在 invoke 回调/UI 线程逐项
+            // 读盘解码），产出 SharedPixelBuffer（Send+Sync）后仅在 UI 线程做
+            // 轻量 Image 包装与行更新。
+            let mut updates: Vec<(Item, slint::SharedPixelBuffer<slint::Rgba8Pixel>)> = Vec::new();
+            let mut persisted: Vec<(String, String)> = Vec::new();
+            for item in &items {
+                let Some(path) = icon_cache.refresh_icon(item) else {
+                    continue;
+                };
+                let path_str = path.to_string_lossy().to_string();
+                // 与背景图同管线（image crate 解码 → RGBA8 → from_rgba8）：
+                // 软件渲染器不绘制 load_from_path 产物，且其 to_rgba8 可能取不到
+                // 像素，导致内存缓存永远无法回填、图标永久空白。
+                match crate::background::decode(&path_str) {
+                    Some(decoded) => {
+                        icon_cache.store_image(item, decoded.buffer.clone());
+                        updates.push((item.clone(), decoded.buffer));
+                        persisted.push((item.id.clone(), path_str));
+                    }
+                    None => {
+                        // 解码失败必须留痕（此前静默降级为空图标，线上无从排查）
+                        log::warn!("Failed to decode extracted icon {:?}", path_str);
                     }
                 }
-                let model = ui.get_items();
-                // 构建 id -> Image 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新
-                let id_to_img: std::collections::HashMap<&str, slint::Image> = updates
-                    .iter()
-                    .map(|(item, buffer)| {
-                        (item.id.as_str(), slint::Image::from_rgba8(buffer.clone()))
-                    })
-                    .collect();
-                for i in 0..model.row_count() {
-                    if let Some(row) = model.row_data(i) {
-                        if let Some(img) = id_to_img.get(row.id.as_str()) {
-                            let mut new_row = row;
-                            new_row.icon_path = img.clone();
-                            model.set_row_data(i, new_row);
+            }
+            if updates.is_empty() {
+                return;
+            }
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(ui) = weak.upgrade() {
+                    // P0：先在事件循环线程登记缓存路径（供 Timer 回写并落盘），
+                    // 否则进程重启后图标无从恢复（item_keys 只是内存映射）。
+                    if let Ok(mut queue) = pending_icon_paths.lock() {
+                        for (id, path) in &persisted {
+                            queue.insert(id.clone(), path.clone());
                         }
                     }
+                    apply_icon_updates(&ui, updates);
                 }
-            }
-        })
-        .ok();
+            })
+            .ok();
+        });
     });
 }
 
@@ -127,36 +133,134 @@ fn spawn_icon_decode(
         return;
     }
     std::thread::spawn(move || {
-        let mut persisted: Vec<(String, String)> = Vec::new();
-        for (item, path) in &jobs {
-            match crate::background::decode(path) {
-                Some(decoded) => {
-                    icon_cache.store_image(item, decoded.buffer.clone());
-                    persisted.push((item.id.clone(), path.clone()));
-                }
-                None => {
-                    log::warn!("Failed to decode cached icon {:?}, re-extracting", path);
-                    let _ = std::fs::remove_file(path);
-                    if let Some(new_path) = icon_cache.refresh_icon(item) {
-                        if let Some(decoded) = crate::background::decode(&new_path.to_string_lossy()) {
-                            icon_cache.store_image(item, decoded.buffer.clone());
-                            persisted.push((
-                                item.id.clone(),
-                                new_path.to_string_lossy().to_string(),
-                            ));
+        with_com_init(|| {
+            let mut persisted: Vec<(String, String)> = Vec::new();
+            for (item, path) in &jobs {
+                match crate::background::decode(path) {
+                    Some(decoded) => {
+                        icon_cache.store_image(item, decoded.buffer.clone());
+                        persisted.push((item.id.clone(), path.clone()));
+                    }
+                    None => {
+                        log::warn!("Failed to decode cached icon {:?}, re-extracting", path);
+                        let _ = std::fs::remove_file(path);
+                        if let Some(new_path) = icon_cache.refresh_icon(item) {
+                            if let Some(decoded) = crate::background::decode(&new_path.to_string_lossy()) {
+                                icon_cache.store_image(item, decoded.buffer.clone());
+                                persisted.push((
+                                    item.id.clone(),
+                                    new_path.to_string_lossy().to_string(),
+                                ));
+                            }
                         }
                     }
                 }
             }
-        }
-        if persisted.is_empty() {
-            return;
-        }
-        if let Ok(mut q) = pending_icon_paths.lock() {
-            for (id, p) in persisted {
-                q.insert(id, p);
+            if persisted.is_empty() {
+                return;
+            }
+            if let Ok(mut q) = pending_icon_paths.lock() {
+                for (id, p) in persisted {
+                    q.insert(id, p);
+                }
+            }
+        });
+    });
+}
+
+/// 在 UI 线程把解码后的图标像素回填到条目模型：按 id 定位命中行，
+/// set_row_data 更新（与提取回写同管线，O(N) 单遍）。
+fn apply_icon_updates(
+    ui: &MainWindow,
+    updates: Vec<(Item, slint::SharedPixelBuffer<slint::Rgba8Pixel>)>,
+) {
+    use slint::Model;
+    let model = ui.get_items();
+    // 构建 id -> Image 映射做 O(1) 查找，单次遍历模型（O(N)）完成全部更新
+    let id_to_img: std::collections::HashMap<&str, slint::Image> = updates
+        .iter()
+        .map(|(item, buffer)| (item.id.as_str(), slint::Image::from_rgba8(buffer.clone())))
+        .collect();
+    for i in 0..model.row_count() {
+        if let Some(row) = model.row_data(i) {
+            if let Some(img) = id_to_img.get(row.id.as_str()) {
+                let mut new_row = row;
+                new_row.icon_path = img.clone();
+                model.set_row_data(i, new_row);
             }
         }
+    }
+}
+
+/// M4：自定义图标源扩展名门控——与 Cargo image 启用的解码格式
+///（png/jpeg/ico/bmp，见 Cargo.toml）严格对齐；未启用格式（gif/webp 等）
+/// 解码必失败，不入后台队列，直接走提取兜底避免后台快失败循环。
+fn image_source_extension(path: &str) -> bool {
+    matches!(
+        std::path::Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            .as_deref(),
+        Some("png" | "jpg" | "jpeg" | "ico" | "bmp")
+    )
+}
+
+/// M4：自定义图标源本会话解码是否已失败（会话级防抖，对齐
+/// icon_extract_attempted 语义）：失败项不再重复入队，避免每轮刷新反复
+/// spawn 快失败线程。
+fn is_custom_decode_failed(
+    failed: &std::sync::Mutex<std::collections::HashSet<String>>,
+    item_id: &str,
+) -> bool {
+    failed
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(item_id)
+}
+
+/// M4：自定义图标源后台解码。工作线程解码用户图标源（png/jpg/ico/bmp），
+/// 成功后回填内存缓存并经事件循环更新命中行。**不**写 pending_icon_paths/
+/// cachedIcon——用户源路径不是 icons/ 目录缓存键路径，入 cachedIcon 违反
+/// 启动键校验语义且污染配置。解码失败记入会话防抖集合（清除点：手动刷新
+/// 图标、编辑条目、改图标尺寸——与提取防抖同清除点）。
+fn spawn_custom_icon_decode(
+    ui_weak: slint::Weak<MainWindow>,
+    icon_cache: IconCache,
+    failed: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    jobs: Vec<Item>,
+) {
+    if jobs.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        with_com_init(|| {
+            let mut updates: Vec<(Item, slint::SharedPixelBuffer<slint::Rgba8Pixel>)> = Vec::new();
+            for item in &jobs {
+                match crate::background::decode(&item.icon_path) {
+                    Some(decoded) => {
+                        icon_cache.store_image(item, decoded.buffer.clone());
+                        updates.push((item.clone(), decoded.buffer));
+                    }
+                    None => {
+                        log::warn!("Failed to decode custom icon source {:?}", item.icon_path);
+                        failed
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .insert(item.id.clone());
+                    }
+                }
+            }
+            if updates.is_empty() {
+                return;
+            }
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    apply_icon_updates(&ui, updates);
+                }
+            })
+            .ok();
+        });
     });
 }
 /// 把后台提取出的图标缓存路径回写到项目模型并落盘（P0）。
@@ -386,6 +490,8 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
     let mut pending: Vec<Item> = Vec::new();
     // L-11：磁盘缓存解码任务队列（后台线程解码，UI 线程只显示占位）
     let mut decode_jobs: Vec<(Item, String)> = Vec::new();
+    // M4：自定义图标源解码任务队列（后台线程解码用户源，UI 线程只显示占位）
+    let mut custom_decode_jobs: Vec<Item> = Vec::new();
     let ui_items: Vec<ItemModel> = items
         .iter()
         .map(|item| {
@@ -399,18 +505,33 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
             let image = if let Some(buffer) = state.icon_cache.cached_image(item) {
                 slint::Image::from_rgba8(buffer)
             } else if !item.icon_path.is_empty() {
-                match crate::background::decode(&item.icon_path) {
-                    Some(decoded) => {
-                        state.icon_cache.store_image(item, decoded.buffer.clone());
-                        slint::Image::from_rgba8(decoded.buffer)
-                    }
-                    None => {
-                        // 自定义源非图像格式（exe/dll）：转磁盘缓存/提取兜底。
-                        log::debug!(
-                            "Custom icon source not decodable ({:?}), falling back",
-                            item.icon_path
-                        );
+                if image_source_extension(&item.icon_path) {
+                    if is_custom_decode_failed(&state.icon_custom_decode_failed, &item.id) {
+                        // M4：本会话解码已失败（损坏源/慢速网络盘）：不再每轮
+                        // 同步重试，直接走提取兜底；可经右键"刷新图标"清除标记后重试。
                         display_fallback_cache(state, item, &mut pending, &mut decode_jobs)
+                    } else {
+                        // M4：自定义图标源后台解码（UI 线程仅登记任务、显示占位），
+                        // 避免网络盘/大图阻塞首屏。不写 cachedIcon——用户源路径
+                        // 不是 icons/ 目录缓存键路径，入 cachedIcon 违反启动键校验
+                        // 语义且污染配置；解码完成经事件循环回填内存缓存并更新行。
+                        custom_decode_jobs.push(item.clone());
+                        slint::Image::default()
+                    }
+                } else {
+                    match crate::background::decode(&item.icon_path) {
+                        Some(decoded) => {
+                            state.icon_cache.store_image(item, decoded.buffer.clone());
+                            slint::Image::from_rgba8(decoded.buffer)
+                        }
+                        None => {
+                            // 自定义源非门控图像格式（exe/dll 等）：转磁盘缓存/提取兜底。
+                            log::debug!(
+                                "Custom icon source not decodable ({:?}), falling back",
+                                item.icon_path
+                            );
+                            display_fallback_cache(state, item, &mut pending, &mut decode_jobs)
+                        }
                     }
                 }
             } else {
@@ -453,6 +574,14 @@ pub fn refresh_items_ui(ui: &MainWindow, state: &AppState, category_id: &str, qu
     }
     if !decode_jobs.is_empty() {
         spawn_icon_decode(state.icon_cache.clone(), decode_jobs, state.pending_icon_paths.clone());
+    }
+    if !custom_decode_jobs.is_empty() {
+        spawn_custom_icon_decode(
+            ui.as_weak(),
+            state.icon_cache.clone(),
+            state.icon_custom_decode_failed.clone(),
+            custom_decode_jobs,
+        );
     }
 }
 
@@ -749,5 +878,23 @@ mod tests {
         attempted.lock().unwrap().remove("q1");
         assert!(queue_extraction_marked(&attempted, &item, &mut pending));
         assert_eq!(pending.len(), 2);
+    }
+
+    /// M4：自定义图标源扩展名门控——与 Cargo image 启用格式（png/jpeg/ico/bmp）
+    /// 严格对齐；未启用格式不入后台解码队列（走提取兜底）。
+    #[test]
+    fn test_image_source_extension_gate() {
+        assert!(image_source_extension("C:\\pics\\a.png"));
+        assert!(image_source_extension("C:\\pics\\a.JPG"));
+        assert!(image_source_extension("C:\\pics\\a.jpeg"));
+        assert!(image_source_extension("C:\\pics\\a.ico"));
+        assert!(image_source_extension("C:\\pics\\a.bmp"));
+        assert!(image_source_extension("/home/u/pics/a.png"));
+        // 未启用格式/非图像源/无扩展名/空路径 → 不门控（走提取兜底）
+        assert!(!image_source_extension("C:\\app\\a.exe"));
+        assert!(!image_source_extension("C:\\pics\\a.gif"));
+        assert!(!image_source_extension("C:\\pics\\a.webp"));
+        assert!(!image_source_extension("C:\\pics\\noext"));
+        assert!(!image_source_extension(""));
     }
 }

@@ -409,6 +409,14 @@ pub fn show_edit_dialog_for_item(
                         .unwrap_or_else(|e| e.into_inner());
                     let _ = attempted.remove(&item_for_save.id);
                 }
+                // M4：编辑可能改变自定义图标源，同步清除解码失败标记
+                {
+                    let mut failed = st
+                        .icon_custom_decode_failed
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    let _ = failed.remove(&item_for_save.id);
+                }
                 // P0：图标源（icon_path/icon_index/target）可能已变，清空旧缓存路径，
                 // 交由 refresh_items_ui 重新提取并回写，否则继续显示编辑前的旧图标
                 draft.cached_icon = String::new();

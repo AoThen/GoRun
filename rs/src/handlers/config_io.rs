@@ -137,6 +137,18 @@ pub fn prepare_import(
 
 /// 导入配置第二步（用户确认覆盖后调用）：整体替换数据与行为设置，
 /// 保留语言/跟随鼠标/自动隐藏等会话偏好；成功后刷新侧栏与条目。
+/// M3：导入保存失败回滚——将配置整体还原为导入前快照（AppConfig: Clone，
+/// 含 data/config/extra_config）。`config_mut` 会置 modified，此处立即复位：
+/// 磁盘内容未变，避免后续 save_if_modified 产生无意义重复写；快照至回滚
+/// 之间闭包持锁，无并发修改，复位安全。
+fn rollback_import_snapshot(
+    manager: &mut crate::item_manager::ItemManager,
+    snapshot: crate::model::AppConfig,
+) {
+    *manager.config_mut() = snapshot;
+    manager.reset_modified();
+}
+
 /// 导入的配置若更改了全局热键，则重注册使本会话立即生效（与条目热键同步对齐）。
 /// `path` 仅用于日志。
 pub fn import_config_apply(
@@ -149,6 +161,10 @@ pub fn import_config_apply(
 ) {
     let loc = state.borrow().loc.clone();
     let mut st = state.borrow_mut();
+    // M3：进入替换前快照完整 AppConfig——导入在保存失败时视为整体未发生，
+    // 回滚须恢复全部状态；特别地 extra_config 会被覆盖为"仅会话偏好"过滤
+    // 子集（丢弃 theme/icon_size 等非会话键），故必须连同快照一起还原。
+    let pre_import = st.manager.config().clone();
     let (old_hk, new_hk, new_current) = {
         let cfg = st.manager.config_mut();
         // 保留会话偏好（语言/跟随鼠标/自动隐藏/低驻留），其余整体替换
@@ -178,6 +194,11 @@ pub fn import_config_apply(
 
     if !saved {
         log::error!("Failed to save imported config");
+        // M3：回滚内存到导入前快照，保证内存与磁盘一致——磁盘写失败内容未变，
+        // 仅回滚未落盘的导入替换（含被覆盖为过滤子集的 extra_config）。
+        let mut st = state.borrow_mut();
+        rollback_import_snapshot(&mut st.manager, pre_import);
+        drop(st);
         let msg = loc.borrow().tr("Status_ImportFailedSave").to_string();
         crate::ui_sync::show_toast(ui, msg, true);
         return;
@@ -321,6 +342,9 @@ mod tests {
             save_fail_notified: false,
             pending_icon_paths: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
             icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+            icon_custom_decode_failed: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             drop_handler: None,
             geometry_dirty: false,
             last_geometry_change: None,
@@ -367,5 +391,31 @@ mod tests {
             "Ctrl+/",
             "失败后配置应回滚为旧键"
         );
+    }
+
+    /// M3：导入保存失败回滚须完整恢复导入前状态，含 extra_config 非会话偏好
+    ///（theme/icon_size 等——导入路径会以"仅会话偏好"子集覆盖 extra_config）。
+    #[test]
+    fn test_rollback_import_snapshot_restores_full_config() {
+        use crate::item_manager::ItemManager;
+        use crate::model::{AppConfig, Category, Item};
+        let mut pre = AppConfig::default();
+        pre.extra_config.insert("theme".to_string(), "dark".to_string());
+        pre.extra_config.insert("follow_mouse".to_string(), "1".to_string());
+        pre.data.categories.push(Category::default());
+        pre.data.items.push(Item::default());
+        let mut m = ItemManager::new(pre.clone());
+        // 模拟导入替换后的内存状态（数据/配置整体换掉，extra_config 仅存会话偏好）
+        *m.config_mut() = AppConfig::default();
+        assert_ne!(m.config().extra_config, pre.extra_config);
+        // 保存失败 → 回滚
+        rollback_import_snapshot(&mut m, pre.clone());
+        assert_eq!(
+            m.config().extra_config, pre.extra_config,
+            "回滚须完整恢复 extra_config（含非会话偏好）"
+        );
+        assert_eq!(m.config().data.categories.len(), pre.data.categories.len());
+        assert_eq!(m.config().data.items.len(), pre.data.items.len());
+        assert!(!m.is_modified(), "回滚后不应残留 modified 标记");
     }
 }

@@ -763,6 +763,43 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
+    /// H4：最大化标志存于 extra_config["windowMaximized"]，save→load 往返
+    /// 一致；老配置缺失该键时经 extra_get_bool 缺省为 false。
+    #[test]
+    fn test_window_maximized_flag_roundtrip() {
+        let path = std::env::temp_dir().join(format!("gorun_maximized_{}.json", std::process::id()));
+        let path_str = path.to_str().unwrap().to_string();
+        let mut config = AppConfig::default();
+        config
+            .extra_config
+            .insert(crate::geometry::WINDOW_MAXIMIZED_KEY.to_string(), "1".to_string());
+        let storage = Storage::new(path_str.clone());
+        assert!(storage.save(&config));
+        let loaded = storage.load().unwrap();
+        assert_eq!(
+            loaded
+                .extra_config
+                .get(crate::geometry::WINDOW_MAXIMIZED_KEY)
+                .map(|s| s.as_str()),
+            Some("1")
+        );
+        // 缺失该键的旧配置：加载后无此键，extra_get_bool 缺省 false
+        let legacy = std::env::temp_dir().join(format!(
+            "gorun_maximized_legacy_{}.json",
+            std::process::id()
+        ));
+        fs::write(
+            &legacy,
+            r#"{"version":"1.0.0","categories":[],"items":[],"config":{"globalHotkey":"Alt+Z","windowX":"100","windowY":"100","windowWidth":"800","windowHeight":"600"}}"#,
+        )
+        .unwrap();
+        let storage2 = Storage::new(legacy.to_str().unwrap().to_string());
+        let loaded2 = storage2.load().unwrap();
+        assert!(!loaded2.extra_get_bool(crate::geometry::WINDOW_MAXIMIZED_KEY));
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&legacy);
+    }
+
     #[test]
     fn test_cached_icon_roundtrip() {
         // P0：自动提取的图标缓存路径必须落盘（cachedIcon），否则重启后图标丢失

@@ -352,7 +352,8 @@ pub fn wire_handler(
     hotkey_mgr: Rc<RefCell<hotkey::HotkeyManager>>,
     hk_tx_shared: Rc<RefCell<Option<std::sync::mpsc::Sender<()>>>>,
 ) {
-    let right_clicked_index: Rc<std::cell::Cell<Option<i32>>> = Rc::new(std::cell::Cell::new(None));
+    let right_clicked_index: Rc<std::cell::RefCell<Option<String>>> =
+        Rc::new(std::cell::RefCell::new(None));
     // 确认弹窗待执行动作（P2-3：原 4 个 pending_* Option 合并为单一枚举，
     // 避免多个 Option 并联分发时漏改/级联执行；同刻仅一个确认框，至多一个动作待定）。
     enum ConfirmAction {
@@ -750,6 +751,16 @@ pub fn wire_handler(
                 let _ = attempted.remove(&it.id);
             }
         }
+        // M4：同步清除自定义图标源解码失败标记（与提取防抖同清除点）
+        {
+            let mut failed = state
+                .icon_custom_decode_failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            for it in &items {
+                let _ = failed.remove(&it.id);
+            }
+        }
         drop(state);
         if let Some(ui) = weak_ui_refresh.upgrade() {
             ui_sync::spawn_icon_refresh(&ui, icon_cache, items, pending);
@@ -902,10 +913,10 @@ pub fn wire_handler(
     let state_search_menu = state.clone();
     let weak_ui_right = ui.as_weak();
     let item_actions_build = item_menu_actions.clone();
-    ui.on_item_right_clicked(move |index, x, y| {
-        log::debug!("Item right-clicked: index={}", index);
+    ui.on_item_right_clicked(move |id, x, y| {
+        log::debug!("Item right-clicked: id={}", id);
         mk_item.set(0);
-        rci.set(Some(index));
+        rci.set(Some(id.to_string()));
         // 搜索态排序语义与全局向量不一致，隐藏 Move Up/Down（建议④）
         let st = state_search_menu.borrow();
         let searching = !st.search_query.is_empty();
@@ -1611,14 +1622,17 @@ pub fn wire_handler(
         }
 
         // 项目菜单（现有逻辑 + Move Up/Down + Run/RefreshIcon/Properties/MoveTo）
-        if let Some(item_idx) = right_clicked_index.get() {
+        // M14：按 item_id 寻址——行索引在搜索/分类切换后会错位（点 A 操作 B），
+        // 右击时记录条目 id，此处按 id 查找，与视图状态解耦。
+        let item_id = right_clicked_index.borrow().clone();
+        if let Some(item_id) = item_id {
             let mut state = state_menu.borrow_mut();
             let items = if state.search_query.is_empty() {
                 state.manager.items(&state.current_category_id)
             } else {
                 state.manager.search_items(&state.search_query)
             };
-            if let Some(item) = items.get(item_idx as usize) {
+            if let Some(item) = items.iter().find(|i| i.id == item_id) {
                 let item = item.clone();
                 // 动作映射分发（对齐汉堡菜单模式）：搜索态构建菜单时已排除
                 // MoveUp/MoveDown，无需索引换算与 normal_mode 守卫。
@@ -1711,6 +1725,14 @@ pub fn wire_handler(
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner());
                             let _ = attempted.remove(&item.id);
+                        }
+                        // M4：同步清除自定义图标源解码失败标记
+                        {
+                            let mut failed = state
+                                .icon_custom_decode_failed
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner());
+                            let _ = failed.remove(&item.id);
                         }
                         drop(state);
                         if let Some(ui) = weak_ui_menu.upgrade() {
@@ -2289,6 +2311,11 @@ pub fn wire_handler(
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .clear();
+            // M4：尺寸变化后所有条目图标源重取，同步清空自定义解码失败标记
+            st.icon_custom_decode_failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
             st.save_if_modified();
             log::info!("Icon size changed to {}", size);
             st.current_category_id.clone()
@@ -2571,6 +2598,9 @@ mod tests {
                 std::collections::HashMap::new(),
             )),
             icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+            icon_custom_decode_failed: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             drop_handler: None,
             geometry_dirty: false,
             last_geometry_change: None,

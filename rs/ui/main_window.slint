@@ -63,7 +63,7 @@ export component MainWindow inherits Window {
     callback toggle-theme();
     callback menu-item-selected(index: int);
     callback hotkey();
-    callback item-right-clicked(index: int, x: length, y: length);
+    callback item-right-clicked(id: string, x: length, y: length);
     callback background-clicked();
     callback background-right-clicked(x: length, y: length);
     callback category-right-clicked(index: int, x: length, y: length);
@@ -406,11 +406,11 @@ export component MainWindow inherits Window {
                         root.selected-item-index = index;
                         root.item-tile-clicked(index);
                     }
-                    item-right-clicked(index, x, y) => {
+                    item-right-clicked(id, x, y) => {
                         root.context-menu-x = x;
                         root.context-menu-y = y;
                         root.context-menu-visible = true;
-                        root.item-right-clicked(index, x, y);
+                        root.item-right-clicked(id, x, y);
                     }
                     drag-data(index) => { root.item-drag-data(index); }
                     dropped-on(index, data) => {

@@ -5,7 +5,7 @@ import { ItemModel } from "../models.slint";
 
 export component ItemGrid {
     callback item-tile-clicked(index: int);
-    callback item-right-clicked(index: int, x: length, y: length);
+    callback item-right-clicked(id: string, x: length, y: length);
     // 拖拽排序（F2-1，DragArea/DropArea）：data 绑定 pure 回调即时构造（消除时序竞态）；
     // 被拖入时上报 (target, data)。
     pure callback drag-data(index: int) -> data-transfer;
@@ -85,7 +85,7 @@ export component ItemGrid {
                 drag-data(index) => { root.drag-data(index); }
                 drag-enabled: root.drag-enabled;
                 clicked => { root.item-tile-clicked(index); }
-                right-clicked(x, y) => { root.item-right-clicked(index, x, y); }
+                right-clicked(x, y) => { root.item-right-clicked(item.id, x, y); }
                 dropped-on(index, data) => { root.dropped-on(index, data); }
             }
         }

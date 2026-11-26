@@ -7,14 +7,18 @@ use std::collections::HashMap;
 
 use crate::model::{AppConfig, Category, Item};
 
-/// 拼音缓存上限（超限整体清空，条目键为文本原文，旧条目自然无害）
+/// 拼音缓存上限（H3：超限逐出最久未访问单项——LRU，替代整体清空；
+/// 条目键为文本原文，逐出后按需重算，无一致性风险）
 const PINYIN_CACHE_MAX: usize = 4096;
 
 pub struct ItemManager {
     config: AppConfig,
     modified: bool,
     /// P1-9：文本 → 拼音对（首字母, 全拼）缓存；None 表示不含 CJK（无需拼音匹配）。
-    pinyin_cache: RefCell<HashMap<String, Option<(String, String)>>>,
+    /// H3：值携带最近访问序号（LRU），超上限逐出最久未用单项。
+    pinyin_cache: RefCell<HashMap<String, (Option<(String, String)>, u64)>>,
+    /// 拼音缓存 LRU 访问序号（仅 UI 线程访问，与缓存同一锁域）。
+    pinyin_seq: std::cell::Cell<u64>,
 }
 
 impl ItemManager {
@@ -27,6 +31,7 @@ impl ItemManager {
             config,
             modified: false,
             pinyin_cache: RefCell::new(HashMap::new()),
+            pinyin_seq: std::cell::Cell::new(0),
         }
     }
 
@@ -63,17 +68,32 @@ impl ItemManager {
 
     /// P1-9：拼音匹配。文本级缓存，同一文本仅首次计算（首字母 + 全拼），
     /// 避免每次搜索按键对每个汉字项重算 lazy_pinyin。
+    /// H3：命中刷新 LRU 序号；插入超限逐出最久未用单项（扫描
+    /// O(PINYIN_CACHE_MAX)，仅满时插入触发，微秒级）。
     fn pinyin_match(&self, text: &str, q: &str) -> bool {
         let entry = {
             let mut cache = self.pinyin_cache.borrow_mut();
             match cache.get_mut(text) {
-                Some(v) => v.clone(),
+                Some((v, seq)) => {
+                    let next = self.pinyin_seq.get() + 1;
+                    self.pinyin_seq.set(next);
+                    *seq = next;
+                    v.clone()
+                }
                 None => {
                     if cache.len() >= PINYIN_CACHE_MAX {
-                        cache.clear();
+                        // H3：逐出最久未访问单项（LRU），替代整体清空
+                        if let Some((&evict, _)) = cache.iter().min_by_key(|(_, (_, seq))| *seq) {
+                            cache.remove(&evict);
+                        }
                     }
                     let computed = pinyin_pair(text);
-                    cache.insert(text.to_string(), computed.clone());
+                    let seq = {
+                        let next = self.pinyin_seq.get() + 1;
+                        self.pinyin_seq.set(next);
+                        next
+                    };
+                    cache.insert(text.to_string(), (computed.clone(), seq));
                     computed
                 }
             }
@@ -1088,7 +1108,7 @@ mod tests {
         let cache = m.pinyin_cache.borrow();
         // 名称拼音被计算并入缓存；搜索命中名称时 || 短路，keywords 不保证入缓存
         assert!(cache.contains_key("计算器"));
-        assert!(cache.get("计算器").unwrap().is_some());
+        assert!(cache.get("计算器").unwrap().0.is_some());
     }
 
     #[test]
@@ -1186,5 +1206,42 @@ mod tests {
         // 非 .url 文件：原样返回路径（无需真实存在）
         let out = normalize_drop_target(&path);
         assert_eq!(out, path.to_string_lossy().to_string());
+    }
+
+    /// H3：拼音缓存超限逐出最久未访问单项（LRU），容量保持上限。
+    #[test]
+    fn test_pinyin_cache_lru_evicts_oldest() {
+        let m = make_manager(vec![]);
+        // 装满缓存：词0 序号最旧
+        for i in 0..PINYIN_CACHE_MAX {
+            m.pinyin_match(&format!("词{i}"), "q");
+        }
+        assert_eq!(m.pinyin_cache.borrow().len(), PINYIN_CACHE_MAX);
+        // 插入一项触发逐出：词0 应被逐出
+        m.pinyin_match(&format!("词{}", PINYIN_CACHE_MAX), "q");
+        let cache = m.pinyin_cache.borrow();
+        assert_eq!(cache.len(), PINYIN_CACHE_MAX, "逐出后容量保持上限");
+        assert!(!cache.contains_key("词0"), "最久未用的词0 应被逐出");
+        assert!(
+            cache.contains_key(&format!("词{}", PINYIN_CACHE_MAX)),
+            "刚插入项应保留"
+        );
+    }
+
+    /// H3：命中刷新 LRU 序号，未再访问的旧项先被逐出。
+    #[test]
+    fn test_pinyin_cache_lru_hit_refreshes_seq() {
+        let m = make_manager(vec![]);
+        m.pinyin_match("计算器", "jsq"); // seq 0
+        m.pinyin_match("计算器", "jsq"); // 命中刷新 → seq 1
+        m.pinyin_match("浏览器", "llq"); // seq 2（最久未用）
+        // 持续访问"计算器"并插入新项：最久未用的"浏览器"应先被逐出
+        for i in 0..PINYIN_CACHE_MAX {
+            let _ = m.pinyin_match("计算器", "jsq");
+            m.pinyin_match(&format!("新词{i}"), "x");
+        }
+        let cache = m.pinyin_cache.borrow();
+        assert!(cache.contains_key("计算器"), "反复访问项应保留");
+        assert!(!cache.contains_key("浏览器"), "未再访问项应被逐出");
     }
 }

@@ -444,6 +444,9 @@ fn setup_app_state(categories: Vec<Category>, items: Vec<Item>) -> Rc<RefCell<Ap
             std::collections::HashMap::new(),
         )),
         icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+        icon_custom_decode_failed: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashSet::new(),
+        )),
         drop_handler: None,
         geometry_dirty: false,
         last_geometry_change: None,
@@ -933,7 +936,7 @@ fn test_edit_dialog_new_duplicate_target_blocked() {
 fn test_edit_dialog_edit_save_updates_item() {
     let (cats, items) = sample_data();
     let (ui, state) = setup_wired_ui(cats, items.clone());
-    ui.invoke_item_right_clicked(0, 0.0, 0.0);
+    ui.invoke_item_right_clicked(items[0].id.clone().into(), 0.0, 0.0);
     ui.invoke_menu_item_selected(0); // 条目菜单首项 = Edit
     let dlg = open_dialog(&state);
     let orig = &items[0];
@@ -965,7 +968,7 @@ fn test_edit_dialog_edit_duplicate_target_blocked() {
     let (ui, state) = setup_wired_ui(cats, items.clone());
     // sample_data 两个条目（i1/i2）同在 cat_1 且 target 不同
     let target_of_second = items[1].target.clone();
-    ui.invoke_item_right_clicked(0, 0.0, 0.0);
+    ui.invoke_item_right_clicked(items[0].id.clone().into(), 0.0, 0.0);
     ui.invoke_menu_item_selected(0);
     let dlg = open_dialog(&state);
     dlg.set_item_target(target_of_second.clone().into());
@@ -1105,7 +1108,12 @@ fn test_confirm_delete_item_removes_item() {
     state.borrow_mut().current_category_id = first_cat;
     let before = state.borrow().manager.all_items().len();
 
-    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    // M14：右键回调按 item_id，取当前分类首条目 id
+    let first_id = {
+        let st = state.borrow();
+        st.manager.items(&st.current_category_id)[0].id.clone()
+    };
+    ui.invoke_item_right_clicked(first_id.into(), 10.0, 10.0);
     let idx = find_context_danger_index(&ui);
     ui.invoke_menu_item_selected(idx);
     assert!(ui.get_confirm_dialog_visible(), "删除确认框应弹出");
@@ -1127,7 +1135,12 @@ fn test_confirm_cancel_keeps_data() {
     state.borrow_mut().current_category_id = first_cat;
     let before = state.borrow().manager.all_items().len();
 
-    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    // M14：右键回调按 item_id，取当前分类首条目 id
+    let first_id = {
+        let st = state.borrow();
+        st.manager.items(&st.current_category_id)[0].id.clone()
+    };
+    ui.invoke_item_right_clicked(first_id.into(), 10.0, 10.0);
     let idx = find_context_danger_index(&ui);
     ui.invoke_menu_item_selected(idx);
     ui.invoke_confirm_dialog_cancel();
@@ -1148,7 +1161,12 @@ fn test_confirm_ok_twice_has_single_effect() {
     state.borrow_mut().current_category_id = first_cat;
     let before = state.borrow().manager.all_items().len();
 
-    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    // M14：右键回调按 item_id，取当前分类首条目 id
+    let first_id = {
+        let st = state.borrow();
+        st.manager.items(&st.current_category_id)[0].id.clone()
+    };
+    ui.invoke_item_right_clicked(first_id.into(), 10.0, 10.0);
     let idx = find_context_danger_index(&ui);
     ui.invoke_menu_item_selected(idx);
     ui.invoke_confirm_dialog_ok();
@@ -1189,7 +1207,12 @@ fn test_move_to_submenu_drilldown_and_back() {
     // invoke 直达 Rust 回调；真实 UI 的 visible=true 由 .slint 侧 ItemGrid
     // handler 设置（invoke 不经过该链路），此处先模拟打开动作。
     ui.set_context_menu_visible(true);
-    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    // M14：右键回调按 item_id，取当前分类首条目 id
+    let first_id = {
+        let st = state.borrow();
+        st.manager.items(&st.current_category_id)[0].id.clone()
+    };
+    ui.invoke_item_right_clicked(first_id.into(), 10.0, 10.0);
     // 一级菜单末位为折叠入口，不再随分类数平铺
     let entry_idx = find_context_item_index(&ui, "移动到...");
     assert!(ui.get_context_menu_visible(), "右键后菜单应可见");
@@ -1252,7 +1275,12 @@ fn test_move_to_submenu_hidden_with_single_category() {
     let first_cat = state.borrow().manager.categories()[0].id.clone();
     state.borrow_mut().current_category_id = first_cat;
 
-    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    // M14：右键回调按 item_id，取当前分类首条目 id
+    let first_id = {
+        let st = state.borrow();
+        st.manager.items(&st.current_category_id)[0].id.clone()
+    };
+    ui.invoke_item_right_clicked(first_id.into(), 10.0, 10.0);
     let items_model = ui.get_context_menu_items();
     for i in 0..items_model.row_count() {
         assert_ne!(
@@ -1662,7 +1690,12 @@ fn test_delete_item_removes_cached_icon_file() {
     std::fs::write(&cache_file, b"fake-icon").unwrap();
     assert!(cache_file.exists(), "预置缓存文件应存在");
 
-    ui.invoke_item_right_clicked(0, 10.0, 10.0);
+    // M14：右键回调按 item_id，取当前分类首条目 id
+    let first_id = {
+        let st = state.borrow();
+        st.manager.items(&st.current_category_id)[0].id.clone()
+    };
+    ui.invoke_item_right_clicked(first_id.into(), 10.0, 10.0);
     let idx = find_context_danger_index(&ui);
     ui.invoke_menu_item_selected(idx);
     assert!(ui.get_confirm_dialog_visible(), "删除确认框应弹出");
@@ -2362,4 +2395,33 @@ fn test_search_debounce_applies_after_window() {
         2,
         "搜索结果应为 2 条 Notepad 条目（Minesweeper 不命中）"
     );
+}
+
+/// M14：右键菜单按 item_id 寻址——右键后搜索态变化使行索引错位时，
+/// 不得误操作列表当前首项（旧实现点 A 却编辑 B：索引 0 在新列表指向 B）。
+#[test]
+fn test_right_click_menu_no_wrong_item_after_list_change() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items.clone());
+    let first_cat = state.borrow().manager.categories()[0].id.clone();
+    state.borrow_mut().current_category_id = first_cat;
+    // 右键首条目（全量列表索引 0 = i1），条目菜单打开
+    ui.invoke_item_right_clicked(items[0].id.clone().into(), 10.0, 10.0);
+    // 菜单打开期间搜索态变化：列表变为仅含次条目 i2，行索引 0 指向 i2
+    state.borrow_mut().search_query = items[1].name.clone();
+    // 点首项 Edit：按 id 查找 i1 不中（已被搜索过滤），不得误开 i2 编辑框
+    ui.invoke_menu_item_selected(0);
+    assert!(
+        state.borrow().edit_dialog.is_none(),
+        "被过滤条目的菜单动作不应打开编辑框（防误操作列表当前首项）"
+    );
+    // 次条目未被误改
+    let st = state.borrow();
+    let b = st
+        .manager
+        .all_items()
+        .iter()
+        .find(|i| i.id == items[1].id)
+        .expect("次条目应仍存在");
+    assert_eq!(b.name, items[1].name, "次条目不得被误操作");
 }

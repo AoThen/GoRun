@@ -21,50 +21,131 @@ pub fn flush_window_geometry(ui: &MainWindow, state: &Rc<RefCell<AppState>>) {
 /// 里的数据快照。
 pub const GEOMETRY_SAVE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(2000);
 
+/// H4：最大化状态持久化键（存于 extra_config，布尔 "1"/"0"，经 P3-12 的
+/// extra_get_bool/extra_set_bool 读写，零 schema 变更）。导入配置时随非会话
+/// 偏好一起被丢弃，与窗口几何整体替换语义一致。
+pub(crate) const WINDOW_MAXIMIZED_KEY: &str = "windowMaximized";
+
+/// H4 几何保存决策（纯逻辑，单测覆盖）：将"是否落盘、落什么"与 UI 调用解耦。
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum GeometrySaveAction {
+    /// 最小化/离屏哨兵或无变化：整体跳过
+    Skip,
+    /// 最大化态：仅维护最大化标志，坐标不落盘（保留最大化前的普通几何）
+    FlagOnly,
+    /// 非最大化态：维护最大化标志（清零）+ 坐标尺寸落盘
+    FullUpdate,
+}
+
+/// H4 决策核心。`maximized/minimized/offscreen` 取当前窗口状态；`cur_flag`
+/// 为已持久化的最大化标志；`xywh_changed` 为坐标尺寸是否变化。
+/// 关键点：最大化时坐标不落盘（否则最大化坐标会污染还原几何）；
+/// "最大化→还原（未移动）"坐标无变化，标志清零不能被坐标相等早退吞掉，
+/// 故标志 diff 判定独立于坐标比较。
+pub(crate) fn geometry_save_decision(
+    maximized: bool,
+    minimized: bool,
+    offscreen: bool,
+    cur_flag: bool,
+    xywh_changed: bool,
+) -> GeometrySaveAction {
+    if minimized || offscreen {
+        return GeometrySaveAction::Skip;
+    }
+    if maximized {
+        // 最大化：坐标不落盘（保留普通还原几何），仅维护标志
+        return if cur_flag {
+            GeometrySaveAction::Skip
+        } else {
+            GeometrySaveAction::FlagOnly
+        };
+    }
+    // 非最大化：标志清零 + 坐标按变化落盘
+    if cur_flag || xywh_changed {
+        GeometrySaveAction::FullUpdate
+    } else {
+        GeometrySaveAction::Skip
+    }
+}
+
 fn save_window_geometry_with(ui: &MainWindow, state: &Rc<RefCell<AppState>>, force: bool) {
     // 必须在事件循环内/窗口销毁前调用；position()/size() 返回物理像素
     let pos = ui.window().position();
-    // P2-04：最小化时 GetWindowRect 返回约 (-32000,-32000)，直接落盘会污染配置。
-    // 双保险：slint 公开 is_minimized() + 坐标哨兵检查（正常坐标远不到 -10000）。
-    if ui.window().is_minimized() || pos.x < -10000 || pos.y < -10000 {
-        return;
-    }
     let size = ui.window().size();
     let w = size.width as i32;
     let h = size.height as i32;
+    // P2-04：最小化时 GetWindowRect 返回约 (-32000,-32000)，直接落盘会污染配置。
+    // 双保险：slint 公开 is_minimized() + 坐标哨兵检查（正常坐标远不到 -10000）。
+    let offscreen = pos.x < -10000 || pos.y < -10000;
+    let maximized = ui.window().is_maximized();
     let (cx, cy, cw, ch) = {
         let st = state.borrow();
         let c = &st.manager.config().config;
         (c.window_x, c.window_y, c.window_width, c.window_height)
     };
-    if cx == pos.x && cy == pos.y && cw == w && ch == h {
-        return;
-    }
-    // 诊断留痕：窗口尺寸/位置变化（定位"宽度无法拖动"类问题——若拖动边缘后
-    // 日志无对应变化，说明尺寸事件未到达 slint 层，需查 winit/OS 命中测试）
-    log::debug!(
-        "Window geometry change: pos ({},{}) -> ({},{}), size {}x{} -> {}x{}",
-        cx,
-        cy,
-        pos.x,
-        pos.y,
-        cw,
-        ch,
-        w,
-        h
-    );
-    let mut state = state.borrow_mut();
-    // P1-2：窗口几何属于高频非关键写，使用 storage.save() 直接落盘，
-    // 避免每次拖动/缩放触发 save_with_backup → rotate_backups 产生频繁文件复制。
-    let cfg = &mut state.manager.config_mut().config;
-    cfg.window_x = pos.x;
-    cfg.window_y = pos.y;
-    cfg.window_width = w;
-    cfg.window_height = h;
-    state.geometry_dirty = true;
-    state.last_geometry_change = Some(std::time::Instant::now());
-    if force {
-        state.flush_geometry();
+    let cur_flag = state
+        .borrow()
+        .manager
+        .config()
+        .extra_get_bool(WINDOW_MAXIMIZED_KEY);
+    let xywh_changed = cx != pos.x || cy != pos.y || cw != w || ch != h;
+    match geometry_save_decision(
+        maximized,
+        ui.window().is_minimized(),
+        offscreen,
+        cur_flag,
+        xywh_changed,
+    ) {
+        GeometrySaveAction::Skip => return,
+        GeometrySaveAction::FlagOnly => {
+            // H4：最大化仅维护标志（坐标不落盘，保留普通还原几何）；
+            // 走几何去抖链（非轮转写），与坐标写同管线。
+            let mut st = state.borrow_mut();
+            st.manager
+                .config_mut()
+                .extra_set_bool(WINDOW_MAXIMIZED_KEY, true);
+            st.geometry_dirty = true;
+            st.last_geometry_change = Some(std::time::Instant::now());
+            if force {
+                st.flush_geometry();
+            }
+            return;
+        }
+        GeometrySaveAction::FullUpdate => {
+            // 诊断留痕：窗口尺寸/位置变化（定位"宽度无法拖动"类问题——若拖动边缘后
+            // 日志无对应变化，说明尺寸事件未到达 slint 层，需查 winit/OS 命中测试）
+            log::debug!(
+                "Window geometry change: pos ({},{}) -> ({},{}), size {}x{} -> {}x{}",
+                cx,
+                cy,
+                pos.x,
+                pos.y,
+                cw,
+                ch,
+                w,
+                h
+            );
+            let mut st = state.borrow_mut();
+            if cur_flag {
+                // H4：还原（非最大化）时清除持久化标志（先于坐标写，避免两次
+                // config_mut 借用冲突）
+                st.manager
+                    .config_mut()
+                    .extra_set_bool(WINDOW_MAXIMIZED_KEY, false);
+            }
+            // P1-2：窗口几何属于高频非关键写，使用 storage.save() 直接落盘，
+            // 避免每次拖动/缩放触发 save_with_backup → rotate_backups 产生频繁文件复制。
+            let cfg = &mut st.manager.config_mut().config;
+            cfg.window_x = pos.x;
+            cfg.window_y = pos.y;
+            cfg.window_width = w;
+            cfg.window_height = h;
+            st.geometry_dirty = true;
+            st.last_geometry_change = Some(std::time::Instant::now());
+            if force {
+                st.flush_geometry();
+            }
+        }
     }
 }
 
@@ -324,5 +405,51 @@ mod tests {
         assert_eq!(MENU_WIDTH, 160.0);
         assert_eq!(MENU_ITEM_HEIGHT, 28.0);
         assert_eq!(MENU_PADDING, 8.0);
+    }
+
+    #[test]
+    fn test_geometry_save_decision_maximized_skips_xywh() {
+        // H4：最大化时坐标不落盘，仅维护标志（即使坐标有变化）
+        assert_eq!(
+            geometry_save_decision(true, false, false, false, true),
+            GeometrySaveAction::FlagOnly
+        );
+        // 最大化且标志已一致：整体跳过
+        assert_eq!(
+            geometry_save_decision(true, false, false, true, false),
+            GeometrySaveAction::Skip
+        );
+    }
+
+    #[test]
+    fn test_geometry_save_decision_restore_clears_flag() {
+        // H4：最大化→还原（坐标未移动）：坐标相等不能吞掉标志清零
+        assert_eq!(
+            geometry_save_decision(false, false, false, true, false),
+            GeometrySaveAction::FullUpdate
+        );
+        // 非最大化、标志一致、坐标未变：跳过
+        assert_eq!(
+            geometry_save_decision(false, false, false, false, false),
+            GeometrySaveAction::Skip
+        );
+        // 非最大化、坐标变化：落盘
+        assert_eq!(
+            geometry_save_decision(false, false, false, false, true),
+            GeometrySaveAction::FullUpdate
+        );
+    }
+
+    #[test]
+    fn test_geometry_save_decision_minimized_offscreen_skip() {
+        // H4：最小化/离屏哨兵：无论标志与坐标如何，整体跳过
+        assert_eq!(
+            geometry_save_decision(true, true, false, false, true),
+            GeometrySaveAction::Skip
+        );
+        assert_eq!(
+            geometry_save_decision(false, false, true, false, true),
+            GeometrySaveAction::Skip
+        );
     }
 }

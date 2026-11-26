@@ -47,11 +47,15 @@ fn main() {
             )
         }
         .unwrap_or(HANDLE::default());
+        // M6：互斥体创建失败（非 ALREADY_EXISTS 的罕见路径，如名称被其他对象
+        // 占用）不再与"已有实例"同行为退出——启动器可用性优先：配置为原子写
+        // （tmp+rename），最坏为最后写者覆盖，不会出现半损文件；拒绝启动则整个
+        // 启动器不可用，损失更大。已知权衡，留痕便于排查。
         if handle.is_invalid() {
-            log::error!("Failed to create single instance mutex");
-            return;
-        }
-        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            log::error!(
+                "Failed to create single instance mutex; continuing without single-instance guard"
+            );
+        } else if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
             log::info!("Another GoRun instance is already running, exiting");
             return;
         }
@@ -180,6 +184,9 @@ fn main() {
             std::collections::HashMap::new(),
         )),
         icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+        icon_custom_decode_failed: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashSet::new(),
+        )),
         drop_handler: None,
         geometry_dirty: false,
         last_geometry_change: None,
@@ -498,14 +505,25 @@ fn main() {
                 use slint::PhysicalSize;
                 ui.window().set_size(PhysicalSize::new(w, h));
             }
-            // 2) 拖放装配
+            // 2) H4：最大化状态恢复——须在窗口真实存在后应用（winit 窗口
+            // Resumed 才创建）；先恢复普通几何再最大化，还原时回到保存的
+            // 普通尺寸。导入配置时该键随非会话偏好被丢弃，默认非最大化。
+            if state_setup
+                .borrow()
+                .manager
+                .config()
+                .extra_get_bool(geometry::WINDOW_MAXIMIZED_KEY)
+            {
+                ui.window().set_maximized(true);
+            }
+            // 3) 拖放装配
             if let Some((guard, rx)) = drop_handler::setup_drop_handler(ui) {
                 drop_handler::spawn_drop_consumer(ui.as_weak(), rx, auto_hide_drop);
                 state_setup.borrow_mut().drop_handler = Some(guard);
             } else {
                 log::warn!("Drop handler setup returned None; drag-and-drop disabled");
             }
-            // 3) 标题栏图标（嵌入 app.ico，资源 ID 1，与托盘同源）
+            // 4) 标题栏图标（嵌入 app.ico，资源 ID 1，与托盘同源）
             if let Some(hwnd) = drop_handler::try_get_hwnd(ui) {
                 platform::window_icon::apply_app_icon(hwnd);
             } else {

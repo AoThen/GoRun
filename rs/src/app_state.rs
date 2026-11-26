@@ -45,6 +45,12 @@ pub struct AppState {
     /// 编辑条目后清除（新键值得再试一次）。仅 UI 线程访问，用 Mutex 满足
     /// 不可变借用下的内部可变性（refresh_items_ui 收 &AppState）。
     pub icon_extract_attempted: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// M4：自定义图标源本会话解码失败集合（会话级防抖，语义同
+    /// icon_extract_attempted）：失败项本会话不再重复入队解码，避免每轮
+    /// 刷新反复 spawn 快失败线程；清除点：手动刷新图标、编辑条目、
+    /// 改图标尺寸（与提取防抖同清除点）。跨工作线程共享，Arc 包裹。
+    pub icon_custom_decode_failed:
+        std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     /// OLE/子类化拖放处理器：必须随应用存活，Drop 时移除子类化并释放 refdata。
     pub drop_handler: Option<DropHandler>,
     /// 窗口几何已变化但尚未落盘（P1-5 去抖）。
@@ -193,6 +199,9 @@ mod tests {
                 std::collections::HashMap::new(),
             )),
             icon_extract_attempted: std::sync::Mutex::new(std::collections::HashSet::new()),
+            icon_custom_decode_failed: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             drop_handler: None,
             geometry_dirty: false,
             last_geometry_change: None,
