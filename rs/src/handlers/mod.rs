@@ -2504,7 +2504,12 @@ pub fn wire_handler(
         );
         if let Some(ui) = weak_ui_fontfam.upgrade() {
             ui.set_settings_font_family_index(index);
-            ui.set_font_family(value.into());
+            ui.set_font_family(value.clone().into());
+            // 同步存活的编辑对话框（独立 Window，须显式跟随全局字体族）
+            let st = state_fontfam.borrow();
+            if let Some(dlg) = st.edit_dialog.as_ref() {
+                dlg.set_font_family(value.into());
+            }
         }
     });
 

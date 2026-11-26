@@ -6,6 +6,10 @@ export component EditDialog inherits Window {
     width: 500px;
     height: 500px;
     background: Theme.bg-2;
+    // 全局字体族跟随（独立 Window，须显式绑定；创建时由 Rust 侧从配置注入，
+    // 设置页切换字体时同步更新存活的对话框实例）。空串=跟随系统默认。
+    in property <string> font-family: "";
+    default-font-family: root.font-family;
 
     callback save();
     callback cancel();

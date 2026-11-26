@@ -281,6 +281,17 @@ pub fn show_edit_dialog(ui_weak: &slint::Weak<MainWindow>, state: &Rc<RefCell<Ap
         dialog.set_item_hotkey("".into());
         dialog.set_category_names(Rc::new(slint::VecModel::from(categories)).into());
         dialog.set_selected_category_index(selected_cat_idx as i32);
+        // 独立 Window 跟随全局字体族（创建时从配置注入；切换时由设置页回调同步）
+        let font_family = {
+            let st = state.borrow();
+            st.manager
+                .config()
+                .extra_config
+                .get("font_family")
+                .cloned()
+                .unwrap_or_default()
+        };
+        dialog.set_font_family(font_family.into());
         let loc_new = state.borrow().loc.clone();
         ui_sync::set_edit_dialog_texts(&dialog, &loc_new);
         dialogs::setup_edit_dialog_new_category(&dialog, state.clone(), ui_weak);
@@ -372,6 +383,17 @@ pub fn show_edit_dialog_for_item(
     dialog.set_run_as_admin(item.run_as_admin);
     dialog.set_category_names(Rc::new(slint::VecModel::from(categories)).into());
     dialog.set_selected_category_index(selected_cat_idx as i32);
+    // 独立 Window 跟随全局字体族（创建时从配置注入；切换时由设置页回调同步）
+    let font_family = {
+        let st = state.borrow();
+        st.manager
+            .config()
+            .extra_config
+            .get("font_family")
+            .cloned()
+            .unwrap_or_default()
+    };
+    dialog.set_font_family(font_family.into());
     let loc_edit = state.borrow().loc.clone();
     ui_sync::set_edit_dialog_texts(&dialog, &loc_edit);
     dialogs::setup_edit_dialog_new_category(&dialog, state.clone(), ui_weak);

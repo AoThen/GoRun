@@ -2353,6 +2353,63 @@ fn test_settings_icon_font_size_persists() {
     );
 }
 
+/// 字体族切换：选"默认"清空配置并注入空串到主窗口；未知 label 兜底回默认，
+/// 不 panic。候选列表依赖后台扫描（非测试可注入），故覆盖默认/兜底两条分支。
+#[test]
+fn test_settings_font_family_changed_persists() {
+    let (cats, items) = sample_data();
+    let (ui, state) = setup_wired_ui(cats, items);
+
+    // 预置已有字体配置，验证切回"默认"时清空并注入空串
+    state
+        .borrow_mut()
+        .manager
+        .config_mut()
+        .extra_config
+        .insert("font_family".into(), "Segoe UI".into());
+
+    // 默认项文案与回调内 tr("SI_Font_Default") 同源（同一 loc），不依赖模型注入
+    let default_label = state
+        .borrow()
+        .loc
+        .borrow()
+        .tr("SI_Font_Default")
+        .to_string();
+    assert!(!default_label.is_empty(), "默认项文案不应为空");
+
+    ui.invoke_settings_font_family_changed(default_label.into());
+    assert_eq!(
+        state
+            .borrow()
+            .manager
+            .config()
+            .extra_config
+            .get("font_family"),
+        Some(&"".to_string()),
+        "选默认应清空字体族配置"
+    );
+    assert_eq!(
+        ui.get_font_family().as_str(),
+        "",
+        "默认应注入空串到主窗口"
+    );
+
+    // 未知 label（不在候选列表）：兜底回默认，不 panic、不写入非空值。
+    // 先恢复非空配置，避免同值短路跳过写入路径。
+    state
+        .borrow_mut()
+        .manager
+        .config_mut()
+        .extra_config
+        .insert("font_family".into(), "Segoe UI".into());
+    ui.invoke_settings_font_family_changed("某不存在的字体".into());
+    assert_eq!(
+        ui.get_font_family().as_str(),
+        "",
+        "未知 label 应兜底为空"
+    );
+}
+
 /// 搜索 300ms 防抖：搜索文本立即写状态，UI 过滤结果须待防抖窗口到期才刷新
 /// （Timer 由闭包持有，testing 后端需手动泵事件 + 真实等待）。
 #[test]
