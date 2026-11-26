@@ -213,9 +213,105 @@ fn apply_background(ui: &MainWindow, state: &Rc<RefCell<AppState>>, path: &str) 
 type FontFamilyCache = Rc<std::cell::RefCell<Option<Vec<(String, String)>>>>;
 
 /// 枚举系统已安装字体族：返回 (显示名, 族名) 列表，按显示名排序（不含
-/// "默认"项，由回填方按本地化文案插入头部）。显示名优先取本地化名（非
-/// ASCII，如"微软雅黑"），族名取 ASCII 名（如 "Microsoft YaHei"，与
-/// Slint/fontdb 匹配路径一致）；仅有本地化名的字体以该名兼任族名。
+/// "默认"项，由回填方按本地化文案插入头部）。
+///
+/// Windows 用 DirectWrite 枚举，与 Slint 渲染端（parley/fontique 的 DirectWrite
+/// 后端）同源：候选列表族名即渲染端可用族名，修复 fontdb/ttf-parser 解析的族名
+/// 与 DWrite 注册名不一致导致的"选中字体不生效"问题。非 Windows（CI Linux 测试）
+/// 回退 fontdb 枚举。
+#[cfg(windows)]
+fn enumerate_system_fonts() -> Vec<(String, String)> {
+    use windows::core::w;
+    use windows::Win32::Graphics::DirectWrite::{
+        DWriteCreateFactory, IDWriteFactory, DWRITE_FACTORY_TYPE_SHARED,
+    };
+    unsafe {
+        let Ok(factory) = DWriteCreateFactory::<IDWriteFactory>(DWRITE_FACTORY_TYPE_SHARED) else {
+            log::error!("enumerate_system_fonts: DWriteCreateFactory failed");
+            return Vec::new();
+        };
+        let mut collection = None;
+        if factory
+            .GetSystemFontCollection(&mut collection, false)
+            .is_err()
+        {
+            log::error!("enumerate_system_fonts: GetSystemFontCollection failed");
+            return Vec::new();
+        }
+        let Some(collection) = collection else {
+            log::error!("enumerate_system_fonts: system font collection is None");
+            return Vec::new();
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut out: Vec<(String, String)> = Vec::new();
+        let count = collection.GetFontFamilyCount();
+        for i in 0..count {
+            let Ok(family) = collection.GetFontFamily(i) else {
+                continue;
+            };
+            let Ok(names) = family.GetFamilyNames() else {
+                continue;
+            };
+            if names.GetCount() == 0 {
+                continue;
+            }
+            // 显示名优先 zh-CN，族名优先 en-US；均缺时回退首条目。显示名与族名
+            // 均取自同一 DWrite 家族名表，与渲染端名字完全一致。
+            let zh_index = find_locale(&names, w!("zh-CN"));
+            let en_index = find_locale(&names, w!("en-US"));
+            let value = en_index
+                .and_then(|j| locale_name(&names, j))
+                .or_else(|| locale_name(&names, 0))
+                .unwrap_or_default();
+            if value.is_empty() || !seen.insert(value.to_lowercase()) {
+                continue;
+            }
+            let label = zh_index
+                .and_then(|j| locale_name(&names, j))
+                .unwrap_or_else(|| value.clone());
+            out.push((label, value));
+        }
+        out.sort_by_key(|a| a.0.to_lowercase());
+        out
+    }
+}
+
+/// 在 DWrite 本地化字符串表中定位指定 locale 的条目索引（不存在返回 None）。
+#[cfg(windows)]
+fn find_locale(
+    names: &windows::Win32::Graphics::DirectWrite::IDWriteLocalizedStrings,
+    locale: windows::core::PCWSTR,
+) -> Option<u32> {
+    let mut index = 0u32;
+    let mut exists = Default::default();
+    unsafe {
+        if names.FindLocaleName(locale, &mut index, &mut exists).is_ok() && exists.as_bool() {
+            Some(index)
+        } else {
+            None
+        }
+    }
+}
+
+/// 读取 DWrite 本地化字符串表第 `index` 条（UTF-16 → String）。
+#[cfg(windows)]
+fn locale_name(
+    names: &windows::Win32::Graphics::DirectWrite::IDWriteLocalizedStrings,
+    index: u32,
+) -> Option<String> {
+    unsafe {
+        let len = names.GetStringLength(index).ok()? as usize;
+        let mut buf = vec![0u16; len + 1];
+        names.GetString(index, &mut buf).ok()?;
+        buf.pop();
+        Some(String::from_utf16_lossy(&buf))
+    }
+}
+
+/// 非 Windows 回退：fontdb 解析字体文件 name 表（仅 CI Linux 测试使用）。
+/// 显示名优先取本地化名（非 ASCII，如"微软雅黑"），族名取 ASCII 名
+/// （如 "Microsoft YaHei"）；仅有本地化名的字体以该名兼任族名。
+#[cfg(not(windows))]
 fn enumerate_system_fonts() -> Vec<(String, String)> {
     let mut db = fontdb::Database::new();
     db.load_system_fonts();
@@ -2670,5 +2766,25 @@ mod tests {
             "部分失败模板应同时含成功数与失败数: {}",
             msg
         );
+    }
+
+    // Windows 用 DirectWrite 枚举：候选列表应与渲染端可用字体同源，非空且
+    // 必含系统自带 Segoe UI；族名去重后唯一。CI Windows（rust-tests-windows）
+    // 交互会话下 DWrite 可用。
+    #[cfg(all(test, windows))]
+    #[test]
+    fn test_enumerate_system_fonts_windows_contains_system_font() {
+        let list = super::enumerate_system_fonts();
+        assert!(!list.is_empty(), "DWrite 枚举不应为空");
+        assert!(
+            list.iter()
+                .any(|(_, v)| v.eq_ignore_ascii_case("Segoe UI")),
+            "应包含系统自带 Segoe UI（实际前 20: {:?}）",
+            list.iter().take(20).map(|(l, v)| format!("{}={}", l, v)).collect::<Vec<_>>()
+        );
+        let values: std::collections::HashSet<&str> =
+            list.iter().map(|(_, v)| v.as_str()).collect();
+        assert_eq!(values.len(), list.len(), "族名应去重唯一");
+        assert!(list.iter().all(|(l, v)| !l.is_empty() && !v.is_empty()));
     }
 }

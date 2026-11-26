@@ -37,9 +37,9 @@ log = { version = "0.4", features = ["max_level_debug", "release_max_level_debug
 chrono = "0.4"
 pinyin = "0.10"
 raw-window-handle = "0.6"
-# 设置页"字体"选择：枚举系统已安装字体族。Slint 渲染端内部同用 fontdb
-# 做字体匹配（版本随依赖树锁定 0.24），枚举结果与可渲染字体天然一致；
-# 仅在打开设置页时后台线程调用一次，结果缓存复用。
+# 设置页"字体"选择：仅非 Windows（CI Linux 测试）回退用 fontdb 枚举系统字体；
+# Windows 改用 DirectWrite（与 Slint 渲染端 parley/fontique 同源，见
+# handlers::enumerate_system_fonts）。仅在打开设置页时后台线程调用一次，结果缓存复用。
 fontdb = "0.24"
 
 # Windows 平台专属依赖：仅 Windows 目标声明，避免 Linux 构建报 unused dependency。
@@ -69,6 +69,7 @@ windows = { version = "0.62", features = [
     "Win32_System_Console",
     "Win32_System_Threading",
     "Win32_Security",
+    "Win32_Graphics_DirectWrite",
 ] }
 # implement 宏展开引用 windows_core 路径，需显式依赖方可解析
 windows-core = "0.62"
