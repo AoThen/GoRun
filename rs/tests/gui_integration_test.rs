@@ -2420,7 +2420,7 @@ fn test_right_click_menu_no_wrong_item_after_list_change() {
     let b = st
         .manager
         .all_items()
-        .iter()
+        .into_iter()
         .find(|i| i.id == items[1].id)
         .expect("次条目应仍存在");
     assert_eq!(b.name, items[1].name, "次条目不得被误操作");
